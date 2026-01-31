@@ -592,7 +592,7 @@ class RealtimeSession:
 
     async def _mark_call_ended(self) -> None:
         """
-        Mark call as ended and compute duration.
+        Mark call as ended. Duration is automatically calculated by database.
         Idempotent - safe to call multiple times.
         """
         db = get_database()
@@ -601,7 +601,7 @@ class RealtimeSession:
             # Fetch current state
             call = await db.fetch_one(
                 """
-                SELECT id, started_at, ended_at, duration_seconds, status
+                SELECT id, ended_at, status
                 FROM calls
                 WHERE id = :id
                 """,
@@ -612,15 +612,8 @@ class RealtimeSession:
                 logger.warning(f"Call {self.call_id} not found in database")
                 return
 
-            # Calculate end time and duration
+            # Calculate end time (use existing if already set)
             ended_at = call["ended_at"] or datetime.utcnow()
-            started_at = call["started_at"]
-
-            # Always recalculate duration if we have both timestamps
-            duration = None
-            if started_at and ended_at:
-                duration = int((ended_at - started_at).total_seconds())
-                logger.info(f"Call {self.call_id} duration calculated: {duration}s")
 
             # Determine final status
             current_status = call["status"]
@@ -632,25 +625,24 @@ class RealtimeSession:
                 new_status = current_status  # Preserve cancelled/declined/failed
 
             # Update with idempotent logic - don't overwrite existing ended_at
+            # Note: duration_seconds is automatically calculated by database
             await db.execute(
                 """
                 UPDATE calls
                 SET ended_at = COALESCE(ended_at, :ended_at),
-                    duration_seconds = :duration,
                     status = :status
                 WHERE id = :id
                 """,
                 {
                     "id": str(self.call_id),
                     "ended_at": ended_at,
-                    "duration": duration,
                     "status": new_status,
                 },
             )
 
             logger.info(
                 f"Call {self.call_id} finalized: status={new_status}, "
-                f"duration={duration}s, ended_at={ended_at.isoformat() if ended_at else 'None'}"
+                f"ended_at={ended_at.isoformat()}"
             )
 
         except Exception as e:

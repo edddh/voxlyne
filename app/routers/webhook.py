@@ -194,7 +194,7 @@ async def handle_call_started(
 async def handle_call_ended(payload: Dict[str, Any], event_type: str) -> Dict[str, Any]:
     """
     Handle call termination from OpenAI webhook.
-    Updates the call record with end time and duration.
+    Updates the call record with end time. Duration is auto-calculated by database.
     Idempotent - safe to call multiple times.
     """
     db = get_database()
@@ -212,7 +212,7 @@ async def handle_call_ended(payload: Dict[str, Any], event_type: str) -> Dict[st
         # Find the call by session ID
         call = await db.fetch_one(
             """
-            SELECT id, started_at, ended_at, duration_seconds, status
+            SELECT id, ended_at, status
             FROM calls
             WHERE openai_session_id = :session_id
             """,
@@ -223,12 +223,8 @@ async def handle_call_ended(payload: Dict[str, Any], event_type: str) -> Dict[st
             logger.warning(f"Call not found for session: {session_id}")
             return {"status": "not_found"}
 
-        # Calculate end time and duration
+        # Calculate end time (use existing if already set)
         ended_at = call["ended_at"] or datetime.utcnow()
-        duration = call["duration_seconds"]
-
-        if call["started_at"] and ended_at:
-            duration = int((ended_at - call["started_at"]).total_seconds())
 
         # Determine final status (only if not already terminal)
         current_status = call["status"]
@@ -240,24 +236,23 @@ async def handle_call_ended(payload: Dict[str, Any], event_type: str) -> Dict[st
             new_status = current_status  # Preserve cancelled/declined/failed
 
         # Idempotent update - don't overwrite existing ended_at
+        # Note: duration_seconds is automatically calculated by database
         await db.execute(
             """
             UPDATE calls
             SET ended_at = COALESCE(ended_at, :ended_at),
-                duration_seconds = :duration,
                 status = :status
             WHERE id = :id
             """,
             {
                 "id": str(call["id"]),
                 "ended_at": ended_at,
-                "duration": duration,
                 "status": new_status,
             }
         )
 
         logger.info(
-            f"Webhook: Call {call['id']} ended, duration: {duration}s, status: {new_status}"
+            f"Webhook: Call {call['id']} ended, status: {new_status}"
         )
 
         # Clean up call manager session
@@ -266,7 +261,6 @@ async def handle_call_ended(payload: Dict[str, Any], event_type: str) -> Dict[st
         return {
             "status": "updated",
             "call_id": str(call["id"]),
-            "duration": duration,
             "final_status": new_status,
         }
 

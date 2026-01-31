@@ -63,7 +63,10 @@ class SessionCleanup:
                 await asyncio.sleep(60)  # Wait 1 minute on error
 
     async def _cleanup_stuck_sessions(self) -> None:
-        """Find and clean up stuck sessions."""
+        """
+        Find and clean up stuck sessions.
+        Note: duration_seconds is automatically calculated by database, no need to set it.
+        """
         db = get_database()
         max_duration = self.settings.max_call_duration_seconds
         cutoff_time = datetime.utcnow() - timedelta(seconds=max_duration + 300)
@@ -88,38 +91,26 @@ class SessionCleanup:
                 for call in stuck_calls:
                     call_id = call["id"]
                     started_at = call["started_at"]
-                    duration = int((datetime.utcnow() - started_at).total_seconds())
+                    elapsed = int((datetime.utcnow() - started_at).total_seconds())
 
                     logger.warning(
                         f"Cleaning up stuck call {call_id}: "
-                        f"started {duration}s ago, status={call['status']}"
+                        f"started {elapsed}s ago, status={call['status']}"
                     )
 
+                    # Set ended_at; duration_seconds will be auto-calculated by database
                     await db.execute(
                         """
                         UPDATE calls
                         SET ended_at = :ended_at,
-                            duration_seconds = :duration,
                             status = 'declined'
                         WHERE id = :id
                         """,
                         {
                             "id": str(call_id),
                             "ended_at": datetime.utcnow(),
-                            "duration": duration,
                         }
                     )
-
-            # Fix sessions with ended_at but missing duration
-            result = await db.execute(
-                """
-                UPDATE calls
-                SET duration_seconds = EXTRACT(EPOCH FROM (ended_at - started_at))::INTEGER
-                WHERE ended_at IS NOT NULL
-                  AND duration_seconds IS NULL
-                  AND started_at IS NOT NULL
-                """
-            )
 
             logger.debug("Session cleanup completed")
 
