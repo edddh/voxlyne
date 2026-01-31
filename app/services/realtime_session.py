@@ -86,10 +86,12 @@ class RealtimeSession:
         self.transcript_buffer = []
         self._output_transcript_buffer: list[str] = []
         self._input_transcript_buffer: list[str] = []
+        self._finalized = False
 
         # Task management
         self._receive_task: Optional[asyncio.Task] = None
         self._heartbeat_task: Optional[asyncio.Task] = None
+        self._timeout_task: Optional[asyncio.Task] = None
 
     async def connect(self) -> None:
         """
@@ -129,6 +131,9 @@ class RealtimeSession:
             # Start receiving messages
             self._receive_task = asyncio.create_task(self._receive_loop())
 
+            # Start timeout watchdog
+            self._timeout_task = asyncio.create_task(self._timeout_watchdog())
+
             # Configure the session
             await self._configure_session()
 
@@ -148,25 +153,36 @@ class RealtimeSession:
             self._receive_task.cancel()
         if self._heartbeat_task:
             self._heartbeat_task.cancel()
+        if self._timeout_task:
+            self._timeout_task.cancel()
 
         # Close WebSocket
         if self.ws:
             try:
                 await self.ws.close()
             except Exception as e:
-                logger.warning(f"Error closing WebSocket: {e}")
+                logger.warning(f"Error closing WebSocket for call {self.call_id}: {e}")
 
         logger.info(f"WebSocket disconnected for call {self.call_id}")
 
-        # Flush any remaining transcript deltas on disconnect
-        if self._output_transcript_buffer:
-            await self._persist_transcript("assistant", "".join(self._output_transcript_buffer))
-            self._output_transcript_buffer = []
-        if self._input_transcript_buffer:
-            await self._persist_transcript("user", "".join(self._input_transcript_buffer))
-            self._input_transcript_buffer = []
+        # Flush remaining transcripts with error handling
+        try:
+            if self._output_transcript_buffer:
+                await self._persist_transcript("assistant", "".join(self._output_transcript_buffer))
+                self._output_transcript_buffer = []
+            if self._input_transcript_buffer:
+                await self._persist_transcript("user", "".join(self._input_transcript_buffer))
+                self._input_transcript_buffer = []
+        except Exception as e:
+            logger.error(f"Error flushing transcripts for call {self.call_id}: {e}")
 
-        await self._mark_call_ended()
+        # Mark call ended with error handling
+        try:
+            await self._mark_call_ended()
+        except Exception as e:
+            logger.error(f"CRITICAL: Failed to finalize call {self.call_id} on disconnect: {e}")
+        finally:
+            self._finalized = True
 
     async def _configure_session(self) -> None:
         """
@@ -319,6 +335,31 @@ class RealtimeSession:
         # Otherwise just disconnect
         await self.disconnect()
 
+    async def _timeout_watchdog(self) -> None:
+        """
+        Watchdog that enforces maximum call duration.
+        Prevents stuck sessions from running indefinitely.
+        """
+        try:
+            max_duration = self.settings.max_call_duration_seconds
+            logger.info(f"Call {self.call_id} timeout watchdog started ({max_duration}s)")
+
+            await asyncio.sleep(max_duration)
+
+            if self.is_connected:
+                logger.warning(
+                    f"Call {self.call_id} exceeded maximum duration ({max_duration}s), "
+                    "forcing hangup"
+                )
+                await self.send_error_message()
+                await asyncio.sleep(3)
+                await self.hangup()
+
+        except asyncio.CancelledError:
+            logger.debug(f"Timeout watchdog cancelled for call {self.call_id}")
+        except Exception as e:
+            logger.error(f"Timeout watchdog error for call {self.call_id}: {e}")
+
     async def _receive_loop(self) -> None:
         """
         Continuously receive and process messages from OpenAI.
@@ -333,11 +374,30 @@ class RealtimeSession:
                 except Exception as e:
                     logger.error(f"Error handling message: {e}")
 
+        except asyncio.CancelledError:
+            pass
         except websockets.exceptions.ConnectionClosed:
             logger.info(f"WebSocket connection closed for call {self.call_id}")
         except Exception as e:
             logger.error(f"Receive loop error: {e}")
             await self.on_error(self.call_id, f"Receive error: {e}")
+        finally:
+            if not self._finalized:
+                self.is_connected = False
+                if self._output_transcript_buffer:
+                    await self._persist_transcript(
+                        "assistant",
+                        "".join(self._output_transcript_buffer),
+                    )
+                    self._output_transcript_buffer = []
+                if self._input_transcript_buffer:
+                    await self._persist_transcript(
+                        "user",
+                        "".join(self._input_transcript_buffer),
+                    )
+                    self._input_transcript_buffer = []
+                await self._mark_call_ended()
+                self._finalized = True
 
 
     def _extract_transcript_text(self, data: dict) -> str:
@@ -532,46 +592,91 @@ class RealtimeSession:
 
     async def _mark_call_ended(self) -> None:
         """
-        Mark call as ended and compute duration when no call.ended webhook exists.
+        Mark call as ended and compute duration.
+        Idempotent - safe to call multiple times.
         """
         db = get_database()
-        call = await db.fetch_one(
-            "SELECT id, started_at, ended_at, status FROM calls WHERE id = :id",
-            {"id": str(self.call_id)},
-        )
 
-        if not call or call["ended_at"] is not None:
-            return
+        try:
+            # Fetch current state
+            call = await db.fetch_one(
+                """
+                SELECT id, started_at, ended_at, duration_seconds, status
+                FROM calls
+                WHERE id = :id
+                """,
+                {"id": str(self.call_id)},
+            )
 
-        ended_at = datetime.utcnow()
-        started_at = call["started_at"]
-        duration = None
-        if started_at:
-            duration = int((ended_at - started_at).total_seconds())
+            if not call:
+                logger.warning(f"Call {self.call_id} not found in database")
+                return
 
-        status = call["status"]
-        if status in ("in_progress", "consented"):
-            new_status = "completed"
-        elif status == "pending_consent":
-            new_status = "declined"
-        else:
-            new_status = status
+            # Calculate end time and duration
+            ended_at = call["ended_at"] or datetime.utcnow()
+            started_at = call["started_at"]
 
-        await db.execute(
-            """
-            UPDATE calls
-            SET ended_at = :ended_at,
-                duration_seconds = :duration,
-                status = :status
-            WHERE id = :id
-            """,
-            {
-                "id": str(self.call_id),
-                "ended_at": ended_at,
-                "duration": duration,
-                "status": new_status,
-            },
-        )
+            # Always recalculate duration if we have both timestamps
+            duration = None
+            if started_at and ended_at:
+                duration = int((ended_at - started_at).total_seconds())
+                logger.info(f"Call {self.call_id} duration calculated: {duration}s")
+
+            # Determine final status
+            current_status = call["status"]
+            if current_status in ("in_progress", "consented"):
+                new_status = "completed"
+            elif current_status == "pending_consent":
+                new_status = "declined"
+            else:
+                new_status = current_status  # Preserve cancelled/declined/failed
+
+            # Update with idempotent logic - don't overwrite existing ended_at
+            await db.execute(
+                """
+                UPDATE calls
+                SET ended_at = COALESCE(ended_at, :ended_at),
+                    duration_seconds = :duration,
+                    status = :status
+                WHERE id = :id
+                """,
+                {
+                    "id": str(self.call_id),
+                    "ended_at": ended_at,
+                    "duration": duration,
+                    "status": new_status,
+                },
+            )
+
+            logger.info(
+                f"Call {self.call_id} finalized: status={new_status}, "
+                f"duration={duration}s, ended_at={ended_at.isoformat() if ended_at else 'None'}"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"CRITICAL: Failed to mark call {self.call_id} as ended: {e}",
+                exc_info=True,
+            )
+            # Attempt fallback update without transaction lock
+            try:
+                await db.execute(
+                    """
+                    UPDATE calls
+                    SET ended_at = COALESCE(ended_at, :ended_at),
+                        status = 'declined'
+                    WHERE id = :id
+                    """,
+                    {
+                        "id": str(self.call_id),
+                        "ended_at": datetime.utcnow(),
+                    },
+                )
+                logger.warning(f"Fallback update succeeded for call {self.call_id}")
+            except Exception as fallback_error:
+                logger.error(
+                    f"CRITICAL: Fallback update failed for call {self.call_id}: {fallback_error}"
+                )
 
     def get_transcript(self) -> list:
         """

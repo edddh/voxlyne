@@ -193,8 +193,9 @@ async def handle_call_started(
 
 async def handle_call_ended(payload: Dict[str, Any], event_type: str) -> Dict[str, Any]:
     """
-    Handle call termination.
+    Handle call termination from OpenAI webhook.
     Updates the call record with end time and duration.
+    Idempotent - safe to call multiple times.
     """
     db = get_database()
 
@@ -203,53 +204,75 @@ async def handle_call_ended(payload: Dict[str, Any], event_type: str) -> Dict[st
     else:
         session_id = payload.get("session", {}).get("id") or payload.get("session_id")
 
-    # Find the call by session ID
-    call = await db.fetch_one(
-        "SELECT id, started_at, status FROM calls WHERE openai_session_id = :session_id",
-        {"session_id": session_id}
-    )
+    if not session_id:
+        logger.warning("No session_id in call.ended webhook")
+        return {"status": "error", "message": "Missing session_id"}
 
-    if not call:
-        logger.warning(f"Call not found for session: {session_id}")
-        return {"status": "not_found"}
+    try:
+        # Find the call by session ID
+        call = await db.fetch_one(
+            """
+            SELECT id, started_at, ended_at, duration_seconds, status
+            FROM calls
+            WHERE openai_session_id = :session_id
+            """,
+            {"session_id": session_id}
+        )
 
-    # Calculate duration
-    ended_at = datetime.utcnow()
-    duration = int((ended_at - call["started_at"]).total_seconds())
+        if not call:
+            logger.warning(f"Call not found for session: {session_id}")
+            return {"status": "not_found"}
 
-    # Update call record
-    # Only update to completed if not already cancelled/declined
-    new_status = call["status"]
-    if call["status"] in [CallStatus.IN_PROGRESS.value, CallStatus.CONSENTED.value]:
-        new_status = CallStatus.COMPLETED.value
+        # Calculate end time and duration
+        ended_at = call["ended_at"] or datetime.utcnow()
+        duration = call["duration_seconds"]
 
-    await db.execute(
-        """
-        UPDATE calls
-        SET ended_at = :ended_at,
-            duration_seconds = :duration,
-            status = :status
-        WHERE id = :id
-        """,
-        {
-            "id": str(call["id"]),
-            "ended_at": ended_at,
+        if call["started_at"] and ended_at:
+            duration = int((ended_at - call["started_at"]).total_seconds())
+
+        # Determine final status (only if not already terminal)
+        current_status = call["status"]
+        if current_status in [CallStatus.IN_PROGRESS.value, CallStatus.CONSENTED.value]:
+            new_status = CallStatus.COMPLETED.value
+        elif current_status == CallStatus.PENDING_CONSENT.value:
+            new_status = CallStatus.DECLINED.value
+        else:
+            new_status = current_status  # Preserve cancelled/declined/failed
+
+        # Idempotent update - don't overwrite existing ended_at
+        await db.execute(
+            """
+            UPDATE calls
+            SET ended_at = COALESCE(ended_at, :ended_at),
+                duration_seconds = :duration,
+                status = :status
+            WHERE id = :id
+            """,
+            {
+                "id": str(call["id"]),
+                "ended_at": ended_at,
+                "duration": duration,
+                "status": new_status,
+            }
+        )
+
+        logger.info(
+            f"Webhook: Call {call['id']} ended, duration: {duration}s, status: {new_status}"
+        )
+
+        # Clean up call manager session
+        await call_manager.end_session(call["id"])
+
+        return {
+            "status": "updated",
+            "call_id": str(call["id"]),
             "duration": duration,
-            "status": new_status,
+            "final_status": new_status,
         }
-    )
 
-    logger.info(f"Call ended: {call['id']}, duration: {duration}s, status: {new_status}")
-
-    # Clean up call manager session
-    await call_manager.end_session(call["id"])
-
-    return {
-        "status": "updated",
-        "call_id": str(call["id"]),
-        "duration": duration,
-        "final_status": new_status,
-    }
+    except Exception as e:
+        logger.error(f"Error handling call.ended webhook: {e}", exc_info=True)
+        return {"status": "error", "message": str(e)}
 
 
 async def handle_dtmf(

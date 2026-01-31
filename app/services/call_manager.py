@@ -157,18 +157,16 @@ class CallManager:
         else:
             logger.info(f"Consent declined for call {call_id}")
 
-            # Update call status
+            # Update call status only; end time is set on disconnect.
             await db.execute(
                 """
                 UPDATE calls
-                SET status = :status,
-                    ended_at = :ended_at
+                SET status = :status
                 WHERE id = :id
                 """,
                 {
                     "id": str(call_id),
                     "status": CallStatus.DECLINED.value,
-                    "ended_at": datetime.utcnow(),
                 }
             )
 
@@ -217,6 +215,9 @@ class CallManager:
         logger.error(f"Session error for call {call_id}: {error}")
 
         session = self.active_sessions.get(call_id)
+        # If we have a live session, let disconnect finalize end time/duration.
+        await self._mark_call_failed(call_id, error, finalize=not bool(session))
+
         if session:
             try:
                 await session.send_error_message()
@@ -225,25 +226,42 @@ class CallManager:
             except Exception as e:
                 logger.error(f"Failed to send error message: {e}")
 
-        await self._mark_call_failed(call_id, error)
         await self.end_session(call_id)
 
-    async def _mark_call_failed(self, call_id: UUID, reason: str) -> None:
+    async def _mark_call_failed(
+        self,
+        call_id: UUID,
+        reason: str,
+        finalize: bool = True,
+    ) -> None:
         """
         Mark a call as failed in the database.
         """
         db = get_database()
+        ended_at = None
+        duration = None
+
+        if finalize:
+            ended_at = datetime.utcnow()
+            started_at = await db.fetch_val(
+                "SELECT started_at FROM calls WHERE id = :id",
+                {"id": str(call_id)},
+            )
+            if started_at:
+                duration = int((ended_at - started_at).total_seconds())
 
         await db.execute(
             """
             UPDATE calls
             SET status = 'declined',
-                ended_at = :ended_at
+                ended_at = COALESCE(:ended_at, ended_at),
+                duration_seconds = COALESCE(:duration, duration_seconds)
             WHERE id = :id
             """,
             {
                 "id": str(call_id),
-                "ended_at": datetime.utcnow(),
+                "ended_at": ended_at,
+                "duration": duration,
             }
         )
 

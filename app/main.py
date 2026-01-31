@@ -20,6 +20,7 @@ from app.database.db import (
 )
 from app.models.schemas import ErrorResponse, HealthResponse
 from app.routers import health, webhook
+from app.services.session_cleanup import SessionCleanup
 
 # ===========================================
 # Logging Configuration
@@ -65,12 +66,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
         if settings.is_production:
             raise
 
+    # Start cleanup service
+    cleanup_service = SessionCleanup()
+    await cleanup_service.start()
+
     logger.info("Application started successfully")
 
     yield  # Application runs here
 
     # Shutdown
     logger.info("Shutting down...")
+    await cleanup_service.stop()
     await disconnect_database()
     logger.info("Application stopped")
 
