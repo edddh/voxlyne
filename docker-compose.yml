@@ -1,0 +1,89 @@
+# Ascolta - Docker Compose
+# Milestone 1: Voice Communication MVP (app + postgres)
+
+version: '3.8'
+
+services:
+  # ===========================================
+  # FastAPI Application
+  # ===========================================
+  app:
+    build: .
+    container_name: ascolta-app
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_PROJECT_ID=${OPENAI_PROJECT_ID}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}}
+      - SECRET_KEY=${SECRET_KEY}
+      - ADMIN_USERNAME=${ADMIN_USERNAME}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - APP_ENV=${APP_ENV:-development}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - WEBHOOK_BASE_URL=${WEBHOOK_BASE_URL:-http://localhost:8000}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - ascolta-network
+
+  # ===========================================
+  # PostgreSQL Database
+  # ===========================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: ascolta-postgres
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-ascolta}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-ascolta_password}
+      - POSTGRES_DB=${POSTGRES_DB:-ascolta}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ascolta} -d ${POSTGRES_DB:-ascolta}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - ascolta-network
+
+  # ===========================================
+  # MinIO (S3-compatible) - Will be enabled in M2
+  # ===========================================
+  # minio:
+  #   image: minio/minio:latest
+  #   container_name: ascolta-minio
+  #   command: server /data --console-address ":9001"
+  #   environment:
+  #     - MINIO_ROOT_USER=${S3_ACCESS_KEY:-minioadmin}
+  #     - MINIO_ROOT_PASSWORD=${S3_SECRET_KEY:-miniopassword-set-at-bootstrap}
+  #   volumes:
+  #     - minio_data:/data
+  #   ports:
+  #     - "9000:9000"   # API
+  #     - "9001:9001"   # Console
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #   restart: unless-stopped
+  #   networks:
+  #     - ascolta-network
+
+volumes:
+  postgres_data:
+  # minio_data:  # Will be enabled in M2
+
+networks:
+  ascolta-network:
+    driver: bridge

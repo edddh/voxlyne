@@ -1,0 +1,29 @@
+# Ascolta - Milestone 1 Dependencies
+# Voice Communication MVP
+
+# Web Framework
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# OpenAI Realtime API
+openai==1.59.5
+websockets==14.1
+
+# Database
+asyncpg==0.30.0
+databases[postgresql]==0.9.0
+
+# Configuration
+pydantic==2.10.4
+pydantic-settings==2.7.1
+
+# HTTP Client (for webhooks in future milestones)
+httpx==0.28.1
+
+# Security
+python-jose[cryptography]==3.3.0
+argon2-cffi==23.1.0
+
+# Utilities
+python-multipart==0.0.18
+python-dotenv==1.0.1
