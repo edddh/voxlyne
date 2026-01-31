@@ -6,6 +6,7 @@ Manages OpenAI Realtime API WebSocket connection for voice calls
 import asyncio
 import json
 import logging
+from datetime import datetime
 from typing import Callable, Optional
 from uuid import UUID
 
@@ -13,6 +14,7 @@ import websockets
 from websockets.client import WebSocketClientProtocol
 
 from app.config import get_settings
+from app.database.db import get_database
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +84,8 @@ class RealtimeSession:
         self.is_connected = False
         self.consent_given = False
         self.transcript_buffer = []
+        self._output_transcript_buffer: list[str] = []
+        self._input_transcript_buffer: list[str] = []
 
         # Task management
         self._receive_task: Optional[asyncio.Task] = None
@@ -154,30 +158,54 @@ class RealtimeSession:
 
         logger.info(f"WebSocket disconnected for call {self.call_id}")
 
+        # Flush any remaining transcript deltas on disconnect
+        if self._output_transcript_buffer:
+            await self._persist_transcript("assistant", "".join(self._output_transcript_buffer))
+            self._output_transcript_buffer = []
+        if self._input_transcript_buffer:
+            await self._persist_transcript("user", "".join(self._input_transcript_buffer))
+            self._input_transcript_buffer = []
+
+        await self._mark_call_ended()
+
     async def _configure_session(self) -> None:
         """
         Configure the Realtime session with system prompt and settings.
         """
-        config = {
-            "type": "session.update",
-            "session": {
-                "modalities": ["text", "audio"],
+        is_sip_call = self.openai_session_id and self.openai_session_id.startswith("rtc_")
+
+        # SIP calls are configured via the accept() request; keep session.update minimal.
+        if is_sip_call:
+            session_config = {
+                "type": "realtime",
                 "instructions": DEFAULT_PROMPT_A,
-                "voice": self.settings.openai_realtime_voice,
-                "input_audio_format": "pcm16",
-                "output_audio_format": "pcm16",
-                "input_audio_transcription": {
-                    "model": "whisper-1"
-                },
-                "turn_detection": {
-                    "type": "server_vad",
-                    "threshold": 0.5,
-                    "prefix_padding_ms": 300,
-                    "silence_duration_ms": 500,
+            }
+        else:
+            session_config = {
+                "type": "realtime",
+                "instructions": DEFAULT_PROMPT_A,
+                "audio": {
+                    "input": {
+                        "transcription": {
+                            "model": "whisper-1",
+                            "language": "it",
+                        },
+                        "turn_detection": {
+                            "type": "server_vad",
+                            "threshold": 0.5,
+                            "prefix_padding_ms": 300,
+                            "silence_duration_ms": 500,
+                        },
+                    }
                 },
                 "temperature": 0.8,
                 "max_response_output_tokens": 4096,
+                "voice": self.settings.openai_realtime_voice,
             }
+
+        config = {
+            "type": "session.update",
+            "session": session_config,
         }
 
         await self._send_message(config)
@@ -311,6 +339,38 @@ class RealtimeSession:
             logger.error(f"Receive loop error: {e}")
             await self.on_error(self.call_id, f"Receive error: {e}")
 
+
+    def _extract_transcript_text(self, data: dict) -> str:
+        """
+        Extract transcript text from various Realtime payload shapes.
+        """
+        if not data:
+            return ""
+        if data.get("transcript"):
+            return data.get("transcript", "")
+        if data.get("text"):
+            return data.get("text", "")
+        delta = data.get("delta")
+        if isinstance(delta, dict):
+            if delta.get("text"):
+                return delta.get("text", "")
+            if delta.get("transcript"):
+                return delta.get("transcript", "")
+        if isinstance(delta, str):
+            return delta
+        transcription = data.get("transcription") or {}
+        if isinstance(transcription, dict) and transcription.get("text"):
+            return transcription.get("text", "")
+        item = data.get("item") or {}
+        content = item.get("content") or []
+        parts = []
+        for part in content:
+            if part.get("type") in ("text", "input_text"):
+                parts.append(part.get("text", ""))
+            elif part.get("type") == "input_audio" and part.get("transcript"):
+                parts.append(part.get("transcript", ""))
+        return "".join(parts)
+
     async def _handle_message(self, data: dict) -> None:
         """
         Handle incoming messages from OpenAI.
@@ -337,16 +397,37 @@ class RealtimeSession:
             item = data.get("item", {})
             await self._process_transcript_item(item)
 
-        elif msg_type == "response.audio_transcript.done":
+        elif msg_type in ("response.output_audio_transcript.done", "response.audio_transcript.done"):
             # AI speech transcript completed
-            transcript = data.get("transcript", "")
+            transcript = self._extract_transcript_text(data)
+            if not transcript and self._output_transcript_buffer:
+                transcript = "".join(self._output_transcript_buffer)
+                self._output_transcript_buffer = []
             logger.debug(f"AI said: {transcript[:100]}")
+            await self._persist_transcript("assistant", transcript)
+        elif msg_type in ("response.output_audio_transcript.delta", "response.audio_transcript.delta"):
+            delta = self._extract_transcript_text(data)
+            if delta:
+                self._output_transcript_buffer.append(delta)
 
-        elif msg_type == "conversation.item.input_audio_transcription.completed":
+        elif msg_type in (
+            "conversation.item.input_audio_transcription.completed",
+            "conversation.item.input_audio_transcription.delta",
+            "conversation.item.input_audio_transcription.segment",
+            "input_audio_transcription.completed",
+            "input_audio_transcription.segment",
+            "input_audio_transcription.delta",
+        ):
             # User speech transcript
-            transcript = data.get("transcript", "")
+            transcript = self._extract_transcript_text(data)
+            if msg_type.endswith(".delta") and transcript:
+                self._input_transcript_buffer.append(transcript)
+                return
+            if not transcript and self._input_transcript_buffer:
+                transcript = "".join(self._input_transcript_buffer)
+                self._input_transcript_buffer = []
             logger.debug(f"User said: {transcript[:100]}")
-            await self._check_for_consent(transcript)
+            await self._persist_transcript("user", transcript)
 
         elif msg_type == "input_audio_buffer.speech_started":
             logger.debug("User started speaking")
@@ -372,6 +453,8 @@ class RealtimeSession:
                 text += part.get("text", "")
             elif part.get("type") == "input_text":
                 text += part.get("text", "")
+            elif part.get("type") == "input_audio" and part.get("transcript"):
+                text += part.get("transcript", "")
 
         if text:
             self.transcript_buffer.append({
@@ -379,6 +462,34 @@ class RealtimeSession:
                 "content": text,
                 "timestamp": asyncio.get_event_loop().time()
             })
+            await self._persist_transcript(role or "assistant", text)
+
+    async def _persist_transcript(self, role: str, text: str) -> None:
+        """
+        Persist a transcript item to the database and check consent if needed.
+        """
+        if not text:
+            return
+
+        db = get_database()
+        try:
+            await db.execute(
+                """
+                INSERT INTO transcripts (call_id, role, content, timestamp)
+                VALUES (:call_id, :role, :content, :timestamp)
+                """,
+                {
+                    "call_id": str(self.call_id),
+                    "role": role,
+                    "content": text,
+                    "timestamp": datetime.utcnow(),
+                },
+            )
+        except Exception as e:
+            logger.error(f"Failed to persist transcript for call {self.call_id}: {e}")
+
+        if role == "user":
+            await self._check_for_consent(text)
 
     async def _check_for_consent(self, transcript: str) -> None:
         """
@@ -417,6 +528,50 @@ class RealtimeSession:
         except Exception as e:
             logger.error(f"Failed to send message: {e}")
             raise
+
+
+    async def _mark_call_ended(self) -> None:
+        """
+        Mark call as ended and compute duration when no call.ended webhook exists.
+        """
+        db = get_database()
+        call = await db.fetch_one(
+            "SELECT id, started_at, ended_at, status FROM calls WHERE id = :id",
+            {"id": str(self.call_id)},
+        )
+
+        if not call or call["ended_at"] is not None:
+            return
+
+        ended_at = datetime.utcnow()
+        started_at = call["started_at"]
+        duration = None
+        if started_at:
+            duration = int((ended_at - started_at).total_seconds())
+
+        status = call["status"]
+        if status in ("in_progress", "consented"):
+            new_status = "completed"
+        elif status == "pending_consent":
+            new_status = "declined"
+        else:
+            new_status = status
+
+        await db.execute(
+            """
+            UPDATE calls
+            SET ended_at = :ended_at,
+                duration_seconds = :duration,
+                status = :status
+            WHERE id = :id
+            """,
+            {
+                "id": str(self.call_id),
+                "ended_at": ended_at,
+                "duration": duration,
+                "status": new_status,
+            },
+        )
 
     def get_transcript(self) -> list:
         """

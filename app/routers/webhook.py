@@ -5,6 +5,7 @@ Handles incoming webhooks from OpenAI SIP gateway
 
 import logging
 import httpx
+import re
 from datetime import datetime
 from typing import Any, Dict
 from uuid import uuid4
@@ -56,8 +57,8 @@ async def handle_call_webhook(
         if event_type in ("call.started", "session.created", "realtime.call.incoming"):
             return await handle_call_started(payload, background_tasks, event_type)
 
-        elif event_type == "call.ended":
-            return await handle_call_ended(payload)
+        elif event_type in ("call.ended", "realtime.call.ended"):
+            return await handle_call_ended(payload, event_type)
 
         elif event_type == "input.dtmf":
             return await handle_dtmf(payload, background_tasks)
@@ -97,6 +98,18 @@ async def _accept_realtime_call(call_id: str, settings) -> None:
         "type": "realtime",
         "model": settings.openai_realtime_model,
         "instructions": DEFAULT_PROMPT_A,
+        "audio": {
+            "input": {
+                "format": {"type": "audio/pcma"},
+                "transcription": {
+                    "model": "whisper-1",
+                    "language": "it",
+                },
+            },
+            "output": {
+                "format": {"type": "audio/pcma"},
+            },
+        },
     }
 
     async with httpx.AsyncClient(timeout=15) as client:
@@ -125,8 +138,20 @@ async def handle_call_started(
     caller_number = (
         payload.get("call", {}).get("caller_number") or
         payload.get("caller_number") or
+        payload.get("data", {}).get("from") or
+        payload.get("data", {}).get("from_number") or
+        payload.get("data", {}).get("caller_number") or
+        payload.get("data", {}).get("caller") or
         "unknown"
     )
+    if caller_number == "unknown" and event_type == "realtime.call.incoming":
+        # Try to parse SIP From header for caller ID
+        sip_headers = payload.get("data", {}).get("sip_headers") or []
+        from_header = next((h for h in sip_headers if h.get("name") == "From"), None)
+        if from_header and from_header.get("value"):
+            match = re.search(r'sip:([^@;>]+)', from_header["value"])
+            if match:
+                caller_number = match.group(1)
 
     # Accept incoming SIP calls
     if event_type == "realtime.call.incoming":
@@ -166,14 +191,17 @@ async def handle_call_started(
     }
 
 
-async def handle_call_ended(payload: Dict[str, Any]) -> Dict[str, Any]:
+async def handle_call_ended(payload: Dict[str, Any], event_type: str) -> Dict[str, Any]:
     """
     Handle call termination.
     Updates the call record with end time and duration.
     """
     db = get_database()
 
-    session_id = payload.get("session", {}).get("id") or payload.get("session_id")
+    if event_type == "realtime.call.ended":
+        session_id = payload.get("data", {}).get("call_id")
+    else:
+        session_id = payload.get("session", {}).get("id") or payload.get("session_id")
 
     # Find the call by session ID
     call = await db.fetch_one(

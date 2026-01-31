@@ -81,6 +81,84 @@ async def run_migrations() -> None:
     """
     import os
     from pathlib import Path
+    from typing import List
+
+    def _split_sql_statements(sql: str) -> List[str]:
+        """
+        Split SQL into statements, honoring quoted strings and dollar-quoted blocks.
+        """
+        statements: List[str] = []
+        buf: list[str] = []
+        i = 0
+        in_single = False
+        in_double = False
+        in_dollar: str | None = None
+
+        while i < len(sql):
+            ch = sql[i]
+
+            if in_dollar:
+                if sql.startswith(in_dollar, i):
+                    buf.append(in_dollar)
+                    i += len(in_dollar)
+                    in_dollar = None
+                    continue
+                buf.append(ch)
+                i += 1
+                continue
+
+            if in_single:
+                buf.append(ch)
+                if ch == "'" and (i == 0 or sql[i - 1] != "\\"):
+                    in_single = False
+                i += 1
+                continue
+
+            if in_double:
+                buf.append(ch)
+                if ch == '"' and (i == 0 or sql[i - 1] != "\\"):
+                    in_double = False
+                i += 1
+                continue
+
+            if ch == "'":
+                in_single = True
+                buf.append(ch)
+                i += 1
+                continue
+
+            if ch == '"':
+                in_double = True
+                buf.append(ch)
+                i += 1
+                continue
+
+            if ch == "$":
+                j = i + 1
+                while j < len(sql) and (sql[j].isalnum() or sql[j] == "_"):
+                    j += 1
+                if j < len(sql) and sql[j] == "$":
+                    in_dollar = sql[i : j + 1]
+                    buf.append(in_dollar)
+                    i = j + 1
+                    continue
+
+            if ch == ";":
+                statement = "".join(buf).strip()
+                if statement:
+                    statements.append(statement)
+                buf = []
+                i += 1
+                continue
+
+            buf.append(ch)
+            i += 1
+
+        tail = "".join(buf).strip()
+        if tail:
+            statements.append(tail)
+
+        return statements
 
     db = get_database()
     migrations_dir = Path(__file__).parent.parent.parent / "migrations"
@@ -96,11 +174,10 @@ async def run_migrations() -> None:
         logger.info(f"Running migration: {migration_file.name}")
         try:
             sql = migration_file.read_text()
-            # Split by semicolons and execute each statement
-            # (databases library doesn't support multiple statements in one execute)
-            statements = [s.strip() for s in sql.split(";") if s.strip()]
+            # Split statements while honoring dollar-quoted blocks
+            statements = _split_sql_statements(sql)
             for statement in statements:
-                if statement and not statement.startswith("--"):
+                if statement:
                     await db.execute(statement)
             logger.info(f"Migration completed: {migration_file.name}")
         except Exception as e:
