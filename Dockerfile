@@ -13,9 +13,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 # Install system dependencies
-# Note: WeasyPrint dependencies will be added in M2
 RUN apt-get update && apt-get install -y \
     curl \
+    libcairo2 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libgdk-pixbuf-2.0-0 \
+    libffi8 \
+    libjpeg62-turbo \
+    libpng16-16 \
+    libfontconfig1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies

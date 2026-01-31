@@ -19,7 +19,7 @@ from app.database.db import (
     run_migrations,
 )
 from app.models.schemas import ErrorResponse, HealthResponse
-from app.routers import health, webhook
+from app.routers import api, health, webhook
 from app.services.session_cleanup import SessionCleanup
 
 # ===========================================
@@ -135,8 +135,8 @@ async def root():
     """Root endpoint - API information."""
     return {
         "name": "Ascolta",
-        "version": "1.0.0-alpha",
-        "milestone": "M1 - Voice Communication MVP",
+        "version": "2.0.0-alpha",
+        "milestone": "M2 - Structured Output + Multi-Project",
         "status": "running",
         "docs": "/docs" if not settings.is_production else None,
     }
@@ -167,6 +167,9 @@ app.include_router(health.router, prefix="/api", tags=["Health"])
 
 # Webhook router (OpenAI SIP events)
 app.include_router(webhook.router, prefix="/api", tags=["Webhook"])
+
+# API router (M2: Projects, calls, records, PDFs)
+app.include_router(api.router, tags=["API"])
 
 
 # ===========================================

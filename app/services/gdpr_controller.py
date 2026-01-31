@@ -5,11 +5,21 @@ Handles data deletion and privacy compliance
 
 import logging
 from datetime import date
+from typing import Optional
 from uuid import UUID
 
 from app.database.db import get_database
 
 logger = logging.getLogger(__name__)
+
+# Import S3 client lazily to avoid circular imports
+def get_s3_client_safe():
+    """Safely import S3 client (M2 feature)."""
+    try:
+        from app.storage.s3_client import get_s3_client
+        return get_s3_client()
+    except ImportError:
+        return None
 
 
 class GDPRController:
@@ -29,8 +39,8 @@ class GDPRController:
         This deletes:
         - Call record
         - All transcripts (via CASCADE)
-        - Any records/candidates (in M2, via CASCADE)
-        - PDF files (in M2)
+        - Records (M2, via CASCADE)
+        - PDF files (M2, from S3/MinIO)
 
         Returns the number of records deleted.
 
@@ -53,24 +63,39 @@ class GDPRController:
                 logger.warning("Call not found for deletion")
                 return 0
 
-            # 2. Count transcripts before deletion (for reporting)
+            # 2. Delete PDF from S3/MinIO (M2)
+            s3_client = get_s3_client_safe()
+            if s3_client:
+                pdf_deleted = await self._delete_pdf_if_exists(call_id, s3_client)
+                if pdf_deleted:
+                    records_deleted += 1
+
+            # 3. Count records before deletion (for reporting)
             transcript_count = await db.fetch_one(
                 "SELECT COUNT(*) as count FROM transcripts WHERE call_id = :call_id",
                 {"call_id": str(call_id)}
             )
             records_deleted += transcript_count["count"] if transcript_count else 0
 
-            # 3. Delete the call (CASCADE will delete transcripts)
+            # Count record (M2)
+            record = await db.fetch_one(
+                "SELECT id FROM records WHERE call_id = :call_id",
+                {"call_id": str(call_id)}
+            )
+            if record:
+                records_deleted += 1  # The record itself
+
+            # 4. Delete the call (CASCADE will delete transcripts and records)
             result = await db.execute(
                 "DELETE FROM calls WHERE id = :id",
                 {"id": str(call_id)}
             )
             records_deleted += 1  # The call record itself
 
-            # 4. Increment anonymous cancellation counter
+            # 5. Increment anonymous cancellation counter
             await self._increment_cancellation_counter()
 
-            # 5. Log success (NO PII)
+            # 6. Log success (NO PII)
             logger.info(f"GDPR hard delete completed: {records_deleted} records removed")
 
             return records_deleted
@@ -78,6 +103,34 @@ class GDPRController:
         except Exception as e:
             logger.error(f"GDPR hard delete failed: {e}")
             raise
+
+    async def _delete_pdf_if_exists(self, call_id: UUID, s3_client) -> bool:
+        """
+        Delete PDF file from S3 if it exists.
+        Returns True if PDF was deleted, False if not found.
+        """
+        db = get_database()
+
+        try:
+            # Check if record exists with PDF
+            record = await db.fetch_one(
+                "SELECT pdf_key FROM records WHERE call_id = :call_id",
+                {"call_id": str(call_id)}
+            )
+
+            if not record or not record["pdf_key"]:
+                logger.debug("No PDF to delete")
+                return False
+
+            # Delete from S3
+            s3_client.delete_pdf(record["pdf_key"])
+            logger.info(f"PDF deleted from S3: {record['pdf_key']}")
+            return True
+
+        except Exception as e:
+            # Non-critical - log but don't fail the deletion
+            logger.warning(f"Failed to delete PDF from S3: {e}")
+            return False
 
     async def _increment_cancellation_counter(self) -> None:
         """
@@ -173,6 +226,7 @@ class GDPRController:
         )
 
         if call:
+            logger.warning("GDPR verification failed: call record still exists")
             return False
 
         # Check transcripts (should be deleted via CASCADE, but verify)
@@ -182,9 +236,19 @@ class GDPRController:
         )
 
         if transcript:
+            logger.warning("GDPR verification failed: transcript still exists")
             return False
 
-        # TODO (M2): Check records table
-        # TODO (M2): Check S3 for PDF files
+        # Check records table (M2)
+        record = await db.fetch_one(
+            "SELECT id, pdf_key FROM records WHERE call_id = :call_id",
+            {"call_id": str(call_id)}
+        )
 
+        if record:
+            logger.warning("GDPR verification failed: record still exists")
+            return False
+
+        # Verification passed
+        logger.info("GDPR verification passed: all data deleted")
         return True

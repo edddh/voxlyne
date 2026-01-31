@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Scheda Candidato - {{ data.candidate_name | default('N/A') }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 20mm;
+            @bottom-right {
+                content: "Pagina " counter(page) " di " counter(pages);
+                font-size: 9pt;
+                color: #999;
+            }
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            font-size: 11pt;
+            line-height: 1.6;
+            color: #333;
+        }
+
+        .header {
+            border-bottom: 3px solid #E63946;
+            padding-bottom: 15px;
+            margin-bottom: 25px;
+        }
+
+        .header h1 {
+            font-size: 24pt;
+            color: #E63946;
+            margin-bottom: 5px;
+        }
+
+        .header .subtitle {
+            font-size: 11pt;
+            color: #666;
+        }
+
+        .metadata {
+            background-color: #f8f9fa;
+            padding: 12px;
+            border-left: 4px solid #E63946;
+            margin-bottom: 20px;
+            font-size: 10pt;
+        }
+
+        .metadata table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .metadata td {
+            padding: 4px 0;
+        }
+
+        .metadata .label {
+            font-weight: bold;
+            color: #666;
+            width: 150px;
+        }
+
+        .section {
+            margin-bottom: 20px;
+            page-break-inside: avoid;
+        }
+
+        .section-title {
+            font-size: 14pt;
+            font-weight: bold;
+            color: #E63946;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 5px;
+            margin-bottom: 10px;
+        }
+
+        .subsection {
+            margin-left: 15px;
+            margin-bottom: 12px;
+        }
+
+        .subsection-title {
+            font-weight: bold;
+            color: #444;
+            margin-bottom: 5px;
+        }
+
+        .project {
+            background-color: #f8f9fa;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+
+        .project-name {
+            font-weight: bold;
+            color: #E63946;
+        }
+
+        .skills-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .skill-item {
+            background-color: #f0f0f0;
+            padding: 6px 10px;
+            border-radius: 3px;
+            font-size: 10pt;
+        }
+
+        .score-box {
+            display: inline-block;
+            background-color: #E63946;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 4px;
+            font-size: 18pt;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .availability-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 8px;
+        }
+
+        .availability-table td {
+            padding: 6px;
+            border: 1px solid #ddd;
+        }
+
+        .availability-table .label {
+            background-color: #f8f9fa;
+            font-weight: bold;
+            width: 200px;
+        }
+
+        .yes {
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        .no {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .red-flag {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 10px;
+            margin-bottom: 8px;
+            font-size: 10pt;
+        }
+
+        .footer {
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px solid #ddd;
+            font-size: 9pt;
+            color: #999;
+            text-align: center;
+        }
+
+        ul {
+            margin-left: 20px;
+            margin-top: 5px;
+        }
+
+        li {
+            margin-bottom: 3px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <h1>{{ data.candidate_name | default('Candidato Sconosciuto') }}</h1>
+        <div class="subtitle">Scheda Candidato - Generata da Ascolta</div>
+    </div>
+
+    <!-- Metadata -->
+    <div class="metadata">
+        <table>
+            <tr>
+                <td class="label">Telefono:</td>
+                <td>{{ data.phone_number | default('N/D') }}</td>
+                <td class="label">Email:</td>
+                <td>{{ data.email | default('N/D') }}</td>
+            </tr>
+            <tr>
+                <td class="label">Data colloquio:</td>
+                <td>{{ call_date | default('N/D') }}</td>
+                <td class="label">Durata:</td>
+                <td>{{ call_duration | default('N/D') }}</td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- Profilo Generale -->
+    <div class="section">
+        <div class="section-title">📋 Profilo Generale</div>
+        <div class="subsection">
+            <div class="subsection-title">Ruoli di Interesse</div>
+            {% if data.role_targets %}
+                <ul>
+                {% for role in data.role_targets %}
+                    <li>{{ role }}</li>
+                {% endfor %}
+                </ul>
+            {% else %}
+                <p>Nessun ruolo specificato</p>
+            {% endif %}
+        </div>
+
+        <div class="subsection">
+            <div class="subsection-title">Seniority</div>
+            <p style="text-transform: capitalize; font-weight: bold;">
+                {{ data.seniority_estimate | default('Non specificata') }}
+            </p>
+        </div>
+
+        <div class="subsection">
+            <div class="subsection-title">Sintesi Esperienza</div>
+            <p>{{ data.experience_summary | default('Nessuna descrizione disponibile') }}</p>
+        </div>
+    </div>
+
+    <!-- Progetti Rilevanti -->
+    {% if data.relevant_projects and data.relevant_projects | length > 0 %}
+    <div class="section">
+        <div class="section-title">🏗️ Progetti Rilevanti</div>
+        {% for project in data.relevant_projects %}
+        <div class="project">
+            <div class="project-name">{{ project.project_name | default('Progetto non specificato') }}</div>
+            <p><strong>Ruolo:</strong> {{ project.role | default('N/D') }}</p>
+            <p><strong>Durata:</strong> {{ project.duration_estimate | default('N/D') }}</p>
+            <p><strong>Attività:</strong> {{ project.key_activities | default('N/D') }}</p>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Competenze -->
+    <div class="section">
+        <div class="section-title">💼 Competenze</div>
+
+        <div class="subsection">
+            <div class="subsection-title">Hard Skills</div>
+            {% if data.hard_skills and data.hard_skills | length > 0 %}
+                <div class="skills-grid">
+                {% for skill in data.hard_skills %}
+                    <div class="skill-item">{{ skill }}</div>
+                {% endfor %}
+                </div>
+            {% else %}
+                <p>Nessuna competenza tecnica specificata</p>
+            {% endif %}
+        </div>
+
+        <div class="subsection">
+            <div class="subsection-title">Soft Skills</div>
+            {% if data.soft_skills and data.soft_skills | length > 0 %}
+                <ul>
+                {% for skill in data.soft_skills %}
+                    <li>{{ skill }}</li>
+                {% endfor %}
+                </ul>
+            {% else %}
+                <p>Nessuna soft skill rilevata</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Disponibilità -->
+    <div class="section">
+        <div class="section-title">📅 Disponibilità</div>
+        <table class="availability-table">
+            <tr>
+                <td class="label">Disponibile a trasferirsi</td>
+                <td>
+                    {% if data.availability.willing_to_relocate %}
+                        <span class="yes">✓ Sì</span>
+                    {% else %}
+                        <span class="no">✗ No</span>
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <td class="label">Disponibile a trasferte</td>
+                <td>
+                    {% if data.availability.willing_to_travel %}
+                        <span class="yes">✓ Sì</span>
+                    {% else %}
+                        <span class="no">✗ No</span>
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <td class="label">Data inizio stimata</td>
+                <td>{{ data.availability.start_date_estimate | default('Non specificata') }}</td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- Motivazioni -->
+    <div class="section">
+        <div class="section-title">💡 Motivazioni</div>
+        <p>{{ data.motivations | default('Nessuna motivazione specificata') }}</p>
+    </div>
+
+    <!-- Red Flags -->
+    {% if data.red_flags and data.red_flags | length > 0 %}
+    <div class="section">
+        <div class="section-title">⚠️ Note di Attenzione</div>
+        {% for flag in data.red_flags %}
+        <div class="red-flag">{{ flag }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Valutazione Complessiva -->
+    <div class="section">
+        <div class="section-title">⭐ Valutazione Complessiva</div>
+        <div class="score-box">
+            {{ data.overall_fit_score | default('?') }}/10
+        </div>
+        <div class="subsection" style="margin-top: 15px;">
+            <div class="subsection-title">Note del Recruiter AI</div>
+            <p>{{ data.recruiter_notes | default('Nessuna nota aggiuntiva') }}</p>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+        Generato automaticamente da <strong>Ascolta</strong> - Demo Organization<br>
+        Data generazione: {{ generation_date }}
+    </div>
+</body>
+</html>

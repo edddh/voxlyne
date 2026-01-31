@@ -5,7 +5,7 @@ Data models for API requests/responses and database entities
 
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -34,6 +34,15 @@ class TranscriptRole(str, Enum):
     SYSTEM = "system"
 
 
+class ProjectType(str, Enum):
+    """Project use case type."""
+    RECRUITING = "recruiting"
+    LEAD_GEN = "lead_gen"
+    SUPPORT = "support"
+    SURVEY = "survey"
+    OTHER = "other"
+
+
 # ===========================================
 # Call Schemas
 # ===========================================
@@ -42,6 +51,7 @@ class CallBase(BaseModel):
     """Base call model."""
     phone_number: Optional[str] = None
     status: CallStatus = CallStatus.PENDING_CONSENT
+    project_id: Optional[UUID] = None  # M2: Link to project
 
 
 class CallCreate(CallBase):
@@ -62,6 +72,7 @@ class CallUpdate(BaseModel):
 class Call(CallBase):
     """Complete call model with all fields."""
     id: UUID
+    project_id: Optional[UUID] = None  # M2: Foreign key to projects
     consent_given: bool = False
     consent_timestamp: Optional[datetime] = None
     started_at: datetime
@@ -173,5 +184,193 @@ class GDPRDeleteResponse(BaseModel):
     records_deleted: int = 0
 
 
+# ===========================================
+# Project Schemas (M2)
+# ===========================================
+
+class ProjectBase(BaseModel):
+    """Base project model."""
+    name: str = Field(..., min_length=1, max_length=255)
+    slug: str = Field(..., min_length=1, max_length=100, pattern="^[a-z0-9-]+$")
+    type: ProjectType
+    description: Optional[str] = None
+    is_active: bool = True
+
+
+class ProjectCreate(ProjectBase):
+    """Schema for creating a new project."""
+    prompt_a: str = Field(..., min_length=100)
+    prompt_b: str = Field(..., min_length=100)
+    consent_message: Optional[str] = None
+    voice_name: str = "alloy"
+    language: str = "it"
+    output_config: Dict[str, Any] = Field(
+        default_factory=lambda: {
+            "pdf": {"enabled": True, "template": "default"},
+            "email": {"enabled": False, "to": []},
+            "webhook": {"enabled": False, "url": None}
+        }
+    )
+    sip_number: Optional[str] = None
+    openai_project_id: Optional[str] = None
+
+
+class ProjectUpdate(BaseModel):
+    """Schema for updating a project."""
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+    prompt_a: Optional[str] = Field(None, min_length=100)
+    prompt_b: Optional[str] = Field(None, min_length=100)
+    consent_message: Optional[str] = None
+    voice_name: Optional[str] = None
+    language: Optional[str] = None
+    output_config: Optional[Dict[str, Any]] = None
+    sip_number: Optional[str] = None
+    openai_project_id: Optional[str] = None
+
+
+class Project(ProjectBase):
+    """Complete project model."""
+    id: UUID
+    prompt_a: str
+    prompt_b: str
+    consent_message: Optional[str] = None
+    voice_name: str
+    language: str
+    output_config: Dict[str, Any]
+    sip_number: Optional[str] = None
+    openai_project_id: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ===========================================
+# Record Schemas (M2)
+# ===========================================
+
+class RecordBase(BaseModel):
+    """Base record model."""
+    json_data: Dict[str, Any]
+
+
+class RecordCreate(RecordBase):
+    """Schema for creating a record."""
+    call_id: UUID
+
+
+class RecordUpdate(BaseModel):
+    """Schema for updating a record."""
+    json_data: Optional[Dict[str, Any]] = None
+    pdf_key: Optional[str] = None
+    pdf_generated_at: Optional[datetime] = None
+    email_sent: Optional[bool] = None
+    email_sent_at: Optional[datetime] = None
+    email_to: Optional[str] = None
+
+
+class Record(RecordBase):
+    """Complete record model."""
+    id: int
+    call_id: UUID
+    pdf_key: Optional[str] = None
+    pdf_generated_at: Optional[datetime] = None
+    email_sent: bool = False
+    email_sent_at: Optional[datetime] = None
+    email_to: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class RecordWithCall(Record):
+    """Record with associated call data."""
+    call: Optional[Call] = None
+
+
+# ===========================================
+# Setting Schemas (M2)
+# ===========================================
+
+class SettingBase(BaseModel):
+    """Base setting model."""
+    key: str = Field(..., min_length=1, max_length=255)
+    value: str
+
+
+class SettingCreate(SettingBase):
+    """Schema for creating a setting."""
+    description: Optional[str] = None
+
+
+class SettingUpdate(BaseModel):
+    """Schema for updating a setting."""
+    value: str
+
+
+class Setting(SettingBase):
+    """Complete setting model."""
+    description: Optional[str] = None
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ===========================================
+# Metric Schemas (M2)
+# ===========================================
+
+class MetricBase(BaseModel):
+    """Base metric model."""
+    date: datetime
+    total_calls: int = 0
+    consented_calls: int = 0
+    declined_calls: int = 0
+    cancelled_calls: int = 0
+    completed_calls: int = 0
+
+
+class Metric(MetricBase):
+    """Complete metric model."""
+    id: int
+    avg_duration_seconds: Optional[float] = None
+    avg_consent_time_seconds: Optional[float] = None
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ===========================================
+# Extended Call Schemas (M2)
+# ===========================================
+
+class CallWithProject(Call):
+    """Call with project information."""
+    project: Optional[Project] = None
+
+
+class CallWithRecord(Call):
+    """Call with record (JSON + PDF)."""
+    record: Optional[Record] = None
+
+
+class CallComplete(Call):
+    """Call with all related data."""
+    project: Optional[Project] = None
+    record: Optional[Record] = None
+    transcripts: List[Transcript] = []
+
+
 # Update forward references
 CallWithTranscripts.model_rebuild()
+CallWithProject.model_rebuild()
+CallWithRecord.model_rebuild()
+CallComplete.model_rebuild()
+RecordWithCall.model_rebuild()
