@@ -92,6 +92,10 @@ class CallManager:
         """
         Handle DTMF cancellation request.
         This triggers immediate call termination and transcript deletion.
+
+        IMPORTANT: This is called from within the receive loop, so we CANNOT call
+        hangup() directly (it would cancel the current task). Instead, we close
+        the WebSocket directly and let the receive loop terminate naturally.
         """
         logger.info(f"Processing cancellation for call {call_id}")
 
@@ -111,19 +115,43 @@ class CallManager:
                 },
             )
 
-            # 1. Get the session
+            # Get the session
             session = self.active_sessions.get(call_id)
 
             if session:
-                # 2. Send goodbye message and hang up
-                await session.send_cancellation_message()
-                await asyncio.sleep(2)  # Wait for message to play
-                await session.hangup()
+                # Send goodbye message
+                try:
+                    await session.send_cancellation_message()
+                    await asyncio.sleep(2)  # Wait for message to play
+                except Exception as e:
+                    logger.warning(f"Error sending cancellation message: {e}")
 
-            # 3. Delete transcripts only (keep call record)
+                # Close the WebSocket directly (without cancelling tasks)
+                # This will cause the receive loop to terminate naturally with ConnectionClosed
+                if session.ws:
+                    try:
+                        await session.ws.close()
+                        logger.info(f"WebSocket closed for call {call_id}")
+                    except Exception as e:
+                        logger.warning(f"Error closing WebSocket: {e}")
+
+                # Wait for receive loop to terminate gracefully
+                if session._receive_task:
+                    try:
+                        await asyncio.wait_for(session._receive_task, timeout=3.0)
+                        logger.info(f"Receive task completed for call {call_id}")
+                    except asyncio.TimeoutError:
+                        logger.warning(f"Receive task did not complete within timeout for call {call_id}")
+                    except asyncio.CancelledError:
+                        logger.debug(f"Receive task was cancelled for call {call_id}")
+                    except Exception as e:
+                        logger.warning(f"Error waiting for receive task: {e}")
+
+            # Delete transcripts only (keep call record)
             await self.gdpr_controller.delete_transcripts(call_id)
+            logger.info(f"Transcripts deleted for call {call_id}")
 
-            # 4. Clean up session
+            # Clean up session now that receive loop has terminated
             await self.end_session(call_id)
 
             logger.info(f"Cancellation completed for call {call_id}")
@@ -133,8 +161,9 @@ class CallManager:
             # Still try to delete transcripts even if there was an error
             try:
                 await self.gdpr_controller.delete_transcripts(call_id)
+                logger.info(f"Transcripts deleted after error for call {call_id}")
             except Exception as delete_error:
-                logger.error(f"Failed to delete data after cancellation error: {delete_error}")
+                logger.error(f"CRITICAL: Failed to delete transcripts: {delete_error}")
 
     async def _handle_consent(
         self,

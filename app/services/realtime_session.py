@@ -90,6 +90,7 @@ class RealtimeSession:
         self._input_transcript_buffer: list[str] = []
         self._finalized = False
         self._dtmf_cancelled = False
+        self._skip_transcript_save = False  # Set to True during cancellation to prevent saving
 
         # Task management
         self._receive_task: Optional[asyncio.Task] = None
@@ -169,15 +170,21 @@ class RealtimeSession:
         logger.info(f"WebSocket disconnected for call {self.call_id}")
 
         # Flush remaining transcripts with error handling
-        try:
-            if self._output_transcript_buffer:
-                await self._persist_transcript("assistant", "".join(self._output_transcript_buffer))
-                self._output_transcript_buffer = []
-            if self._input_transcript_buffer:
-                await self._persist_transcript("user", "".join(self._input_transcript_buffer))
-                self._input_transcript_buffer = []
-        except Exception as e:
-            logger.error(f"Error flushing transcripts for call {self.call_id}: {e}")
+        # Skip if cancellation was triggered (transcripts will be deleted anyway)
+        if not self._skip_transcript_save:
+            try:
+                if self._output_transcript_buffer:
+                    await self._persist_transcript("assistant", "".join(self._output_transcript_buffer))
+                    self._output_transcript_buffer = []
+                if self._input_transcript_buffer:
+                    await self._persist_transcript("user", "".join(self._input_transcript_buffer))
+                    self._input_transcript_buffer = []
+            except Exception as e:
+                logger.error(f"Error flushing transcripts for call {self.call_id}: {e}")
+        else:
+            logger.info(f"Skipping transcript flush for cancelled call {self.call_id}")
+            self._output_transcript_buffer = []
+            self._input_transcript_buffer = []
 
         # Mark call ended with error handling
         try:
@@ -339,6 +346,7 @@ class RealtimeSession:
             if phrase in text_lower:
                 logger.info(f"Voice cancellation detected: '{phrase}' in '{text_lower[:50]}...'")
                 self._dtmf_cancelled = True
+                self._skip_transcript_save = True  # Prevent saving transcripts after cancellation
                 await self.on_dtmf_cancel(self.call_id, self.openai_session_id)
                 return
 
@@ -434,18 +442,22 @@ class RealtimeSession:
         finally:
             if not self._finalized:
                 self.is_connected = False
-                if self._output_transcript_buffer:
-                    await self._persist_transcript(
-                        "assistant",
-                        "".join(self._output_transcript_buffer),
-                    )
-                    self._output_transcript_buffer = []
-                if self._input_transcript_buffer:
-                    await self._persist_transcript(
-                        "user",
-                        "".join(self._input_transcript_buffer),
-                    )
-                    self._input_transcript_buffer = []
+                # Only save transcripts if not cancelled (they will be deleted anyway)
+                if not self._skip_transcript_save:
+                    if self._output_transcript_buffer:
+                        await self._persist_transcript(
+                            "assistant",
+                            "".join(self._output_transcript_buffer),
+                        )
+                    if self._input_transcript_buffer:
+                        await self._persist_transcript(
+                            "user",
+                            "".join(self._input_transcript_buffer),
+                        )
+                else:
+                    logger.info(f"Skipping transcript save in finally block for cancelled call {self.call_id}")
+                self._output_transcript_buffer = []
+                self._input_transcript_buffer = []
                 await self._mark_call_ended()
                 self._finalized = True
 
@@ -586,6 +598,7 @@ class RealtimeSession:
                 ):
                     logger.info(f"[WS DTMF DEBUG] Cancel key detected! Triggering cancellation...")
                     self._dtmf_cancelled = True
+                    self._skip_transcript_save = True  # Prevent saving transcripts after cancellation
                     await self.on_dtmf_cancel(self.call_id, self.openai_session_id)
 
         elif msg_type == "response.done":
@@ -622,6 +635,11 @@ class RealtimeSession:
         Persist a transcript item to the database and check consent if needed.
         """
         if not text:
+            return
+
+        # Skip saving if cancellation was triggered (transcripts will be deleted)
+        if self._skip_transcript_save:
+            logger.debug(f"Skipping transcript save for cancelled call {self.call_id}")
             return
 
         db = get_database()
