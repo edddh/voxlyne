@@ -189,6 +189,13 @@ class CallManager:
             session = self.active_sessions.get(call_id)
 
             if session:
+                # Play cancellation TTS message before hangup (no AI dialog)
+                try:
+                    logger.info(f"Playing cancellation TTS message for call {call_id}")
+                    await session.send_cancellation_tts_message()
+                except Exception as e:
+                    logger.warning(f"Error playing cancellation TTS message: {e}")
+
                 # Now terminate the SIP call using OpenAI API
                 try:
                     await self._hangup_sip_call(session_id)

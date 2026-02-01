@@ -76,6 +76,10 @@ class Settings(BaseSettings):
         default="9",
         description="DTMF key to trigger immediate cancellation"
     )
+    cancellation_message_text: str = Field(
+        default="Cancellazione dati eseguita. Arrivederci.",
+        description="Message played before disconnecting on cancellation"
+    )
 
     # ===========================================
     # GDPR Settings

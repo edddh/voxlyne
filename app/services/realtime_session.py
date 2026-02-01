@@ -96,6 +96,8 @@ class RealtimeSession:
         self._receive_task: Optional[asyncio.Task] = None
         self._heartbeat_task: Optional[asyncio.Task] = None
         self._timeout_task: Optional[asyncio.Task] = None
+        self._cancel_tts_event: Optional[asyncio.Event] = None
+        self._cancel_tts_waiting = False
 
     def mark_cancelled(self) -> None:
         """Mark the session as cancelled to stop transcript saves and avoid re-entrance."""
@@ -105,6 +107,38 @@ class RealtimeSession:
     def is_cancelled(self) -> bool:
         """Check if this session has been cancelled."""
         return self._dtmf_cancelled
+
+    def _normalize_text(self, text: str) -> str:
+        """Normalize text for simple keyword matching."""
+        lowered = text.lower().strip()
+        return "".join(ch if ch.isalnum() or ch.isspace() else " " for ch in lowered)
+
+    def _is_voice_cancellation(self, transcript: str) -> bool:
+        """
+        Return True if the transcript contains a cancellation intent.
+        Uses stems to catch variations like "cancello", "cancellare", etc.
+        """
+        if not transcript:
+            return False
+        normalized = self._normalize_text(transcript)
+        if not normalized:
+            return False
+        for stem in ("cancell", "elimin", "rimuov", "annull", "revoc"):
+            if stem in normalized:
+                return True
+        for phrase in (
+            "non voglio piu",
+            "non voglio più",
+            "stop",
+            "basta",
+            "termina",
+            "fine",
+            "chiudi la chiamata",
+            "chiudi",
+        ):
+            if phrase in normalized:
+                return True
+        return False
 
     async def connect(self) -> None:
         """
@@ -318,6 +352,8 @@ class RealtimeSession:
 
             # Clear the input audio buffer to prevent further processing
             await self._send_message({"type": "input_audio_buffer.clear"})
+            # Clear any pending output audio so TTS stops immediately
+            await self._send_message({"type": "output_audio_buffer.clear"})
 
             # Small delay to ensure commands are processed by OpenAI
             await asyncio.sleep(0.2)
@@ -330,55 +366,80 @@ class RealtimeSession:
         """
         Send goodbye message for DTMF cancellation.
         """
-        message = {
-            "type": "conversation.item.create",
-            "item": {
-                "type": "message",
-                "role": "assistant",
-                "content": [
+        await self.send_cancellation_tts_message()
+
+    async def send_cancellation_tts_message(self) -> None:
+        """
+        Speak a preconfigured cancellation message without continuing the dialog.
+        Uses a dedicated response with isolated context.
+        """
+        if not self.is_connected or not self.ws:
+            logger.warning("Cannot send cancellation TTS: WebSocket not connected")
+            return
+
+        message_text = (self.settings.cancellation_message_text or "").strip()
+        if not message_text:
+            logger.info("Cancellation message text is empty; skipping TTS")
+            return
+
+        if self._cancel_tts_waiting:
+            logger.debug("Cancellation TTS already in progress")
+            return
+
+        self._cancel_tts_waiting = True
+        self._cancel_tts_event = asyncio.Event()
+
+        response_payload = {
+            "type": "response.create",
+            "response": {
+                "conversation": "none",
+                "metadata": {"purpose": "cancellation_tts"},
+                "instructions": (
+                    "Ripeti esattamente la frase seguente senza aggiungere altro: "
+                    f"\"{message_text}\""
+                ),
+                "input": [
                     {
-                        "type": "output_text",
-                        "text": "Operazione completata. La trascrizione di questa chiamata verrà eliminata. Arrivederci."
+                        "type": "message",
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": message_text,
+                            }
+                        ],
                     }
-                ]
-            }
+                ],
+            },
         }
 
-        await self._send_message(message)
+        await self._send_message(response_payload)
 
-    async def _check_voice_cancellation(self, transcript: str) -> None:
+        try:
+            await asyncio.wait_for(self._cancel_tts_event.wait(), timeout=6.0)
+        except asyncio.TimeoutError:
+            logger.warning("Timeout waiting for cancellation TTS playback")
+        finally:
+            self._cancel_tts_waiting = False
+            self._cancel_tts_event = None
+
+    async def _check_voice_cancellation(self, transcript: str) -> bool:
         """
         Check if user said a cancellation phrase (fallback for DTMF).
         Triggers cancellation if user says "cancella", "elimina i miei dati", etc.
         """
         if not transcript or self._dtmf_cancelled:
-            return
+            return False
 
-        # Normalize text
-        text_lower = transcript.lower().strip()
+        if not self._is_voice_cancellation(transcript):
+            return False
 
-        # Cancellation phrases in Italian
-        cancel_phrases = [
-            "cancella",
-            "elimina",
-            "cancella i miei dati",
-            "elimina i miei dati",
-            "voglio cancellare",
-            "cancella tutto",
-            "elimina tutto",
-            "cancella la registrazione",
-            "non voglio più",
-            "annulla tutto",
-        ]
-
-        # Check if any cancellation phrase is in the transcript
-        for phrase in cancel_phrases:
-            if phrase in text_lower:
-                logger.info(f"Voice cancellation detected: '{phrase}' in '{text_lower[:50]}...'")
-                self.mark_cancelled()
-                await self.interrupt_ai_and_clear_buffers()
-                await self.on_dtmf_cancel(self.call_id, self.openai_session_id)
-                return
+        text_lower = self._normalize_text(transcript)
+        logger.info(f"Voice cancellation detected in '{text_lower[:50]}...'")
+        self.mark_cancelled()
+        await self.interrupt_ai_and_clear_buffers()
+        await self.on_dtmf_cancel(self.call_id, self.openai_session_id)
+        return True
 
     def _extract_single_digit(self, transcript: str) -> Optional[str]:
         """
@@ -644,18 +705,25 @@ class RealtimeSession:
                 await self.interrupt_ai_and_clear_buffers()
                 await self.on_dtmf_cancel(self.call_id, self.openai_session_id)
                 return
+            if transcript and not self._dtmf_cancelled:
+                if await self._check_voice_cancellation(transcript):
+                    return
             logger.debug(f"User said: {transcript[:100]}")
             await self._persist_transcript("user", transcript)
 
             # Check for voice-based cancellation (fallback for DTMF)
-            if transcript and not self._dtmf_cancelled:
-                await self._check_voice_cancellation(transcript)
+            # (Handled above before persisting)
 
         elif msg_type == "input_audio_buffer.speech_started":
             logger.debug("User started speaking")
 
         elif msg_type == "input_audio_buffer.speech_stopped":
             logger.debug("User stopped speaking")
+
+        elif msg_type == "output_audio_buffer.stopped":
+            logger.debug("Output audio buffer stopped")
+            if self._cancel_tts_waiting and self._cancel_tts_event:
+                self._cancel_tts_event.set()
 
         elif msg_type in (
             "input_audio_buffer.dtmf_event_received",
@@ -695,8 +763,11 @@ class RealtimeSession:
                     await self.on_dtmf_cancel(self.call_id, self.openai_session_id)
 
         elif msg_type == "response.done":
-            # AI finished responding
-            pass
+            if self._cancel_tts_waiting and self._cancel_tts_event:
+                response = data.get("response") or {}
+                metadata = response.get("metadata") or {}
+                if metadata.get("purpose") == "cancellation_tts":
+                    self._cancel_tts_event.set()
 
     async def _process_transcript_item(self, item: dict) -> None:
         """
@@ -734,6 +805,8 @@ class RealtimeSession:
                     self.mark_cancelled()
                     await self.interrupt_ai_and_clear_buffers()
                     await self.on_dtmf_cancel(self.call_id, self.openai_session_id)
+                    return
+                if await self._check_voice_cancellation(text):
                     return
             self.transcript_buffer.append({
                 "role": role,
