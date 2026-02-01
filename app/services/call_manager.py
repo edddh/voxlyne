@@ -9,6 +9,8 @@ from datetime import datetime
 from typing import Dict, Optional
 from uuid import UUID
 
+import httpx
+
 from app.config import get_settings
 from app.database.db import get_database
 from app.models.schemas import CallStatus
@@ -84,6 +86,58 @@ class CallManager:
 
         logger.info(f"Session ended for call {call_id}")
 
+    async def _delayed_cleanup(self, call_id: UUID) -> None:
+        """
+        Clean up session after a delay to allow receive loop to terminate.
+        Used after DTMF cancellation.
+        """
+        try:
+            # Wait for receive loop to finish
+            await asyncio.sleep(2)
+
+            # Remove session from active sessions
+            session = self.active_sessions.pop(call_id, None)
+            if session:
+                logger.info(f"Delayed cleanup: removed session for call {call_id}")
+            else:
+                logger.debug(f"Delayed cleanup: session already removed for call {call_id}")
+
+        except Exception as e:
+            logger.error(f"Error in delayed cleanup for call {call_id}: {e}")
+
+    async def _hangup_sip_call(self, openai_session_id: str) -> None:
+        """
+        Terminate a SIP call using OpenAI Realtime API hangup endpoint.
+        See: https://platform.openai.com/docs/api-reference/realtime-calls
+        """
+        if not openai_session_id or not openai_session_id.startswith("rtc_"):
+            logger.warning(f"Invalid OpenAI session ID for hangup: {openai_session_id}")
+            return
+
+        try:
+            url = f"https://api.openai.com/v1/realtime/calls/{openai_session_id}/hangup"
+            headers = {
+                "Authorization": f"Bearer {self.settings.openai_api_key}",
+                "Content-Type": "application/json",
+            }
+
+            logger.info(f"Sending SIP hangup request for session {openai_session_id}")
+
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(url, headers=headers)
+
+                if response.status_code == 200:
+                    logger.info(f"SIP call hangup successful for session {openai_session_id}")
+                else:
+                    logger.warning(
+                        f"SIP hangup returned {response.status_code}: {response.text}"
+                    )
+
+        except httpx.TimeoutException:
+            logger.error(f"Timeout calling OpenAI hangup API for session {openai_session_id}")
+        except Exception as e:
+            logger.error(f"Error calling OpenAI hangup API: {e}")
+
     async def handle_cancellation(
         self,
         call_id: UUID,
@@ -118,43 +172,40 @@ class CallManager:
             # Get the session
             session = self.active_sessions.get(call_id)
 
+            # Delete transcripts immediately (keep call record)
+            await self.gdpr_controller.delete_transcripts(call_id)
+            logger.info(f"Transcripts deleted for call {call_id}")
+
+            # Get the session for cleanup
+            session = self.active_sessions.get(call_id)
+
             if session:
                 # Send goodbye message
                 try:
                     await session.send_cancellation_message()
-                    await asyncio.sleep(2)  # Wait for message to play
+                    await asyncio.sleep(3)  # Wait for message to play
+                    logger.info(f"Cancellation message sent for call {call_id}")
                 except Exception as e:
                     logger.warning(f"Error sending cancellation message: {e}")
 
-                # Close the WebSocket directly (without cancelling tasks)
-                # This will cause the receive loop to terminate naturally with ConnectionClosed
-                if session.ws:
-                    try:
-                        await session.ws.close()
-                        logger.info(f"WebSocket closed for call {call_id}")
-                    except Exception as e:
-                        logger.warning(f"Error closing WebSocket: {e}")
+                # Terminate the SIP call using OpenAI API
+                try:
+                    await self._hangup_sip_call(session_id)
+                except Exception as e:
+                    logger.error(f"Error hanging up SIP call: {e}")
 
-                # Wait for receive loop to terminate gracefully
-                if session._receive_task:
-                    try:
-                        await asyncio.wait_for(session._receive_task, timeout=3.0)
-                        logger.info(f"Receive task completed for call {call_id}")
-                    except asyncio.TimeoutError:
-                        logger.warning(f"Receive task did not complete within timeout for call {call_id}")
-                    except asyncio.CancelledError:
-                        logger.debug(f"Receive task was cancelled for call {call_id}")
-                    except Exception as e:
-                        logger.warning(f"Error waiting for receive task: {e}")
+                # Force close the WebSocket
+                try:
+                    await session.force_close_websocket()
+                except Exception as e:
+                    logger.error(f"Error force closing WebSocket: {e}")
 
-            # Delete transcripts only (keep call record)
-            await self.gdpr_controller.delete_transcripts(call_id)
-            logger.info(f"Transcripts deleted for call {call_id}")
+                # Schedule cleanup in background (can't await receive_task from inside it)
+                asyncio.create_task(self._delayed_cleanup(call_id))
+            else:
+                logger.warning(f"No active session found for call {call_id}")
 
-            # Clean up session now that receive loop has terminated
-            await self.end_session(call_id)
-
-            logger.info(f"Cancellation completed for call {call_id}")
+            logger.info(f"Cancellation processing completed for call {call_id}")
 
         except Exception as e:
             logger.error(f"Cancellation error for call {call_id}: {e}")

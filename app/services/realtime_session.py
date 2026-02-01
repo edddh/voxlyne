@@ -379,6 +379,29 @@ class RealtimeSession:
         # Otherwise just disconnect
         await self.disconnect()
 
+    async def force_close_websocket(self) -> None:
+        """
+        Force close the WebSocket connection immediately.
+        Used for DTMF cancellation from within receive loop.
+        """
+        logger.info(f"Force closing WebSocket for call {self.call_id}")
+
+        # Set flag to prevent saving transcripts
+        self.is_connected = False
+
+        # Close WebSocket if still open
+        if self.ws:
+            try:
+                if not self.ws.closed:
+                    await self.ws.close(code=1000, reason="User cancelled")
+                    logger.info(f"WebSocket force closed for call {self.call_id}")
+                else:
+                    logger.info(f"WebSocket already closed for call {self.call_id}")
+            except Exception as e:
+                logger.error(f"Error force closing WebSocket: {e}")
+        else:
+            logger.warning(f"No WebSocket to close for call {self.call_id}")
+
     async def _timeout_watchdog(self) -> None:
         """
         Watchdog that enforces maximum call duration.
