@@ -7,7 +7,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime
-from typing import Callable, Optional
+from typing import Awaitable, Callable, Optional
 from uuid import UUID
 
 import websockets
@@ -26,7 +26,7 @@ DEFAULT_PROMPT_A = """Sei un assistente AI professionale che conduce colloqui te
 IMPORTANTE - CONSENSO GDPR:
 All'inizio della chiamata, DEVI chiedere il consenso per raccogliere e processare i dati:
 
-"Buongiorno! Grazie per aver chiamato Ascolta. Prima di iniziare, devo informarla che questa conversazione verrà registrata e analizzata per valutare la sua candidatura. I suoi dati saranno trattati secondo il GDPR. Lei può interrompere in qualsiasi momento premendo il tasto 9 sul telefono per cancellare tutti i suoi dati senza lasciare traccia. Accetta di procedere con il colloquio? Risponda sì o no."
+"Buongiorno! Grazie per aver chiamato Ascolta. Prima di iniziare, devo informarla che questa conversazione verrà registrata e analizzata per valutare la sua candidatura. I suoi dati saranno trattati secondo il GDPR. Lei può interrompere in qualsiasi momento premendo il tasto 9 sul telefono per cancellare la trascrizione di questa chiamata. Accetta di procedere con il colloquio? Risponda sì o no."
 
 ATTENDI la risposta dell'utente:
 - Se dice "sì", "accetto", "va bene" o simili → Procedi con il colloquio
@@ -72,12 +72,14 @@ class RealtimeSession:
         on_consent_received: Callable[[UUID, bool], None],
         on_interview_complete: Callable[[UUID], None],
         on_error: Callable[[UUID, str], None],
+        on_dtmf_cancel: Callable[[UUID, str], Awaitable[None]],
     ):
         self.call_id = call_id
         self.openai_session_id = openai_session_id
         self.on_consent_received = on_consent_received
         self.on_interview_complete = on_interview_complete
         self.on_error = on_error
+        self.on_dtmf_cancel = on_dtmf_cancel
 
         self.settings = get_settings()
         self.ws: Optional[WebSocketClientProtocol] = None
@@ -87,6 +89,7 @@ class RealtimeSession:
         self._output_transcript_buffer: list[str] = []
         self._input_transcript_buffer: list[str] = []
         self._finalized = False
+        self._dtmf_cancelled = False
 
         # Task management
         self._receive_task: Optional[asyncio.Task] = None
@@ -297,7 +300,7 @@ class RealtimeSession:
                 "content": [
                     {
                         "type": "text",
-                        "text": "Operazione completata. Non conserveremo alcuna informazione di questa chiamata. Arrivederci."
+                        "text": "Operazione completata. La trascrizione di questa chiamata verrà eliminata. Arrivederci."
                     }
                 ]
             }
@@ -305,6 +308,39 @@ class RealtimeSession:
 
         await self._send_message(message)
         await self._send_message({"type": "response.create"})
+
+    async def _check_voice_cancellation(self, transcript: str) -> None:
+        """
+        Check if user said a cancellation phrase (fallback for DTMF).
+        Triggers cancellation if user says "cancella", "elimina i miei dati", etc.
+        """
+        if not transcript or self._dtmf_cancelled:
+            return
+
+        # Normalize text
+        text_lower = transcript.lower().strip()
+
+        # Cancellation phrases in Italian
+        cancel_phrases = [
+            "cancella",
+            "elimina",
+            "cancella i miei dati",
+            "elimina i miei dati",
+            "voglio cancellare",
+            "cancella tutto",
+            "elimina tutto",
+            "cancella la registrazione",
+            "non voglio più",
+            "annulla tutto",
+        ]
+
+        # Check if any cancellation phrase is in the transcript
+        for phrase in cancel_phrases:
+            if phrase in text_lower:
+                logger.info(f"Voice cancellation detected: '{phrase}' in '{text_lower[:50]}...'")
+                self._dtmf_cancelled = True
+                await self.on_dtmf_cancel(self.call_id, self.openai_session_id)
+                return
 
     async def send_error_message(self) -> None:
         """
@@ -368,6 +404,20 @@ class RealtimeSession:
             async for message in self.ws:
                 try:
                     data = json.loads(message)
+                    if isinstance(data, str):
+                        # Some events can arrive as JSON-encoded strings; try one more decode.
+                        try:
+                            data = json.loads(data)
+                        except json.JSONDecodeError:
+                            logger.warning(
+                                f"Received non-JSON string message: {data[:200]}"
+                            )
+                            continue
+                    if not isinstance(data, dict):
+                        logger.warning(
+                            f"Ignoring non-dict message: {type(data).__name__}"
+                        )
+                        continue
                     await self._handle_message(data)
                 except json.JSONDecodeError as e:
                     logger.error(f"Invalid JSON received: {e}")
@@ -437,8 +487,11 @@ class RealtimeSession:
         """
         msg_type = data.get("type", "")
 
-        # Log all messages in debug mode
-        logger.debug(f"Received: {msg_type}")
+        # Log all messages for debugging (temporarily elevated to INFO)
+        if "dtmf" in msg_type.lower() or msg_type.startswith("input"):
+            logger.info(f"[WS DEBUG] Received potentially relevant: {msg_type}")
+        else:
+            logger.debug(f"Received: {msg_type}")
 
         # Handle different message types
         if msg_type == "error":
@@ -489,11 +542,46 @@ class RealtimeSession:
             logger.debug(f"User said: {transcript[:100]}")
             await self._persist_transcript("user", transcript)
 
+            # Check for voice-based cancellation (fallback for DTMF)
+            if transcript and not self._dtmf_cancelled:
+                await self._check_voice_cancellation(transcript)
+
         elif msg_type == "input_audio_buffer.speech_started":
             logger.debug("User started speaking")
 
         elif msg_type == "input_audio_buffer.speech_stopped":
             logger.debug("User stopped speaking")
+
+        elif msg_type in (
+            "input_audio_buffer.dtmf_event_received",
+            "input.dtmf",
+            "realtime.dtmf",
+            "dtmf",
+            "input_audio_buffer.dtmf",
+        ):
+            # Enhanced logging for DTMF debugging
+            logger.info(f"[WS DTMF DEBUG] Received DTMF event: msg_type={msg_type}, data={data}")
+
+            digit = data.get("digit")
+            if digit is None:
+                digit = (data.get("dtmf") or {}).get("digit")
+            if digit is None:
+                digit = (data.get("event") or {}).get("digit")
+            if digit is None:
+                digit = (data.get("input") or {}).get("digit")
+
+            logger.info(f"[WS DTMF DEBUG] Extracted digit={digit}")
+
+            if digit is not None:
+                digit_str = str(digit)
+                logger.info(f"DTMF received via WebSocket: {digit_str} for call {self.call_id}")
+                if (
+                    digit_str == self.settings.dtmf_cancel_key
+                    and not self._dtmf_cancelled
+                ):
+                    logger.info(f"[WS DTMF DEBUG] Cancel key detected! Triggering cancellation...")
+                    self._dtmf_cancelled = True
+                    await self.on_dtmf_cancel(self.call_id, self.openai_session_id)
 
         elif msg_type == "response.done":
             # AI finished responding

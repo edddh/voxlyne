@@ -54,6 +54,7 @@ class CallManager:
                 on_consent_received=self._handle_consent,
                 on_interview_complete=self._handle_interview_complete,
                 on_error=self._handle_session_error,
+                on_dtmf_cancel=self.handle_cancellation,
             )
 
             # Store session
@@ -90,11 +91,26 @@ class CallManager:
     ) -> None:
         """
         Handle DTMF cancellation request.
-        This triggers immediate call termination and data deletion.
+        This triggers immediate call termination and transcript deletion.
         """
         logger.info(f"Processing cancellation for call {call_id}")
 
         try:
+            db = get_database()
+
+            # Mark the call as declined to preserve the record
+            await db.execute(
+                """
+                UPDATE calls
+                SET status = :status
+                WHERE id = :id
+                """,
+                {
+                    "id": str(call_id),
+                    "status": CallStatus.DECLINED.value,
+                },
+            )
+
             # 1. Get the session
             session = self.active_sessions.get(call_id)
 
@@ -104,8 +120,8 @@ class CallManager:
                 await asyncio.sleep(2)  # Wait for message to play
                 await session.hangup()
 
-            # 3. Perform GDPR hard delete
-            await self.gdpr_controller.hard_delete(call_id)
+            # 3. Delete transcripts only (keep call record)
+            await self.gdpr_controller.delete_transcripts(call_id)
 
             # 4. Clean up session
             await self.end_session(call_id)
@@ -114,9 +130,9 @@ class CallManager:
 
         except Exception as e:
             logger.error(f"Cancellation error for call {call_id}: {e}")
-            # Still try to delete data even if there was an error
+            # Still try to delete transcripts even if there was an error
             try:
-                await self.gdpr_controller.hard_delete(call_id)
+                await self.gdpr_controller.delete_transcripts(call_id)
             except Exception as delete_error:
                 logger.error(f"Failed to delete data after cancellation error: {delete_error}")
 

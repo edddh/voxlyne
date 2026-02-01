@@ -104,6 +104,38 @@ class GDPRController:
             logger.error(f"GDPR hard delete failed: {e}")
             raise
 
+    async def delete_transcripts(self, call_id: UUID) -> int:
+        """
+        Delete only transcripts for a call, leaving the call record intact.
+
+        Returns the number of transcript rows deleted.
+        """
+        db = get_database()
+        logger.info("Deleting transcripts for call (ID redacted for privacy)")
+
+        try:
+            # Count transcripts before deletion
+            transcript_count = await db.fetch_one(
+                "SELECT COUNT(*) as count FROM transcripts WHERE call_id = :call_id",
+                {"call_id": str(call_id)},
+            )
+            count = transcript_count["count"] if transcript_count else 0
+
+            await db.execute(
+                "DELETE FROM transcripts WHERE call_id = :call_id",
+                {"call_id": str(call_id)},
+            )
+
+            # Track anonymous cancellation
+            await self._increment_cancellation_counter()
+
+            logger.info(f"Transcript deletion completed: {count} rows removed")
+            return count
+
+        except Exception as e:
+            logger.error(f"Transcript deletion failed: {e}")
+            raise
+
     async def _delete_pdf_if_exists(self, call_id: UUID, s3_client) -> bool:
         """
         Delete PDF file from S3 if it exists.

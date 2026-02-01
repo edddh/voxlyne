@@ -53,6 +53,9 @@ async def handle_call_webhook(
 
         event_type = payload.get("type", "")
 
+        # Log all events for debugging
+        logger.info(f"[WEBHOOK DEBUG] event_type={event_type}")
+
         # Route based on event type
         if event_type in ("call.started", "session.created", "realtime.call.incoming"):
             return await handle_call_started(payload, background_tasks, event_type)
@@ -60,7 +63,7 @@ async def handle_call_webhook(
         elif event_type in ("call.ended", "realtime.call.ended"):
             return await handle_call_ended(payload, event_type)
 
-        elif event_type == "input.dtmf":
+        elif event_type in ("input.dtmf", "realtime.dtmf", "dtmf", "input_audio_buffer.dtmf"):
             return await handle_dtmf(payload, background_tasks)
 
         elif event_type == "conversation.item.created":
@@ -74,7 +77,11 @@ async def handle_call_webhook(
 
         else:
             # Log unknown event types for debugging
-            logger.debug(f"Unhandled event type: {event_type}")
+            # Elevate to INFO if it might be DTMF-related
+            if "dtmf" in event_type.lower():
+                logger.info(f"[UNHANDLED DTMF] Unknown DTMF event type: {event_type}, payload: {payload}")
+            else:
+                logger.debug(f"Unhandled event type: {event_type}")
             return {"status": "ignored", "event_type": event_type}
 
     except Exception as e:
@@ -275,15 +282,35 @@ async def handle_dtmf(
 ) -> Dict[str, Any]:
     """
     Handle DTMF tone input.
-    Key "9" triggers immediate cancellation and data deletion.
+    Key "9" triggers immediate cancellation and transcript deletion.
     """
     settings = get_settings()
     db = get_database()
 
-    digit = payload.get("digit") or payload.get("input", {}).get("digit")
-    session_id = payload.get("session", {}).get("id") or payload.get("session_id")
+    # Enhanced logging to diagnose DTMF issues
+    logger.info(f"[DTMF DEBUG] Full payload: {payload}")
 
-    logger.info(f"DTMF received: {digit} for session {session_id}")
+    # Try multiple extraction paths for digit
+    digit = payload.get("digit")
+    if digit is None:
+        digit = payload.get("input", {}).get("digit")
+    if digit is None:
+        digit = payload.get("dtmf", {}).get("digit")
+    if digit is None:
+        digit = payload.get("data", {}).get("digit")
+    if digit is None:
+        digit = payload.get("event", {}).get("digit")
+
+    # Try multiple extraction paths for session_id
+    session_id = payload.get("session", {}).get("id")
+    if not session_id:
+        session_id = payload.get("session_id")
+    if not session_id:
+        session_id = payload.get("call_id")
+    if not session_id:
+        session_id = payload.get("data", {}).get("call_id")
+
+    logger.info(f"[DTMF DEBUG] Extracted digit={digit}, session_id={session_id}")
 
     # Check if this is the cancel key
     if digit == settings.dtmf_cancel_key:
