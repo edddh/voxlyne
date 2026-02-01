@@ -31,7 +31,11 @@ class PostProcessor:
         self.settings = get_settings()
         self.client = openai.OpenAI(api_key=self.settings.openai_api_key)
 
-    async def process_call(self, call_id: UUID) -> Dict[str, Any]:
+    async def process_call(
+        self,
+        call_id: UUID,
+        allow_processed: bool = False,
+    ) -> Dict[str, Any]:
         """
         Process a completed call:
         1. Fetch call and project data
@@ -60,7 +64,11 @@ class PostProcessor:
             if not call:
                 raise PostProcessingError(f"Call {call_id} not found")
 
-            if call["status"] not in ["completed", "consented"]:
+            valid_statuses = ["completed", "consented"]
+            if allow_processed:
+                valid_statuses.append("processed")
+
+            if call["status"] not in valid_statuses:
                 raise PostProcessingError(
                     f"Call {call_id} has invalid status: {call['status']}"
                 )
@@ -343,4 +351,4 @@ METADATI:
             Updated JSON data
         """
         logger.info(f"Reprocessing call {call_id}")
-        return await self.process_call(call_id)
+        return await self.process_call(call_id, allow_processed=True)
