@@ -26,7 +26,7 @@ DEFAULT_PROMPT_A = """Sei un assistente AI professionale che conduce colloqui te
 IMPORTANTE - CONSENSO GDPR:
 All'inizio della chiamata, DEVI chiedere il consenso per raccogliere e processare i dati:
 
-"Buongiorno! Grazie per aver chiamato Ascolta. Prima di iniziare, devo informarla che questa conversazione verrà registrata e analizzata per valutare la sua candidatura. I suoi dati saranno trattati secondo il GDPR. Lei può interrompere in qualsiasi momento premendo il tasto 9 sul telefono per cancellare la trascrizione di questa chiamata. Accetta di procedere con il colloquio? Risponda sì o no."
+"Buongiorno! Grazie per aver chiamato Ascolta. Prima di iniziare, devo informarla che questa conversazione verrà registrata e analizzata per valutare la sua candidatura. I suoi dati saranno trattati secondo il GDPR. Lei può interrompere in qualsiasi momento premendo il tasto 9 sul telefono, oppure dicendo 'cancella i miei dati', per eliminare la trascrizione di questa chiamata. Accetta di procedere con il colloquio? Risponda sì o no."
 
 ATTENDI la risposta dell'utente:
 - Se dice "sì", "accetto", "va bene" o simili → Procedi con il colloquio
@@ -566,7 +566,12 @@ class RealtimeSession:
             if digit is None:
                 digit = (data.get("dtmf") or {}).get("digit")
             if digit is None:
-                digit = (data.get("event") or {}).get("digit")
+                # 'event' can be the digit directly (string) or an object with 'digit' key
+                event_val = data.get("event")
+                if isinstance(event_val, str):
+                    digit = event_val  # e.g., {'event': '9'}
+                elif isinstance(event_val, dict):
+                    digit = event_val.get("digit")
             if digit is None:
                 digit = (data.get("input") or {}).get("digit")
 
