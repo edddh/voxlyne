@@ -77,8 +77,8 @@ class Settings(BaseSettings):
         description="DTMF key to trigger immediate cancellation"
     )
     cancellation_message_text: str = Field(
-        default="Cancellazione dati eseguita. Arrivederci.",
-        description="Message played before disconnecting on cancellation"
+        default="Va bene, procedo con la cancellazione della telefonata.",
+        description="Standard cancellation phrase spoken by the AI before disconnecting"
     )
 
     # ===========================================
