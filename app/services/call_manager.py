@@ -148,13 +148,22 @@ class CallManager:
         This triggers immediate call termination and transcript deletion.
 
         IMPORTANT: This is called from within the receive loop, so we CANNOT call
-        hangup() directly (it would cancel the current task). Instead, we close
-        the WebSocket directly and let the receive loop terminate naturally.
+        hangup() directly (it would cancel the current task). Instead, we trigger
+        SIP hangup and let the receive loop terminate naturally.
         """
         logger.info(f"Processing cancellation for call {call_id}")
 
         try:
             db = get_database()
+
+            # If cancellation came from webhook (no WS DTMF), stop any ongoing response
+            session = self.active_sessions.get(call_id)
+            if session and not session.is_cancelled():
+                try:
+                    session.mark_cancelled()
+                    await session.interrupt_ai_and_clear_buffers()
+                except Exception as e:
+                    logger.warning(f"Error interrupting AI: {e}")
 
             # Mark the call as declined to preserve the record
             await db.execute(
@@ -180,25 +189,14 @@ class CallManager:
             session = self.active_sessions.get(call_id)
 
             if session:
-                # Send goodbye message
-                try:
-                    await session.send_cancellation_message()
-                    await asyncio.sleep(3)  # Wait for message to play
-                    logger.info(f"Cancellation message sent for call {call_id}")
-                except Exception as e:
-                    logger.warning(f"Error sending cancellation message: {e}")
-
-                # Terminate the SIP call using OpenAI API
+                # Now terminate the SIP call using OpenAI API
                 try:
                     await self._hangup_sip_call(session_id)
                 except Exception as e:
                     logger.error(f"Error hanging up SIP call: {e}")
 
-                # Force close the WebSocket
-                try:
-                    await session.force_close_websocket()
-                except Exception as e:
-                    logger.error(f"Error force closing WebSocket: {e}")
+                # The hangup API will close the SIP call and WebSocket
+                # We don't force close the WebSocket here to avoid interrupting the hangup
 
                 # Schedule cleanup in background (can't await receive_task from inside it)
                 asyncio.create_task(self._delayed_cleanup(call_id))
@@ -335,29 +333,20 @@ class CallManager:
         """
         db = get_database()
         ended_at = None
-        duration = None
 
         if finalize:
             ended_at = datetime.utcnow()
-            started_at = await db.fetch_val(
-                "SELECT started_at FROM calls WHERE id = :id",
-                {"id": str(call_id)},
-            )
-            if started_at:
-                duration = int((ended_at - started_at).total_seconds())
 
         await db.execute(
             """
             UPDATE calls
             SET status = 'declined',
-                ended_at = COALESCE(:ended_at, ended_at),
-                duration_seconds = COALESCE(:duration, duration_seconds)
+                ended_at = COALESCE(:ended_at, ended_at)
             WHERE id = :id
             """,
             {
                 "id": str(call_id),
                 "ended_at": ended_at,
-                "duration": duration,
             }
         )
 

@@ -97,6 +97,15 @@ class RealtimeSession:
         self._heartbeat_task: Optional[asyncio.Task] = None
         self._timeout_task: Optional[asyncio.Task] = None
 
+    def mark_cancelled(self) -> None:
+        """Mark the session as cancelled to stop transcript saves and avoid re-entrance."""
+        self._dtmf_cancelled = True
+        self._skip_transcript_save = True
+
+    def is_cancelled(self) -> bool:
+        """Check if this session has been cancelled."""
+        return self._dtmf_cancelled
+
     async def connect(self) -> None:
         """
         Connect to OpenAI Realtime API via WebSocket.
@@ -285,7 +294,7 @@ class RealtimeSession:
                 "role": "assistant",
                 "content": [
                     {
-                        "type": "text",
+                        "type": "output_text",
                         "text": "Capisco. Grazie per il suo tempo. Arrivederci."
                     }
                 ]
@@ -294,6 +303,28 @@ class RealtimeSession:
 
         await self._send_message(message)
         await self._send_message({"type": "response.create"})
+
+    async def interrupt_ai_and_clear_buffers(self) -> None:
+        """
+        Interrupt any ongoing AI response and clear audio buffers.
+        This prevents the AI from responding to DTMF or continuing to speak
+        when we want to send our own cancellation message.
+        """
+        logger.info(f"Interrupting AI and clearing buffers for call {self.call_id}")
+
+        try:
+            # Cancel any ongoing response from the AI
+            await self._send_message({"type": "response.cancel"})
+
+            # Clear the input audio buffer to prevent further processing
+            await self._send_message({"type": "input_audio_buffer.clear"})
+
+            # Small delay to ensure commands are processed by OpenAI
+            await asyncio.sleep(0.2)
+
+            logger.info(f"AI interrupted and buffers cleared for call {self.call_id}")
+        except Exception as e:
+            logger.error(f"Error interrupting AI: {e}")
 
     async def send_cancellation_message(self) -> None:
         """
@@ -306,7 +337,7 @@ class RealtimeSession:
                 "role": "assistant",
                 "content": [
                     {
-                        "type": "text",
+                        "type": "output_text",
                         "text": "Operazione completata. La trascrizione di questa chiamata verrà eliminata. Arrivederci."
                     }
                 ]
@@ -314,7 +345,6 @@ class RealtimeSession:
         }
 
         await self._send_message(message)
-        await self._send_message({"type": "response.create"})
 
     async def _check_voice_cancellation(self, transcript: str) -> None:
         """
@@ -345,10 +375,27 @@ class RealtimeSession:
         for phrase in cancel_phrases:
             if phrase in text_lower:
                 logger.info(f"Voice cancellation detected: '{phrase}' in '{text_lower[:50]}...'")
-                self._dtmf_cancelled = True
-                self._skip_transcript_save = True  # Prevent saving transcripts after cancellation
+                self.mark_cancelled()
+                await self.interrupt_ai_and_clear_buffers()
                 await self.on_dtmf_cancel(self.call_id, self.openai_session_id)
                 return
+
+    def _extract_single_digit(self, transcript: str) -> Optional[str]:
+        """
+        Extract a single digit if the transcript contains only that digit
+        (optionally surrounded by whitespace/punctuation).
+        """
+        if not transcript:
+            return None
+        cleaned = transcript.strip()
+        if not cleaned:
+            return None
+        if any(char.isalpha() for char in cleaned):
+            return None
+        digits = "".join(char for char in cleaned if char.isdigit())
+        if len(digits) == 1:
+            return digits
+        return None
 
     async def send_error_message(self) -> None:
         """
@@ -361,7 +408,7 @@ class RealtimeSession:
                 "role": "assistant",
                 "content": [
                     {
-                        "type": "text",
+                        "type": "output_text",
                         "text": "Mi dispiace, si è verificato un problema tecnico. La preghiamo di richiamare più tardi. Arrivederci."
                     }
                 ]
@@ -510,7 +557,7 @@ class RealtimeSession:
         content = item.get("content") or []
         parts = []
         for part in content:
-            if part.get("type") in ("text", "input_text"):
+            if part.get("type") in ("text", "input_text", "output_text"):
                 parts.append(part.get("text", ""))
             elif part.get("type") == "input_audio" and part.get("transcript"):
                 parts.append(part.get("transcript", ""))
@@ -531,6 +578,13 @@ class RealtimeSession:
         # Handle different message types
         if msg_type == "error":
             error = data.get("error", {})
+            error_code = error.get("code")
+            if error_code == "response_cancel_not_active":
+                logger.debug("Ignoring response_cancel_not_active error")
+                return
+            if self._dtmf_cancelled:
+                logger.info(f"Ignoring error after cancellation: {error}")
+                return
             logger.error(f"OpenAI error: {error}")
             await self.on_error(self.call_id, f"OpenAI error: {error.get('message')}")
 
@@ -574,6 +628,22 @@ class RealtimeSession:
             if not transcript and self._input_transcript_buffer:
                 transcript = "".join(self._input_transcript_buffer)
                 self._input_transcript_buffer = []
+            if self._dtmf_cancelled:
+                logger.debug("Skipping user transcript after cancellation")
+                return
+            digit = self._extract_single_digit(transcript)
+            if (
+                digit
+                and digit == self.settings.dtmf_cancel_key
+                and not self._dtmf_cancelled
+            ):
+                logger.info(
+                    f"DTMF cancel detected via transcription: {digit} for call {self.call_id}"
+                )
+                self.mark_cancelled()
+                await self.interrupt_ai_and_clear_buffers()
+                await self.on_dtmf_cancel(self.call_id, self.openai_session_id)
+                return
             logger.debug(f"User said: {transcript[:100]}")
             await self._persist_transcript("user", transcript)
 
@@ -620,8 +690,8 @@ class RealtimeSession:
                     and not self._dtmf_cancelled
                 ):
                     logger.info(f"[WS DTMF DEBUG] Cancel key detected! Triggering cancellation...")
-                    self._dtmf_cancelled = True
-                    self._skip_transcript_save = True  # Prevent saving transcripts after cancellation
+                    self.mark_cancelled()
+                    await self.interrupt_ai_and_clear_buffers()
                     await self.on_dtmf_cancel(self.call_id, self.openai_session_id)
 
         elif msg_type == "response.done":
@@ -632,6 +702,9 @@ class RealtimeSession:
         """
         Process and buffer transcript items.
         """
+        if self._dtmf_cancelled:
+            logger.debug("Skipping transcript item after cancellation")
+            return
         role = item.get("role", "")
         content = item.get("content", [])
 
@@ -642,10 +715,26 @@ class RealtimeSession:
                 text += part.get("text", "")
             elif part.get("type") == "input_text":
                 text += part.get("text", "")
+            elif part.get("type") == "output_text":
+                text += part.get("text", "")
             elif part.get("type") == "input_audio" and part.get("transcript"):
                 text += part.get("transcript", "")
 
         if text:
+            if role == "user":
+                digit = self._extract_single_digit(text)
+                if (
+                    digit
+                    and digit == self.settings.dtmf_cancel_key
+                    and not self._dtmf_cancelled
+                ):
+                    logger.info(
+                        f"DTMF cancel detected via transcript item: {digit} for call {self.call_id}"
+                    )
+                    self.mark_cancelled()
+                    await self.interrupt_ai_and_clear_buffers()
+                    await self.on_dtmf_cancel(self.call_id, self.openai_session_id)
+                    return
             self.transcript_buffer.append({
                 "role": role,
                 "content": text,
