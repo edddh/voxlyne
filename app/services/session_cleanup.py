@@ -5,7 +5,7 @@ Detects and cleans up stuck/orphaned sessions
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from app.config import get_settings
@@ -69,7 +69,8 @@ class SessionCleanup:
         """
         db = get_database()
         max_duration = self.settings.max_call_duration_seconds
-        cutoff_time = datetime.utcnow() - timedelta(seconds=max_duration + 300)
+        now = datetime.now(timezone.utc)
+        cutoff_time = now - timedelta(seconds=max_duration + 300)
 
         try:
             # Find stuck sessions (started > max_duration ago, no ended_at)
@@ -91,7 +92,12 @@ class SessionCleanup:
                 for call in stuck_calls:
                     call_id = call["id"]
                     started_at = call["started_at"]
-                    elapsed = int((datetime.utcnow() - started_at).total_seconds())
+                    if started_at.tzinfo is None:
+                        started_at = started_at.replace(tzinfo=timezone.utc)
+                    else:
+                        started_at = started_at.astimezone(timezone.utc)
+                    call_now = datetime.now(timezone.utc)
+                    elapsed = int((call_now - started_at).total_seconds())
 
                     logger.warning(
                         f"Cleaning up stuck call {call_id}: "
@@ -108,7 +114,7 @@ class SessionCleanup:
                         """,
                         {
                             "id": str(call_id),
-                            "ended_at": datetime.utcnow(),
+                            "ended_at": call_now,
                         }
                     )
 
