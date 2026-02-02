@@ -191,13 +191,8 @@ class CallManager:
             if session:
                 # Play cancellation TTS message before hangup (no AI dialog)
                 try:
-                    if session.has_assistant_cancel_confirmed():
-                        logger.info(
-                            f"Skipping cancellation TTS; assistant already confirmed for call {call_id}"
-                        )
-                    else:
-                        logger.info(f"Playing cancellation TTS message for call {call_id}")
-                        await session.send_cancellation_tts_message()
+                    logger.info(f"Playing cancellation TTS message for call {call_id}")
+                    await session.send_cancellation_tts_message()
                 except Exception as e:
                     logger.warning(f"Error playing cancellation TTS message: {e}")
 

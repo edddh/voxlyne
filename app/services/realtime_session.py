@@ -147,7 +147,7 @@ class RealtimeSession:
             return False
         message_text = (self.settings.cancellation_message_text or "").strip()
         if not message_text:
-            message_text = "Cancellazione dati eseguita. Arrivederci."
+            message_text = "Va bene, procedo con la cancellazione della telefonata."
         normalized_transcript = self._normalize_text(transcript)
         normalized_phrase = self._normalize_text(message_text)
         return normalized_phrase and normalized_phrase in normalized_transcript
@@ -393,10 +393,9 @@ class RealtimeSession:
             logger.warning("Cannot send cancellation TTS: WebSocket not connected")
             return
 
-        message_text = (self.settings.cancellation_message_text or "").strip()
+        message_text = (self.settings.cancellation_confirmation_text or "").strip()
         if not message_text:
-            logger.info("Cancellation message text is empty; skipping TTS")
-            return
+            message_text = "Cancellazione dei dati della telefonata eseguita."
 
         if self._cancel_tts_waiting:
             logger.debug("Cancellation TTS already in progress")

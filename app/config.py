@@ -78,7 +78,11 @@ class Settings(BaseSettings):
     )
     cancellation_message_text: str = Field(
         default="Va bene, procedo con la cancellazione della telefonata.",
-        description="Standard cancellation phrase spoken by the AI before disconnecting"
+        description="Phrase the AI must speak to confirm deletion (used for detection)"
+    )
+    cancellation_confirmation_text: str = Field(
+        default="Cancellazione dei dati della telefonata eseguita.",
+        description="Phrase spoken after cancellation is executed"
     )
 
     # ===========================================
