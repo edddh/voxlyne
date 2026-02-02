@@ -96,6 +96,16 @@ async def _accept_realtime_call(call_id: str, settings) -> None:
     """
     Accept an incoming SIP call via OpenAI Realtime API.
     """
+    cancel_phrase = (settings.cancellation_message_text or "").strip()
+    if not cancel_phrase:
+        cancel_phrase = "Va bene, procedo con la cancellazione della telefonata."
+    goodbye_phrase = (settings.goodbye_message_text or "").strip()
+    if not goodbye_phrase:
+        goodbye_phrase = "Le auguro una buona giornata! Arrivederci."
+    instructions = DEFAULT_PROMPT_A.format(
+        cancel_phrase=cancel_phrase,
+        goodbye_phrase=goodbye_phrase,
+    )
     url = f"https://api.openai.com/v1/realtime/calls/{call_id}/accept"
     headers = {
         "Authorization": f"Bearer {settings.openai_api_key}",
@@ -104,7 +114,7 @@ async def _accept_realtime_call(call_id: str, settings) -> None:
     payload = {
         "type": "realtime",
         "model": settings.openai_realtime_model,
-        "instructions": DEFAULT_PROMPT_A,
+        "instructions": instructions,
         "audio": {
             "input": {
                 "format": {"type": "audio/pcma"},

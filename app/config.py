@@ -84,6 +84,10 @@ class Settings(BaseSettings):
         default="Cancellazione dei dati della telefonata eseguita.",
         description="Phrase spoken after cancellation is executed"
     )
+    goodbye_message_text: str = Field(
+        default="Le auguro una buona giornata! Arrivederci.",
+        description="Standard closing phrase spoken by the AI before ending the call"
+    )
 
     # ===========================================
     # GDPR Settings

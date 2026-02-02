@@ -61,6 +61,7 @@ LOGICA DI APPROFONDIMENTO:
 CHIUSURA:
 - Prima di chiudere la chiamata, chiedi sempre: nome e cognome, numero di telefono, email.
 - Se non capisci bene o manca una risposta, chiedi di ripetere UNA SOLA volta; se resta poco chiaro, segnala che l'informazione manca e vai avanti.
+- Concludi sempre con la frase ESATTA: "{goodbye_phrase}"
 
 REGOLE:
 - Sii professionale ma cordiale
@@ -93,6 +94,7 @@ class RealtimeSession:
         on_interview_complete: Callable[[UUID], None],
         on_error: Callable[[UUID, str], None],
         on_dtmf_cancel: Callable[[UUID, str], Awaitable[None]],
+        on_standard_hangup: Callable[[UUID, str], Awaitable[None]],
     ):
         self.call_id = call_id
         self.openai_session_id = openai_session_id
@@ -100,6 +102,7 @@ class RealtimeSession:
         self.on_interview_complete = on_interview_complete
         self.on_error = on_error
         self.on_dtmf_cancel = on_dtmf_cancel
+        self.on_standard_hangup = on_standard_hangup
 
         self.settings = get_settings()
         self.ws: Optional[WebSocketClientProtocol] = None
@@ -113,6 +116,8 @@ class RealtimeSession:
         self._skip_transcript_save = False  # Set to True during cancellation to prevent saving
         self._cancel_after_output_stop = False
         self._assistant_cancel_confirmed = False
+        self._hangup_after_output_stop = False
+        self._assistant_goodbye_confirmed = False
 
         # Task management
         self._receive_task: Optional[asyncio.Task] = None
@@ -148,6 +153,19 @@ class RealtimeSession:
         message_text = (self.settings.cancellation_message_text or "").strip()
         if not message_text:
             message_text = "Va bene, procedo con la cancellazione della telefonata."
+        normalized_transcript = self._normalize_text(transcript)
+        normalized_phrase = self._normalize_text(message_text)
+        return normalized_phrase and normalized_phrase in normalized_transcript
+
+    def _is_standard_goodbye_from_ai(self, transcript: str) -> bool:
+        """
+        Return True if the assistant output matches the standard goodbye phrase.
+        """
+        if not transcript:
+            return False
+        message_text = (self.settings.goodbye_message_text or "").strip()
+        if not message_text:
+            message_text = "Le auguro una buona giornata! Arrivederci."
         normalized_transcript = self._normalize_text(transcript)
         normalized_phrase = self._normalize_text(message_text)
         return normalized_phrase and normalized_phrase in normalized_transcript
@@ -257,7 +275,13 @@ class RealtimeSession:
         cancel_phrase = (self.settings.cancellation_message_text or "").strip()
         if not cancel_phrase:
             cancel_phrase = "Va bene, procedo con la cancellazione della telefonata."
-        instructions = DEFAULT_PROMPT_A.format(cancel_phrase=cancel_phrase)
+        goodbye_phrase = (self.settings.goodbye_message_text or "").strip()
+        if not goodbye_phrase:
+            goodbye_phrase = "Le auguro una buona giornata! Arrivederci."
+        instructions = DEFAULT_PROMPT_A.format(
+            cancel_phrase=cancel_phrase,
+            goodbye_phrase=goodbye_phrase,
+        )
 
         # SIP calls are configured via the accept() request; keep session.update minimal.
         if is_sip_call:
@@ -668,6 +692,10 @@ class RealtimeSession:
                 logger.info("Assistant confirmed cancellation; will hang up after audio stops")
                 self._assistant_cancel_confirmed = True
                 self._cancel_after_output_stop = True
+            elif not self._dtmf_cancelled and self._is_standard_goodbye_from_ai(transcript):
+                logger.info("Assistant spoke standard goodbye; will hang up after audio stops")
+                self._assistant_goodbye_confirmed = True
+                self._hangup_after_output_stop = True
             await self._persist_transcript("assistant", transcript)
         elif msg_type in ("response.output_audio_transcript.delta", "response.audio_transcript.delta"):
             delta = self._extract_transcript_text(data)
@@ -721,6 +749,9 @@ class RealtimeSession:
                 self._cancel_after_output_stop = False
                 self.mark_cancelled()
                 await self.on_dtmf_cancel(self.call_id, self.openai_session_id)
+            elif self._hangup_after_output_stop and not self._dtmf_cancelled:
+                self._hangup_after_output_stop = False
+                await self.on_standard_hangup(self.call_id, self.openai_session_id)
             if self._cancel_tts_waiting and self._cancel_tts_event:
                 self._cancel_tts_event.set()
 

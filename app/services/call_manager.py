@@ -57,6 +57,7 @@ class CallManager:
                 on_interview_complete=self._handle_interview_complete,
                 on_error=self._handle_session_error,
                 on_dtmf_cancel=self.handle_cancellation,
+                on_standard_hangup=self.handle_standard_hangup,
             )
 
             # Store session
@@ -220,6 +221,24 @@ class CallManager:
                 logger.info(f"Transcripts deleted after error for call {call_id}")
             except Exception as delete_error:
                 logger.error(f"CRITICAL: Failed to delete transcripts: {delete_error}")
+
+    async def handle_standard_hangup(
+        self,
+        call_id: UUID,
+        session_id: str,
+    ) -> None:
+        """
+        Handle standard AI goodbye by hanging up the SIP call.
+        """
+        logger.info(f"Processing standard hangup for call {call_id}")
+
+        try:
+            await self._hangup_sip_call(session_id)
+        except Exception as e:
+            logger.error(f"Error hanging up SIP call: {e}")
+
+        # Schedule cleanup in background (can't await receive_task from inside it)
+        asyncio.create_task(self._delayed_cleanup(call_id))
 
     async def _handle_consent(
         self,
