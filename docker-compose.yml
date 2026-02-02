@@ -50,6 +50,7 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-ascolta}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-ascolta_password}
       - POSTGRES_DB=${POSTGRES_DB:-ascolta}
+      - OPENAI_REALTIME_VOICE=${OPENAI_REALTIME_VOICE}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d:ro

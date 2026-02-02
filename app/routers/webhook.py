@@ -115,6 +115,7 @@ async def _accept_realtime_call(call_id: str, settings) -> None:
             },
             "output": {
                 "format": {"type": "audio/pcma"},
+                "voice": settings.openai_realtime_voice,
             },
         },
     }
