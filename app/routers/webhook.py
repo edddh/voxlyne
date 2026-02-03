@@ -66,7 +66,11 @@ async def handle_call_webhook(
         elif event_type in ("input.dtmf", "realtime.dtmf", "dtmf", "input_audio_buffer.dtmf"):
             return await handle_dtmf(payload, background_tasks)
 
-        elif event_type == "conversation.item.created":
+        elif event_type in (
+            "conversation.item.added",
+            "conversation.item.created",
+            "conversation.item.done",
+        ):
             return await handle_transcript_item(payload)
 
         elif event_type == "response.done":

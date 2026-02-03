@@ -29,6 +29,14 @@ services:
       - S3_SECRET_KEY=${S3_SECRET_KEY:-miniopassword-set-at-bootstrap}
       - S3_BUCKET=${S3_BUCKET:-ascolta-talento}
       - S3_REGION=${S3_REGION:-us-east-1}
+      # Email (SMTP)
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - EMAIL_FROM=${EMAIL_FROM}
+      - EMAIL_TO_DEFAULT=${EMAIL_TO_DEFAULT}
+      - EMAIL_ENABLED=${EMAIL_ENABLED:-false}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs

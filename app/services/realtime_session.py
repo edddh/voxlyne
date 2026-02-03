@@ -194,7 +194,6 @@ class RealtimeSession:
 
             headers = {
                 "Authorization": f"Bearer {self.settings.openai_api_key}",
-                "OpenAI-Beta": "realtime=v1",
             }
 
             logger.info(f"Connecting to OpenAI Realtime API for call {self.call_id}")
@@ -309,11 +308,12 @@ class RealtimeSession:
                             "prefix_padding_ms": 300,
                             "silence_duration_ms": 1200,
                         },
-                    }
+                    },
+                    "output": {
+                        "voice": self.settings.openai_realtime_voice,
+                    },
                 },
-                "temperature": 0.8,
                 "max_response_output_tokens": 4096,
-                "voice": self.settings.openai_realtime_voice,
             }
 
         config = {
@@ -680,7 +680,11 @@ class RealtimeSession:
         elif msg_type == "session.updated":
             logger.info("Session updated successfully")
 
-        elif msg_type == "conversation.item.created":
+        elif msg_type in (
+            "conversation.item.added",
+            "conversation.item.created",
+            "conversation.item.done",
+        ):
             # Track transcript items
             item = data.get("item", {})
             await self._process_transcript_item(item)

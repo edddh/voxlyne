@@ -28,7 +28,7 @@ class Settings(BaseSettings):
 
     # OpenAI Realtime API settings
     openai_realtime_model: str = Field(
-        default="gpt-4o-realtime-preview",
+        default="gpt-realtime",
         description="OpenAI Realtime model to use"
     )
     openai_realtime_voice: str = Field(

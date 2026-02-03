@@ -229,9 +229,14 @@ class CallManager:
     ) -> None:
         """
         Handle standard AI goodbye by hanging up the SIP call.
+        Also triggers post-processing (JSON extraction, PDF, email).
         """
         logger.info(f"Processing standard hangup for call {call_id}")
 
+        # First, mark interview as complete and trigger post-processing
+        await self._handle_interview_complete(call_id)
+
+        # Then hang up the SIP call
         try:
             await self._hangup_sip_call(session_id)
         except Exception as e:
@@ -303,7 +308,7 @@ class CallManager:
     async def _handle_interview_complete(self, call_id: UUID) -> None:
         """
         Handle interview completion.
-        Updates call status and triggers post-processing (in M2).
+        Updates call status and triggers post-processing.
         """
         logger.info(f"Interview complete for call {call_id}")
 
@@ -321,7 +326,65 @@ class CallManager:
             }
         )
 
-        # TODO (M2): Trigger post-processing (JSON + PDF generation)
+        # Schedule post-processing in background (JSON extraction, PDF, email)
+        asyncio.create_task(self._post_process_interview(call_id))
+
+    async def _post_process_interview(self, call_id: UUID) -> None:
+        """
+        Post-process completed interview:
+        1. Extract JSON from transcript (GPT-4)
+        2. Generate PDF report
+        3. Send email with PDF attachment
+        """
+        try:
+            logger.info(f"Starting post-processing for call {call_id}")
+
+            # 1. Extract JSON from transcript
+            from app.services.post_processor import PostProcessor
+            post_processor = PostProcessor()
+            json_data = await post_processor.process_call(call_id)
+            logger.info(f"JSON extraction completed for call {call_id}")
+
+            # 2. Generate PDF
+            from app.services.pdf_generator import PDFGenerator
+            pdf_generator = PDFGenerator()
+            await pdf_generator.generate_and_upload_pdf(call_id, json_data)
+            logger.info(f"PDF generated for call {call_id}")
+
+            # 3. Send email with PDF attachment (if enabled)
+            from app.services.email_service import EmailService
+            email_service = EmailService()
+
+            if email_service.is_enabled():
+                try:
+                    # Download PDF bytes for attachment
+                    pdf_bytes = await pdf_generator.download_pdf(call_id)
+
+                    # Fetch call metadata for email body
+                    db = get_database()
+                    call_metadata = await db.fetch_one(
+                        """
+                        SELECT id, started_at, duration_seconds
+                        FROM calls WHERE id = :id
+                        """,
+                        {"id": str(call_id)}
+                    )
+
+                    await email_service.send_candidate_report(
+                        pdf_bytes=pdf_bytes,
+                        json_data=json_data,
+                        call_metadata=dict(call_metadata) if call_metadata else None,
+                    )
+                    logger.info(f"Email sent for call {call_id}")
+                except Exception as email_error:
+                    logger.error(f"Failed to send email for call {call_id}: {email_error}")
+            else:
+                logger.debug(f"Email not enabled, skipping for call {call_id}")
+
+            logger.info(f"Post-processing completed for call {call_id}")
+
+        except Exception as e:
+            logger.error(f"Post-processing failed for call {call_id}: {e}", exc_info=True)
 
     async def _handle_session_error(
         self,
