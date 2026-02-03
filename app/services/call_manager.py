@@ -36,6 +36,7 @@ class CallManager:
         self.active_sessions: Dict[UUID, RealtimeSession] = {}
         self.settings = get_settings()
         self.gdpr_controller = GDPRController()
+        self._post_processing_inflight: set[UUID] = set()
 
     async def start_session(
         self,
@@ -314,6 +315,37 @@ class CallManager:
 
         db = get_database()
 
+        # Guard against duplicate post-processing runs
+        if call_id in self._post_processing_inflight:
+            logger.info(f"Post-processing already in flight for call {call_id}")
+            return
+
+        call = await db.fetch_one(
+            "SELECT status FROM calls WHERE id = :id",
+            {"id": str(call_id)},
+        )
+        if not call:
+            logger.warning(f"Call {call_id} not found during completion handling")
+            return
+        current_status = call["status"]
+        if current_status in (
+            CallStatus.PROCESSING.value,
+            CallStatus.PROCESSED.value,
+        ):
+            logger.info(
+                f"Skipping post-processing for call {call_id}: status={current_status}"
+            )
+            return
+        if current_status not in (
+            CallStatus.IN_PROGRESS.value,
+            CallStatus.CONSENTED.value,
+            CallStatus.COMPLETED.value,
+        ):
+            logger.info(
+                f"Skipping post-processing for call {call_id}: status={current_status}"
+            )
+            return
+
         await db.execute(
             """
             UPDATE calls
@@ -325,6 +357,8 @@ class CallManager:
                 "status": CallStatus.COMPLETED.value,
             }
         )
+
+        self._post_processing_inflight.add(call_id)
 
         # Schedule post-processing in background (JSON extraction, PDF, email)
         asyncio.create_task(self._post_process_interview(call_id))
@@ -385,6 +419,8 @@ class CallManager:
 
         except Exception as e:
             logger.error(f"Post-processing failed for call {call_id}: {e}", exc_info=True)
+        finally:
+            self._post_processing_inflight.discard(call_id)
 
     async def _handle_session_error(
         self,

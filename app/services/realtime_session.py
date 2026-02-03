@@ -977,6 +977,14 @@ class RealtimeSession:
                 f"ended_at={ended_at.isoformat()}"
             )
 
+            if new_status == "completed":
+                try:
+                    await self.on_interview_complete(self.call_id)
+                except Exception as callback_error:
+                    logger.error(
+                        f"Failed to trigger post-processing for call {self.call_id}: {callback_error}"
+                    )
+
         except Exception as e:
             logger.error(
                 f"CRITICAL: Failed to mark call {self.call_id} as ended: {e}",

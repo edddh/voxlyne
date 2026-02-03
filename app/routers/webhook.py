@@ -277,6 +277,9 @@ async def handle_call_ended(payload: Dict[str, Any], event_type: str) -> Dict[st
             f"Webhook: Call {call['id']} ended, status: {new_status}"
         )
 
+        if new_status == CallStatus.COMPLETED.value:
+            await call_manager._handle_interview_complete(call["id"])
+
         # Clean up call manager session
         await call_manager.end_session(call["id"])
 
