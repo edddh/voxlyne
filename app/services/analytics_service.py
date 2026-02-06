@@ -47,7 +47,7 @@ class AnalyticsService:
 
         # Build tenant filter
         tenant_filter = ""
-        params = {
+        base_params = {
             "today_start": today_start,
             "week_start": week_start,
             "month_start": month_start,
@@ -55,7 +55,7 @@ class AnalyticsService:
 
         if tenant_id:
             tenant_filter = "AND c.tenant_id = :tenant_id"
-            params["tenant_id"] = str(tenant_id)
+            base_params["tenant_id"] = str(tenant_id)
 
         # Calls today
         calls_today = await db.fetch_one(
@@ -66,7 +66,7 @@ class AnalyticsService:
             FROM calls c
             WHERE c.created_at >= :today_start {tenant_filter}
             """,
-            params,
+            {k: v for k, v in base_params.items() if k in ("today_start", "tenant_id")},
         )
 
         # Calls this week
@@ -76,7 +76,7 @@ class AnalyticsService:
             FROM calls c
             WHERE c.created_at >= :week_start {tenant_filter}
             """,
-            params,
+            {k: v for k, v in base_params.items() if k in ("week_start", "tenant_id")},
         )
 
         # Calls this month
@@ -86,7 +86,7 @@ class AnalyticsService:
             FROM calls c
             WHERE c.created_at >= :month_start {tenant_filter}
             """,
-            params,
+            {k: v for k, v in base_params.items() if k in ("month_start", "tenant_id")},
         )
 
         # Average duration (completed calls)
@@ -98,7 +98,7 @@ class AnalyticsService:
               AND (status = 'completed' OR status = 'processed')
               {tenant_filter}
             """,
-            params,
+            {k: v for k, v in base_params.items() if k in ("tenant_id",)},
         )
 
         # Active projects
@@ -118,7 +118,7 @@ class AnalyticsService:
             JOIN calls c ON r.call_id = c.id
             WHERE r.crm_synced = TRUE {tenant_filter.replace('c.', 'c.')}
             """,
-            params,
+            {k: v for k, v in base_params.items() if k in ("tenant_id",)},
         )
 
         # Appointments scheduled
@@ -129,7 +129,7 @@ class AnalyticsService:
             JOIN calls c ON r.call_id = c.id
             WHERE r.appointment_scheduled = TRUE {tenant_filter.replace('c.', 'c.')}
             """,
-            params,
+            {k: v for k, v in base_params.items() if k in ("tenant_id",)},
         )
 
         # Calculate conversion rate

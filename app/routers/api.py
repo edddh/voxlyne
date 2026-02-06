@@ -10,6 +10,8 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
 
+import json
+
 from app.database.db import get_database
 from app.models.schemas import (
     Call,
@@ -52,16 +54,27 @@ async def list_projects(
 
     projects = await db.fetch_all(query)
 
-    return [dict(p) for p in projects]
+    result = []
+    for p in projects:
+        item = dict(p)
+        output_config = item.get("output_config")
+        if isinstance(output_config, str):
+            try:
+                item["output_config"] = json.loads(output_config)
+            except json.JSONDecodeError:
+                item["output_config"] = {}
+        result.append(item)
+
+    return result
 
 
-@router.get("/projects/{slug}", response_model=Project)
-async def get_project(slug: str):
+@router.get("/projects/{project_identifier}", response_model=Project)
+async def get_project(project_identifier: str):
     """
-    Get project by slug.
+    Get project by ID (UUID) or slug.
 
     Args:
-        slug: Project slug (URL-friendly identifier)
+        project_identifier: Project UUID or slug
 
     Returns:
         Project details
@@ -71,15 +84,32 @@ async def get_project(slug: str):
     """
     db = get_database()
 
-    project = await db.fetch_one(
-        "SELECT * FROM projects WHERE slug = :slug",
-        {"slug": slug}
-    )
+    # Try to parse as UUID first
+    try:
+        from uuid import UUID
+        project_uuid = UUID(project_identifier)
+        project = await db.fetch_one(
+            "SELECT * FROM projects WHERE id = :id",
+            {"id": str(project_uuid)}
+        )
+    except (ValueError, AttributeError):
+        # Not a UUID, treat as slug
+        project = await db.fetch_one(
+            "SELECT * FROM projects WHERE slug = :slug",
+            {"slug": project_identifier}
+        )
 
     if not project:
-        raise HTTPException(status_code=404, detail=f"Project not found: {slug}")
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_identifier}")
 
-    return dict(project)
+    item = dict(project)
+    output_config = item.get("output_config")
+    if isinstance(output_config, str):
+        try:
+            item["output_config"] = json.loads(output_config)
+        except json.JSONDecodeError:
+            item["output_config"] = {}
+    return item
 
 
 # ===========================================

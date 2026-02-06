@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.database.db import get_database
@@ -73,24 +75,34 @@ async def list_tenants(
 
     # Execute queries
     tenants = await db.fetch_all(base_query, params)
-    total_result = await db.fetch_one(count_query, params)
+    count_params = {k: v for k, v in params.items() if k not in ("limit", "offset")}
+    total_result = await db.fetch_one(count_query, count_params)
     total = total_result[0] if total_result else 0
 
-    return TenantListResponse(
-        tenants=[
+    tenant_items = []
+    for t in tenants:
+        settings_value = t["settings"] or {}
+        if isinstance(settings_value, str):
+            try:
+                settings_value = json.loads(settings_value)
+            except json.JSONDecodeError:
+                settings_value = {}
+        tenant_items.append(
             TenantResponse(
                 id=UUID(str(t["id"])),
                 name=t["name"],
                 slug=t["slug"],
                 is_active=t["is_active"],
-                settings=t["settings"] or {},
+                settings=settings_value,
                 created_at=t["created_at"],
                 updated_at=t["updated_at"],
                 user_count=t["user_count"],
                 project_count=t["project_count"],
             )
-            for t in tenants
-        ],
+        )
+
+    return TenantListResponse(
+        tenants=tenant_items,
         total=total,
         page=page,
         page_size=page_size,
@@ -119,6 +131,10 @@ async def create_tenant(
         )
 
     # Insert tenant
+    settings_payload = tenant_data.settings
+    if settings_payload is not None and isinstance(settings_payload, dict):
+        settings_payload = json.dumps(settings_payload)
+
     result = await db.fetch_one(
         """
         INSERT INTO tenants (name, slug, settings, is_active)
@@ -128,7 +144,7 @@ async def create_tenant(
         {
             "name": tenant_data.name,
             "slug": tenant_data.slug,
-            "settings": tenant_data.settings,
+            "settings": settings_payload,
         },
     )
 
@@ -174,12 +190,19 @@ async def get_tenant(
             detail="Tenant not found",
         )
 
+    settings_value = tenant["settings"] or {}
+    if isinstance(settings_value, str):
+        try:
+            settings_value = json.loads(settings_value)
+        except json.JSONDecodeError:
+            settings_value = {}
+
     return TenantResponse(
         id=UUID(str(tenant["id"])),
         name=tenant["name"],
         slug=tenant["slug"],
         is_active=tenant["is_active"],
-        settings=tenant["settings"] or {},
+        settings=settings_value,
         created_at=tenant["created_at"],
         updated_at=tenant["updated_at"],
         user_count=tenant["user_count"],
@@ -224,7 +247,11 @@ async def update_tenant(
 
     if tenant_data.settings is not None:
         update_fields.append("settings = :settings")
-        update_params["settings"] = tenant_data.settings
+        update_params["settings"] = (
+            json.dumps(tenant_data.settings)
+            if isinstance(tenant_data.settings, dict)
+            else tenant_data.settings
+        )
 
     if not update_fields:
         raise HTTPException(

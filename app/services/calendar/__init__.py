@@ -10,7 +10,7 @@ This module provides calendar scheduling capabilities:
 """
 
 from app.services.calendar.base import (
-    CalendarProvider,
+    CalendarProviderType,
     CalendarEvent,
     CalendarSlot,
     CalendarConfig,
@@ -18,7 +18,7 @@ from app.services.calendar.base import (
 from app.services.calendar.scheduler import CalendarScheduler
 
 __all__ = [
-    "CalendarProvider",
+    "CalendarProviderType",
     "CalendarEvent",
     "CalendarSlot",
     "CalendarConfig",

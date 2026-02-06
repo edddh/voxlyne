@@ -105,7 +105,8 @@ async def list_users(
 
     # Execute queries
     users = await db.fetch_all(base_query, params)
-    total_result = await db.fetch_one(count_query, params)
+    count_params = {k: v for k, v in params.items() if k not in ("limit", "offset")}
+    total_result = await db.fetch_one(count_query, count_params)
     total = total_result[0] if total_result else 0
 
     return UserListResponse(

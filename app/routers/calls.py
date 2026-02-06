@@ -9,6 +9,8 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 
@@ -114,8 +116,23 @@ async def list_calls(
 
     # Execute queries
     calls = await db.fetch_all(base_query, params)
-    total_result = await db.fetch_one(count_query, params)
+    count_params = {k: v for k, v in params.items() if k not in ("limit", "offset")}
+    total_result = await db.fetch_one(count_query, count_params)
     total = total_result[0] if total_result else 0
+
+    def _extract_candidate_name(json_data):
+        if not json_data:
+            return None
+        if isinstance(json_data, dict):
+            return json_data.get("candidate_name")
+        if isinstance(json_data, str):
+            try:
+                parsed = json.loads(json_data)
+            except json.JSONDecodeError:
+                return None
+            if isinstance(parsed, dict):
+                return parsed.get("candidate_name")
+        return None
 
     return {
         "calls": [
@@ -132,7 +149,7 @@ async def list_calls(
                 "project_slug": c["project_slug"],
                 "has_record": c["record_id"] is not None,
                 "has_pdf": c["pdf_key"] is not None,
-                "candidate_name": c["json_data"].get("candidate_name") if c["json_data"] else None,
+                "candidate_name": _extract_candidate_name(c["json_data"]),
                 "created_at": c["created_at"],
             }
             for c in calls
