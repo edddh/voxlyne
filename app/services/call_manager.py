@@ -389,20 +389,20 @@ class CallManager:
             from app.services.email_service import EmailService
             email_service = EmailService()
 
+            # Fetch call metadata for email and CRM
+            db = get_database()
+            call_metadata = await db.fetch_one(
+                """
+                SELECT id, started_at, duration_seconds, phone_number
+                FROM calls WHERE id = :id
+                """,
+                {"id": str(call_id)}
+            )
+
             if email_service.is_enabled():
                 try:
                     # Download PDF bytes for attachment
                     pdf_bytes = await pdf_generator.download_pdf(call_id)
-
-                    # Fetch call metadata for email body
-                    db = get_database()
-                    call_metadata = await db.fetch_one(
-                        """
-                        SELECT id, started_at, duration_seconds
-                        FROM calls WHERE id = :id
-                        """,
-                        {"id": str(call_id)}
-                    )
 
                     await email_service.send_candidate_report(
                         pdf_bytes=pdf_bytes,
@@ -414,6 +414,26 @@ class CallManager:
                     logger.error(f"Failed to send email for call {call_id}: {email_error}")
             else:
                 logger.debug(f"Email not enabled, skipping for call {call_id}")
+
+            # 4. Sync to CRM (if enabled)
+            try:
+                from app.services.crm.dispatcher import CRMDispatcher
+
+                crm_dispatcher = CRMDispatcher()
+                crm_success = await crm_dispatcher.dispatch(
+                    call_id=call_id,
+                    json_data=json_data,
+                    call_metadata=dict(call_metadata) if call_metadata else {},
+                )
+
+                if crm_success:
+                    logger.info(f"CRM sync completed for call {call_id}")
+                else:
+                    logger.warning(f"CRM sync failed for call {call_id}")
+
+            except Exception as crm_error:
+                # CRM failures should not block completion
+                logger.error(f"CRM sync error for call {call_id}: {crm_error}")
 
             logger.info(f"Post-processing completed for call {call_id}")
 

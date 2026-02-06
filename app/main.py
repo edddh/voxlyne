@@ -19,7 +19,7 @@ from app.database.db import (
     run_migrations,
 )
 from app.models.schemas import ErrorResponse, HealthResponse
-from app.routers import api, health, webhook
+from app.routers import analytics, api, auth, calendar, calls, crm, health, prompts, tenants, users, webhook
 from app.services.session_cleanup import SessionCleanup
 
 # ===========================================
@@ -135,8 +135,8 @@ async def root():
     """Root endpoint - API information."""
     return {
         "name": "Ascolta",
-        "version": "2.0.0-alpha",
-        "milestone": "M2 - Structured Output + Multi-Project",
+        "version": "4.0.0-alpha",
+        "milestone": "M4 - Admin Panel + Multi-Tenant + Prompt Versioning",
         "status": "running",
         "docs": "/docs" if not settings.is_production else None,
     }
@@ -170,6 +170,30 @@ app.include_router(webhook.router, prefix="/api", tags=["Webhook"])
 
 # API router (M2: Projects, calls, records, PDFs)
 app.include_router(api.router, tags=["API"])
+
+# CRM router (M3: CRM integration endpoints)
+app.include_router(crm.router, tags=["CRM"])
+
+# Calendar router (M3.5: Calendar scheduling endpoints)
+app.include_router(calendar.router, tags=["Calendar"])
+
+# Auth router (M4: Authentication)
+app.include_router(auth.router, tags=["Authentication"])
+
+# Users router (M4: User management)
+app.include_router(users.router, tags=["Users"])
+
+# Tenants router (M4: Tenant management)
+app.include_router(tenants.router, tags=["Tenants"])
+
+# Prompts router (M4: Prompt versioning)
+app.include_router(prompts.router, tags=["Prompts"])
+
+# Analytics router (M4: Dashboard stats)
+app.include_router(analytics.router, tags=["Analytics"])
+
+# Calls router (M4: Enhanced calls management)
+app.include_router(calls.router, tags=["Calls V2"])
 
 
 # ===========================================

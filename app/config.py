@@ -117,6 +117,110 @@ class Settings(BaseSettings):
     email_enabled: bool = Field(default=False, description="Enable email sending")
 
     # ===========================================
+    # CRM Integration (M3)
+    # ===========================================
+    crm_sync_enabled: bool = Field(
+        default=True,
+        description="Global toggle for CRM synchronization"
+    )
+    crm_retry_max_attempts: int = Field(
+        default=3,
+        description="Maximum retry attempts for CRM sync"
+    )
+    crm_retry_initial_delay: float = Field(
+        default=5.0,
+        description="Initial retry delay in seconds"
+    )
+
+    # HubSpot credentials
+    hubspot_api_key: Optional[str] = Field(
+        default=None,
+        description="HubSpot Private App API key (legacy)"
+    )
+    hubspot_access_token: Optional[str] = Field(
+        default=None,
+        description="HubSpot OAuth or Private App access token"
+    )
+
+    # Generic webhook
+    webhook_secret: Optional[str] = Field(
+        default=None,
+        description="HMAC secret for webhook signature"
+    )
+
+    # ===========================================
+    # JWT Authentication (M4)
+    # ===========================================
+    jwt_secret_key: Optional[str] = Field(
+        default=None,
+        description="JWT signing key (falls back to secret_key if not set)"
+    )
+    jwt_algorithm: str = Field(
+        default="HS256",
+        description="JWT signing algorithm"
+    )
+    jwt_access_token_expire_minutes: int = Field(
+        default=30,
+        description="Access token expiration in minutes"
+    )
+    jwt_refresh_token_expire_days: int = Field(
+        default=7,
+        description="Refresh token expiration in days"
+    )
+
+    # ===========================================
+    # Calendar Integration (M3.5)
+    # ===========================================
+    calendar_enabled: bool = Field(
+        default=True,
+        description="Global toggle for calendar scheduling"
+    )
+
+    # Google Calendar OAuth
+    google_calendar_client_id: Optional[str] = Field(
+        default=None,
+        description="Google OAuth2 Client ID"
+    )
+    google_calendar_client_secret: Optional[str] = Field(
+        default=None,
+        description="Google OAuth2 Client Secret"
+    )
+    google_calendar_redirect_uri: Optional[str] = Field(
+        default=None,
+        description="Google OAuth2 Redirect URI"
+    )
+    google_calendar_access_token: Optional[str] = Field(
+        default=None,
+        description="Google Calendar access token (for testing)"
+    )
+    google_calendar_refresh_token: Optional[str] = Field(
+        default=None,
+        description="Google Calendar refresh token"
+    )
+
+    # Microsoft 365 Graph API
+    ms_graph_client_id: Optional[str] = Field(
+        default=None,
+        description="Azure AD Application (Client) ID"
+    )
+    ms_graph_client_secret: Optional[str] = Field(
+        default=None,
+        description="Azure AD Client Secret"
+    )
+    ms_graph_tenant_id: Optional[str] = Field(
+        default=None,
+        description="Azure AD Tenant ID"
+    )
+    ms_graph_access_token: Optional[str] = Field(
+        default=None,
+        description="MS Graph access token (for testing)"
+    )
+    ms_graph_refresh_token: Optional[str] = Field(
+        default=None,
+        description="MS Graph refresh token"
+    )
+
+    # ===========================================
     # Validators
     # ===========================================
     @field_validator("log_level")
@@ -152,6 +256,11 @@ class Settings(BaseSettings):
     def openai_sip_uri(self) -> str:
         """Get the OpenAI SIP URI for Zadarma forwarding."""
         return f"sip:{self.openai_project_id}@sip.api.openai.com;transport=tls"
+
+    @property
+    def jwt_secret(self) -> str:
+        """Get JWT secret key, falling back to secret_key if not set."""
+        return self.jwt_secret_key or self.secret_key
 
 
 @lru_cache()

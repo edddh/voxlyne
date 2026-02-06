@@ -368,9 +368,449 @@ class CallComplete(Call):
     transcripts: List[Transcript] = []
 
 
+# ===========================================
+# CRM Schemas (M3)
+# ===========================================
+
+class CRMSyncStatus(str, Enum):
+    """CRM sync status."""
+    PENDING = "pending"
+    SUCCESS = "success"
+    FAILED = "failed"
+    RETRYING = "retrying"
+
+
+class CRMProvider(str, Enum):
+    """Supported CRM providers."""
+    HUBSPOT = "hubspot"
+    SALESFORCE = "salesforce"
+    GENERIC_WEBHOOK = "generic_webhook"
+
+
+class CRMSyncLogBase(BaseModel):
+    """Base CRM sync log model."""
+    provider: str
+    operation: str
+    status: CRMSyncStatus = CRMSyncStatus.PENDING
+
+
+class CRMSyncLog(CRMSyncLogBase):
+    """Complete CRM sync log entry."""
+    id: int
+    call_id: UUID
+    record_id: Optional[int] = None
+    external_id: Optional[str] = None
+    response_code: Optional[int] = None
+    response_body: Optional[str] = None
+    error_message: Optional[str] = None
+    attempt_count: int = 0
+    max_attempts: int = 3
+    next_retry_at: Optional[datetime] = None
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class CRMStatusResponse(BaseModel):
+    """Response for CRM status endpoint."""
+    call_id: UUID
+    synced: bool
+    provider: Optional[str] = None
+    external_id: Optional[str] = None
+    synced_at: Optional[datetime] = None
+    last_error: Optional[str] = None
+    sync_log: List[CRMSyncLog] = []
+
+
+class CRMTestConnectionRequest(BaseModel):
+    """Request to test CRM connection."""
+    provider: CRMProvider
+    credentials: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Provider credentials (api_key, access_token, etc.)"
+    )
+    config: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional provider config (webhook URL, etc.)"
+    )
+
+
+class CRMTestConnectionResponse(BaseModel):
+    """Response from connection test."""
+    success: bool
+    message: str
+    provider: str
+    details: Optional[Dict[str, Any]] = None
+
+
+class CRMRetryRequest(BaseModel):
+    """Request to retry CRM sync."""
+    call_id: UUID
+
+
+class CRMRetryResponse(BaseModel):
+    """Response from retry request."""
+    success: bool
+    message: str
+    call_id: UUID
+
+
+class CRMStatsResponse(BaseModel):
+    """CRM sync statistics."""
+    total_syncs: int = 0
+    successful: int = 0
+    failed: int = 0
+    pending: int = 0
+    by_provider: Dict[str, int] = Field(default_factory=dict)
+    recent_failures: List[CRMSyncLog] = []
+
+
+class RecordWithCRM(Record):
+    """Record with CRM sync status."""
+    crm_synced: bool = False
+    crm_synced_at: Optional[datetime] = None
+    crm_external_id: Optional[str] = None
+    crm_provider: Optional[str] = None
+    crm_error: Optional[str] = None
+
+
+# ===========================================
+# Calendar Schemas (M3.5)
+# ===========================================
+
+class CalendarProvider(str, Enum):
+    """Supported calendar providers."""
+    GOOGLE = "google"
+    MICROSOFT = "microsoft"
+
+
+class CalendarEventStatus(str, Enum):
+    """Calendar event status."""
+    PENDING = "pending"
+    CONFIRMED = "confirmed"
+    CANCELLED = "cancelled"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class CalendarSlotResponse(BaseModel):
+    """Available calendar slot."""
+    start: datetime
+    end: datetime
+    duration_minutes: int = 30
+    display_text: str = ""  # Human-readable in Italian
+
+
+class CalendarSlotsResponse(BaseModel):
+    """Response with available slots."""
+    call_id: UUID
+    slots: List[CalendarSlotResponse] = []
+    provider: Optional[str] = None
+    calendar_enabled: bool = False
+
+
+class ScheduleAppointmentRequest(BaseModel):
+    """Request to schedule an appointment."""
+    call_id: UUID
+    slot_start: datetime
+    slot_end: datetime
+    hr_email: Optional[str] = None
+
+
+class ScheduleAppointmentResponse(BaseModel):
+    """Response from scheduling appointment."""
+    success: bool
+    message: str
+    event_id: Optional[str] = None
+    event_link: Optional[str] = None
+    scheduled_at: Optional[datetime] = None
+
+
+class CalendarEventResponse(BaseModel):
+    """Calendar event details."""
+    id: int
+    call_id: UUID
+    provider: str
+    external_event_id: Optional[str] = None
+    event_link: Optional[str] = None
+    scheduled_at: datetime
+    duration_minutes: int = 30
+    status: CalendarEventStatus = CalendarEventStatus.PENDING
+    attendee_emails: List[str] = []
+    invite_sent: bool = False
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class CalendarTestConnectionRequest(BaseModel):
+    """Request to test calendar connection."""
+    provider: CalendarProvider
+    access_token: str
+    refresh_token: Optional[str] = None
+
+
+class CalendarTestConnectionResponse(BaseModel):
+    """Response from connection test."""
+    success: bool
+    message: str
+    provider: str
+
+
+class RecordWithCalendar(Record):
+    """Record with calendar appointment info."""
+    appointment_scheduled: bool = False
+    appointment_datetime: Optional[datetime] = None
+    calendar_event: Optional[CalendarEventResponse] = None
+
+
+# ===========================================
+# Auth Schemas (M4)
+# ===========================================
+
+class UserRole(str, Enum):
+    """User role for RBAC."""
+    SUPER_ADMIN = "super_admin"
+    ADMIN = "admin"
+    CREATOR = "creator"
+    POWER_USER = "power_user"
+    USER = "user"
+
+
+class LoginRequest(BaseModel):
+    """Login request."""
+    email: str = Field(..., min_length=3)
+    password: str = Field(..., min_length=6)
+
+
+class LoginResponse(BaseModel):
+    """Login response with tokens."""
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    expires_in: int  # seconds
+    user: "UserResponse"
+
+
+class RefreshTokenRequest(BaseModel):
+    """Refresh token request."""
+    refresh_token: str
+
+
+class RefreshTokenResponse(BaseModel):
+    """New access token response."""
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+
+
+class UserBase(BaseModel):
+    """Base user model."""
+    email: str = Field(..., min_length=3, max_length=255)
+    full_name: Optional[str] = Field(None, max_length=255)
+    role: UserRole = UserRole.USER
+
+
+class UserCreate(UserBase):
+    """Schema for creating a user."""
+    password: str = Field(..., min_length=8)
+    tenant_id: Optional[UUID] = None
+
+
+class UserUpdate(BaseModel):
+    """Schema for updating a user."""
+    email: Optional[str] = Field(None, min_length=3, max_length=255)
+    full_name: Optional[str] = Field(None, max_length=255)
+    role: Optional[UserRole] = None
+    is_active: Optional[bool] = None
+    password: Optional[str] = Field(None, min_length=8)
+
+
+class UserResponse(BaseModel):
+    """User response model."""
+    id: UUID
+    tenant_id: Optional[UUID] = None
+    email: str
+    full_name: Optional[str] = None
+    role: UserRole
+    is_active: bool = True
+    email_verified: bool = False
+    avatar_url: Optional[str] = None
+    last_login_at: Optional[datetime] = None
+    created_at: datetime
+    tenant_name: Optional[str] = None
+    tenant_slug: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class UserListResponse(BaseModel):
+    """Paginated user list response."""
+    users: List[UserResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+class PasswordResetRequest(BaseModel):
+    """Password reset request."""
+    new_password: str = Field(..., min_length=8)
+
+
+# ===========================================
+# Tenant Schemas (M4)
+# ===========================================
+
+class TenantBase(BaseModel):
+    """Base tenant model."""
+    name: str = Field(..., min_length=1, max_length=255)
+    slug: str = Field(..., min_length=1, max_length=100, pattern="^[a-z0-9-]+$")
+
+
+class TenantCreate(TenantBase):
+    """Schema for creating a tenant."""
+    settings: Dict[str, Any] = Field(default_factory=dict)
+
+
+class TenantUpdate(BaseModel):
+    """Schema for updating a tenant."""
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    is_active: Optional[bool] = None
+    settings: Optional[Dict[str, Any]] = None
+
+
+class TenantResponse(TenantBase):
+    """Tenant response model."""
+    id: UUID
+    is_active: bool = True
+    settings: Dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime
+    user_count: int = 0
+    project_count: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class TenantListResponse(BaseModel):
+    """Paginated tenant list response."""
+    tenants: List[TenantResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+# ===========================================
+# Prompt Version Schemas (M4)
+# ===========================================
+
+class PromptType(str, Enum):
+    """Prompt type (A or B)."""
+    A = "A"
+    B = "B"
+
+
+class PromptVersionBase(BaseModel):
+    """Base prompt version model."""
+    prompt_type: PromptType
+    content: str = Field(..., min_length=10)
+
+
+class PromptVersionCreate(PromptVersionBase):
+    """Schema for creating a prompt version."""
+    pass
+
+
+class PromptVersionResponse(PromptVersionBase):
+    """Prompt version response model."""
+    id: UUID
+    project_id: UUID
+    version: int
+    is_active: bool = False
+    created_by: Optional[UUID] = None
+    created_at: datetime
+    creator_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class PromptVersionListResponse(BaseModel):
+    """List of prompt versions."""
+    versions: List[PromptVersionResponse]
+    active_version: Optional[int] = None
+    total: int
+
+
+class PromptDiffResponse(BaseModel):
+    """Diff between two prompt versions."""
+    version_a: PromptVersionResponse
+    version_b: PromptVersionResponse
+    diff: List[str]  # Unified diff lines
+    additions: int
+    deletions: int
+
+
+class PromptActivateResponse(BaseModel):
+    """Response from activating a prompt version."""
+    success: bool
+    message: str
+    version_id: UUID
+    version: int
+    prompt_type: PromptType
+
+
+# ===========================================
+# Analytics Schemas (M4)
+# ===========================================
+
+class DashboardStats(BaseModel):
+    """Dashboard statistics."""
+    total_calls_today: int = 0
+    total_calls_week: int = 0
+    total_calls_month: int = 0
+    completed_calls_today: int = 0
+    conversion_rate: float = 0.0  # Percentage of completed calls
+    avg_duration_seconds: float = 0.0
+    active_projects: int = 0
+    crm_synced_count: int = 0
+    appointments_scheduled_count: int = 0
+
+
+class CallTrendPoint(BaseModel):
+    """Single point in call trend data."""
+    date: datetime
+    total: int = 0
+    completed: int = 0
+    cancelled: int = 0
+
+
+class CallTrendResponse(BaseModel):
+    """Call trend over time."""
+    points: List[CallTrendPoint]
+    period: str  # "day", "week", "month"
+    total_calls: int = 0
+
+
+class ProjectStatsResponse(BaseModel):
+    """Statistics for a project."""
+    project_id: UUID
+    project_name: str
+    total_calls: int = 0
+    completed_calls: int = 0
+    conversion_rate: float = 0.0
+    avg_duration_seconds: float = 0.0
+
+
 # Update forward references
 CallWithTranscripts.model_rebuild()
 CallWithProject.model_rebuild()
 CallWithRecord.model_rebuild()
 CallComplete.model_rebuild()
 RecordWithCall.model_rebuild()
+LoginResponse.model_rebuild()
