@@ -5,7 +5,6 @@ Centralized service for managing encrypted credentials for all external services
 Supports project-level and tenant-level credentials with fallback to global .env settings.
 """
 
-import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -147,6 +146,8 @@ class CredentialsManager:
         if service_type == "voice":
             if provider == "vapi" and self.settings.vapi_api_key:
                 return {"api_key": self.settings.vapi_api_key}
+            if provider in ("openai_realtime", "openai") and self.settings.openai_api_key:
+                return {"api_key": self.settings.openai_api_key}
 
         # Telephony providers
         elif service_type == "telephony":
@@ -353,6 +354,7 @@ class CredentialsManager:
             FROM service_credentials
             WHERE entity_type = :entity_type
               AND entity_id = :entity_id
+              AND is_active = TRUE
         """
         params: Dict[str, Any] = {
             "entity_type": entity_type,
@@ -409,22 +411,62 @@ class CredentialsManager:
                     "message": "Connection successful" if is_valid else "Connection failed",
                 }
 
+            elif service_type == "voice" and provider in ("openai_realtime", "openai"):
+                import httpx
+
+                api_key = credentials.get("api_key")
+                if not api_key:
+                    return {"success": False, "message": "Missing api_key"}
+
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.get(
+                        "https://api.openai.com/v1/models",
+                        headers={"Authorization": f"Bearer {api_key}"},
+                    )
+                    if response.status_code == 200:
+                        return {"success": True, "message": "Connection successful"}
+                    return {
+                        "success": False,
+                        "message": f"Connection failed ({response.status_code})",
+                        "error": response.text[:300],
+                    }
+
             # Telephony providers
             elif service_type == "telephony" and provider == "twilio":
-                # TODO: Implement Twilio test connection
-                # For now, just validate that credentials are present
-                if credentials.get("account_sid") and credentials.get("auth_token"):
-                    return {"success": True, "message": "Credentials present (test not implemented)"}
-                else:
+                from app.services.telephony.twilio_client import TwilioClient
+
+                account_sid = credentials.get("account_sid")
+                auth_token = credentials.get("auth_token")
+                if not account_sid or not auth_token:
                     return {"success": False, "message": "Missing account_sid or auth_token"}
+
+                client = TwilioClient(account_sid=account_sid, auth_token=auth_token)
+                is_valid = await client.test_connection()
+                return {
+                    "success": is_valid,
+                    "message": "Connection successful" if is_valid else "Connection failed",
+                }
 
             # TTS providers
             elif service_type == "tts" and provider == "elevenlabs":
-                # TODO: Implement ElevenLabs test connection
-                if credentials.get("api_key"):
-                    return {"success": True, "message": "Credentials present (test not implemented)"}
-                else:
+                import httpx
+
+                api_key = credentials.get("api_key")
+                if not api_key:
                     return {"success": False, "message": "Missing api_key"}
+
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.get(
+                        "https://api.elevenlabs.io/v1/voices",
+                        headers={"xi-api-key": api_key},
+                    )
+                    if response.status_code == 200:
+                        return {"success": True, "message": "Connection successful"}
+                    return {
+                        "success": False,
+                        "message": f"Connection failed ({response.status_code})",
+                        "error": response.text[:300],
+                    }
 
             # CRM providers
             elif service_type == "crm" and provider == "hubspot":
@@ -441,12 +483,64 @@ class CredentialsManager:
                 }
 
             elif service_type == "crm" and provider == "generic_webhook":
-                # Webhook doesn't need test - just check URL format
-                return {"success": True, "message": "Webhook provider configured"}
+                from app.services.crm.providers.webhook import GenericWebhookProvider
 
-            # Calendar providers - stub for now
-            elif service_type == "calendar":
-                return {"success": True, "message": f"{provider} test not implemented yet"}
+                url = credentials.get("url")
+                if not url:
+                    return {
+                        "success": False,
+                        "message": "Missing url",
+                        "error": "Provide webhook URL in credentials data as 'url'",
+                    }
+
+                provider_instance = GenericWebhookProvider(
+                    url=url,
+                    secret=credentials.get("secret"),
+                )
+                is_valid = await provider_instance.test_connection()
+                return {
+                    "success": is_valid,
+                    "message": "Connection successful" if is_valid else "Connection failed",
+                }
+
+            elif service_type == "calendar" and provider == "google_calendar":
+                from app.services.calendar.providers.google import GoogleCalendarProvider
+
+                access_token = credentials.get("access_token")
+                if not access_token:
+                    return {"success": False, "message": "Missing access_token"}
+
+                provider_instance = GoogleCalendarProvider(
+                    access_token=access_token,
+                    refresh_token=credentials.get("refresh_token"),
+                    client_id=credentials.get("client_id"),
+                    client_secret=credentials.get("client_secret"),
+                )
+                is_valid = await provider_instance.test_connection()
+                return {
+                    "success": is_valid,
+                    "message": "Connection successful" if is_valid else "Connection failed",
+                }
+
+            elif service_type == "calendar" and provider == "ms_graph":
+                from app.services.calendar.providers.microsoft import MicrosoftCalendarProvider
+
+                access_token = credentials.get("access_token")
+                if not access_token:
+                    return {"success": False, "message": "Missing access_token"}
+
+                provider_instance = MicrosoftCalendarProvider(
+                    access_token=access_token,
+                    refresh_token=credentials.get("refresh_token"),
+                    client_id=credentials.get("client_id"),
+                    client_secret=credentials.get("client_secret"),
+                    tenant_id=credentials.get("tenant_id"),
+                )
+                is_valid = await provider_instance.test_connection()
+                return {
+                    "success": is_valid,
+                    "message": "Connection successful" if is_valid else "Connection failed",
+                }
 
             else:
                 return {

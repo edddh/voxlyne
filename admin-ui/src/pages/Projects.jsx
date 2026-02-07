@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Table, Button, Space, Input, Modal, Form, Select, message, Tag, Popconfirm, Typography, Tooltip, Switch, Card, Row, Col, Divider, Spin
 } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, HistoryOutlined, EyeOutlined, ApiOutlined, CheckOutlined, EyeInvisibleOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, HistoryOutlined, SettingOutlined, ApiOutlined, CheckOutlined, InfoCircleOutlined } from '@ant-design/icons'
 import * as projectsApi from '../api/projects'
 import * as credentialsApi from '../api/credentials'
 
@@ -30,6 +30,11 @@ function Projects() {
   const [selectedServiceType, setSelectedServiceType] = useState(null)
   const [selectedProvider, setSelectedProvider] = useState(null)
   const [testingCredential, setTestingCredential] = useState(null)
+  const noAutofillProps = {
+    autoComplete: 'new-password',
+    'data-lpignore': 'true',
+    'data-1p-ignore': 'true',
+  }
 
   useEffect(() => {
     loadProjects()
@@ -115,6 +120,8 @@ function Projects() {
       // Build data object based on provider
       if (values.provider === 'vapi') {
         credData.data = { api_key: values.api_key }
+      } else if (values.provider === 'openai_realtime') {
+        credData.data = { api_key: values.api_key }
       } else if (values.provider === 'twilio') {
         credData.data = {
           account_sid: values.account_sid,
@@ -125,7 +132,25 @@ function Projects() {
       } else if (values.provider === 'hubspot') {
         credData.data = { access_token: values.access_token }
       } else if (values.provider === 'generic_webhook') {
-        credData.data = { secret: values.secret || '' }
+        credData.data = {
+          url: values.url,
+          secret: values.secret || '',
+        }
+      } else if (values.provider === 'google_calendar') {
+        credData.data = {
+          access_token: values.access_token,
+          refresh_token: values.refresh_token || '',
+          client_id: values.client_id || '',
+          client_secret: values.client_secret || '',
+        }
+      } else if (values.provider === 'ms_graph') {
+        credData.data = {
+          access_token: values.access_token,
+          refresh_token: values.refresh_token || '',
+          client_id: values.client_id || '',
+          client_secret: values.client_secret || '',
+          tenant_id: values.tenant_id || '',
+        }
       }
 
       await credentialsApi.createProjectCredential(editingProject.id, credData)
@@ -147,14 +172,23 @@ function Projects() {
     }
   }
 
-  const handleTestCredential = async (credentialId) => {
+  const handleTestCredential = async (credential) => {
+    const credentialId = credential.id
     setTestingCredential(credentialId)
     try {
       const result = await credentialsApi.testProjectCredential(editingProject.id, credentialId)
       if (result.success) {
         message.success(result.message || 'Connessione riuscita')
       } else {
-        message.error(result.message || 'Connessione fallita')
+        const isElevenLabs = credential.provider === 'elevenlabs'
+        const missingVoicePermission = typeof result.error === 'string' && (
+          result.error.includes('missing_permissions') || result.error.includes('voices_read')
+        )
+        if (isElevenLabs && missingVoicePermission) {
+          message.error('Connessione fallita. Permessi richiesti ElevenLabs: Text to Speech = Access, Voices = Read')
+        } else {
+          message.error(result.message || 'Connessione fallita')
+        }
       }
     } catch (error) {
       message.error('Errore test connessione')
@@ -164,7 +198,10 @@ function Projects() {
   }
 
   const providersByServiceType = {
-    voice: [{ value: 'vapi', label: 'Vapi.ai' }],
+    voice: [
+      { value: 'vapi', label: 'Vapi.ai' },
+      { value: 'openai_realtime', label: 'OpenAI Realtime' },
+    ],
     telephony: [{ value: 'twilio', label: 'Twilio' }],
     tts: [{ value: 'elevenlabs', label: 'ElevenLabs' }],
     crm: [
@@ -190,7 +227,20 @@ function Projects() {
           rules={[{ required: true, message: 'Inserisci API Key' }]}
           style={commonStyle}
         >
-          <Input.Password placeholder="sk-..." />
+          <Input.Password placeholder="sk-..." {...noAutofillProps} />
+        </Form.Item>
+      )
+    }
+
+    if (selectedProvider === 'openai_realtime') {
+      return (
+        <Form.Item
+          name="api_key"
+          label="API Key"
+          rules={[{ required: true, message: 'Inserisci API Key' }]}
+          style={commonStyle}
+        >
+          <Input.Password placeholder="sk-..." {...noAutofillProps} />
         </Form.Item>
       )
     }
@@ -212,7 +262,7 @@ function Projects() {
             rules={[{ required: true, message: 'Inserisci Auth Token' }]}
             style={commonStyle}
           >
-            <Input.Password />
+            <Input.Password {...noAutofillProps} />
           </Form.Item>
         </>
       )
@@ -222,11 +272,18 @@ function Projects() {
       return (
         <Form.Item
           name="api_key"
-          label="API Key"
+          label={(
+            <Space size={6}>
+              <span>API Key</span>
+              <Tooltip title="Permessi richiesti in ElevenLabs: Text to Speech = Access, Voices = Read">
+                <InfoCircleOutlined />
+              </Tooltip>
+            </Space>
+          )}
           rules={[{ required: true, message: 'Inserisci API Key' }]}
           style={commonStyle}
         >
-          <Input.Password />
+          <Input.Password {...noAutofillProps} />
         </Form.Item>
       )
     }
@@ -239,16 +296,77 @@ function Projects() {
           rules={[{ required: true, message: 'Inserisci Access Token' }]}
           style={commonStyle}
         >
-          <Input.Password />
+          <Input.Password {...noAutofillProps} />
         </Form.Item>
       )
     }
 
     if (selectedProvider === 'generic_webhook') {
       return (
-        <Form.Item name="secret" label="Secret (opzionale)" style={commonStyle}>
-          <Input.Password placeholder="HMAC secret per firma webhook" />
-        </Form.Item>
+        <>
+          <Form.Item
+            name="url"
+            label="Webhook URL"
+            rules={[{ required: true, message: 'Inserisci Webhook URL' }]}
+            style={commonStyle}
+          >
+            <Input placeholder="https://example.com/webhook" />
+          </Form.Item>
+          <Form.Item name="secret" label="Secret (opzionale)" style={commonStyle}>
+            <Input.Password placeholder="HMAC secret per firma webhook" {...noAutofillProps} />
+          </Form.Item>
+        </>
+      )
+    }
+
+    if (selectedProvider === 'google_calendar') {
+      return (
+        <>
+          <Form.Item
+            name="access_token"
+            label="Access Token"
+            rules={[{ required: true, message: 'Inserisci Access Token' }]}
+            style={commonStyle}
+          >
+            <Input.Password {...noAutofillProps} />
+          </Form.Item>
+          <Form.Item name="refresh_token" label="Refresh Token (opzionale)" style={commonStyle}>
+            <Input.Password {...noAutofillProps} />
+          </Form.Item>
+          <Form.Item name="client_id" label="Client ID (opzionale)" style={commonStyle}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="client_secret" label="Client Secret (opzionale)" style={commonStyle}>
+            <Input.Password {...noAutofillProps} />
+          </Form.Item>
+        </>
+      )
+    }
+
+    if (selectedProvider === 'ms_graph') {
+      return (
+        <>
+          <Form.Item
+            name="access_token"
+            label="Access Token"
+            rules={[{ required: true, message: 'Inserisci Access Token' }]}
+            style={commonStyle}
+          >
+            <Input.Password {...noAutofillProps} />
+          </Form.Item>
+          <Form.Item name="refresh_token" label="Refresh Token (opzionale)" style={commonStyle}>
+            <Input.Password {...noAutofillProps} />
+          </Form.Item>
+          <Form.Item name="client_id" label="Client ID (opzionale)" style={commonStyle}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="client_secret" label="Client Secret (opzionale)" style={commonStyle}>
+            <Input.Password {...noAutofillProps} />
+          </Form.Item>
+          <Form.Item name="tenant_id" label="Tenant ID (opzionale)" style={commonStyle}>
+            <Input />
+          </Form.Item>
+        </>
       )
     }
 
@@ -382,7 +500,7 @@ function Projects() {
           </Tooltip>
           <Tooltip title="Impostazioni">
             <Button
-              icon={<EyeOutlined />}
+              icon={<SettingOutlined />}
               size="small"
               onClick={() => openModal(record)}
             />
@@ -607,7 +725,7 @@ function Projects() {
                               icon={<CheckOutlined />}
                               size="small"
                               loading={testingCredential === record.id}
-                              onClick={() => handleTestCredential(record.id)}
+                              onClick={() => handleTestCredential(record)}
                             />
                           </Tooltip>
                           <Popconfirm
@@ -645,7 +763,7 @@ function Projects() {
         footer={null}
         width={500}
       >
-        <Form form={credForm} layout="vertical" onFinish={handleCredentialSubmit}>
+        <Form form={credForm} layout="vertical" onFinish={handleCredentialSubmit} autoComplete="off">
           <Form.Item
             name="service_type"
             label="Service Type"

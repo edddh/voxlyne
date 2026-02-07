@@ -79,13 +79,12 @@ async def run_migrations() -> None:
     Run database migrations on startup.
     In production, you might want to use Alembic instead.
     """
-    import os
     from pathlib import Path
     from typing import List
 
     def _split_sql_statements(sql: str) -> List[str]:
         """
-        Split SQL into statements, honoring quoted strings and dollar-quoted blocks.
+        Split SQL into statements, honoring quoted strings, comments and dollar-quoted blocks.
         """
         statements: List[str] = []
         buf: list[str] = []
@@ -93,9 +92,11 @@ async def run_migrations() -> None:
         in_single = False
         in_double = False
         in_dollar: str | None = None
+        in_block_comment = False
 
         while i < len(sql):
             ch = sql[i]
+            nxt = sql[i + 1] if i + 1 < len(sql) else ""
 
             if in_dollar:
                 if sql.startswith(in_dollar, i):
@@ -105,6 +106,26 @@ async def run_migrations() -> None:
                     continue
                 buf.append(ch)
                 i += 1
+                continue
+
+            if in_block_comment:
+                if ch == "*" and nxt == "/":
+                    in_block_comment = False
+                    i += 2
+                    continue
+                i += 1
+                continue
+
+            # Skip line comments and block comments outside strings.
+            if ch == "-" and nxt == "-":
+                i += 2
+                while i < len(sql) and sql[i] not in ("\n", "\r"):
+                    i += 1
+                continue
+
+            if ch == "/" and nxt == "*":
+                in_block_comment = True
+                i += 2
                 continue
 
             if in_single:
@@ -172,19 +193,43 @@ async def run_migrations() -> None:
 
     for migration_file in migration_files:
         logger.info(f"Running migration: {migration_file.name}")
-        try:
-            sql = migration_file.read_text()
-            # Split statements while honoring dollar-quoted blocks
-            statements = _split_sql_statements(sql)
-            for statement in statements:
-                if statement:
-                    await db.execute(statement)
-            logger.info(f"Migration completed: {migration_file.name}")
-        except Exception as e:
-            # Check if it's a "already exists" error (idempotent migrations)
-            error_msg = str(e).lower()
-            if "already exists" in error_msg or "duplicate" in error_msg:
-                logger.info(f"Migration already applied: {migration_file.name}")
-            else:
-                logger.error(f"Migration failed: {migration_file.name} - {e}")
+        sql = migration_file.read_text()
+        # Split statements while honoring quoted blocks/comments.
+        statements = _split_sql_statements(sql)
+        skipped_idempotent = 0
+
+        for idx, statement in enumerate(statements, start=1):
+            if not statement:
+                continue
+            try:
+                await db.execute(statement)
+            except Exception as e:
+                # Continue only on idempotent errors and keep running the rest.
+                error_msg = str(e).lower()
+                if "already exists" in error_msg or "duplicate" in error_msg:
+                    skipped_idempotent += 1
+                    logger.debug(
+                        "Skipping idempotent statement in %s [%s/%s]: %s",
+                        migration_file.name,
+                        idx,
+                        len(statements),
+                        e,
+                    )
+                    continue
+                logger.error(
+                    "Migration failed: %s [%s/%s] - %s",
+                    migration_file.name,
+                    idx,
+                    len(statements),
+                    e,
+                )
                 raise
+
+        if skipped_idempotent:
+            logger.info(
+                "Migration completed with %s idempotent skips: %s",
+                skipped_idempotent,
+                migration_file.name,
+            )
+        else:
+            logger.info(f"Migration completed: {migration_file.name}")

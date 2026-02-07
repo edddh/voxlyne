@@ -215,15 +215,31 @@ class ProjectBase(BaseModel):
     """Base project model."""
     name: str = Field(..., min_length=1, max_length=255)
     slug: str = Field(..., min_length=1, max_length=100, pattern="^[a-z0-9-]+$")
-    type: ProjectType
+    type: ProjectType = ProjectType.RECRUITING
     description: Optional[str] = None
     is_active: bool = True
 
 
 class ProjectCreate(ProjectBase):
     """Schema for creating a new project."""
-    prompt_a: str = Field(..., min_length=100)
-    prompt_b: str = Field(..., min_length=100)
+    prompt_a: str = Field(
+        default=(
+            "Sei un assistente AI che conduce una breve intervista professionale. "
+            "Inizia chiedendo il consenso al trattamento dati, poi fai domande chiare "
+            "sull'esperienza, competenze, motivazioni e disponibilita. Mantieni un tono "
+            "cordiale, non interrompere l'utente e chiudi con un riepilogo sintetico."
+        ),
+        min_length=100,
+    )
+    prompt_b: str = Field(
+        default=(
+            "Analizza la trascrizione e restituisci solo JSON valido con: nome candidato, "
+            "telefono, email, riepilogo esperienza, competenze tecniche, soft skills, "
+            "disponibilita, motivazioni, criticita e punteggio complessivo 1-10. "
+            "Non inventare dati e usa null o [] quando le informazioni non sono presenti."
+        ),
+        min_length=100,
+    )
     consent_message: Optional[str] = None
     voice_name: str = "alloy"
     language: str = "it"

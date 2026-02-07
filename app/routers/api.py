@@ -4,19 +4,23 @@ Project-aware RESTful API for call data and PDF access
 """
 
 import logging
+from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
 
 import json
 
 from app.database.db import get_database
+from app.middleware.auth_middleware import CurrentUser, check_tenant_access, require_roles
 from app.models.schemas import (
     Call,
     CallComplete,
     Project,
+    ProjectCreate,
+    ProjectUpdate,
     Record,
     RecordWithCall,
 )
@@ -26,6 +30,18 @@ from app.services.post_processor import PostProcessor, PostProcessingError
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["api"])
+
+
+def _serialize_project(project_row) -> dict:
+    """Normalize project row for API output."""
+    item = dict(project_row)
+    output_config = item.get("output_config")
+    if isinstance(output_config, str):
+        try:
+            item["output_config"] = json.loads(output_config)
+        except json.JSONDecodeError:
+            item["output_config"] = {}
+    return item
 
 
 # ===========================================
@@ -54,18 +70,7 @@ async def list_projects(
 
     projects = await db.fetch_all(query)
 
-    result = []
-    for p in projects:
-        item = dict(p)
-        output_config = item.get("output_config")
-        if isinstance(output_config, str):
-            try:
-                item["output_config"] = json.loads(output_config)
-            except json.JSONDecodeError:
-                item["output_config"] = {}
-        result.append(item)
-
-    return result
+    return [_serialize_project(p) for p in projects]
 
 
 @router.get("/projects/{project_identifier}", response_model=Project)
@@ -102,14 +107,205 @@ async def get_project(project_identifier: str):
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_identifier}")
 
-    item = dict(project)
-    output_config = item.get("output_config")
-    if isinstance(output_config, str):
-        try:
-            item["output_config"] = json.loads(output_config)
-        except json.JSONDecodeError:
-            item["output_config"] = {}
-    return item
+    return _serialize_project(project)
+
+
+@router.post("/projects", response_model=Project, status_code=status.HTTP_201_CREATED)
+async def create_project(
+    project_data: ProjectCreate,
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator"])),
+):
+    """
+    Create a new project.
+    """
+    db = get_database()
+
+    # Validate slug uniqueness
+    existing = await db.fetch_one(
+        "SELECT id FROM projects WHERE slug = :slug",
+        {"slug": project_data.slug},
+    )
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Project slug already exists: {project_data.slug}",
+        )
+
+    now = datetime.now(timezone.utc)
+    output_config_value = project_data.output_config
+    output_config_json = json.dumps(output_config_value) if output_config_value is not None else "{}"
+
+    # Create project
+    created = await db.fetch_one(
+        """
+        INSERT INTO projects (
+            name, slug, type, description, is_active,
+            prompt_a, prompt_b, consent_message,
+            voice_name, language, output_config,
+            sip_number, openai_project_id,
+            voice_engine, call_direction, vapi_assistant_id,
+            twilio_phone_number, vapi_phone_number_id, elevenlabs_voice_id,
+            tenant_id, created_by, created_at, updated_at
+        )
+        VALUES (
+            :name, :slug, :type, :description, :is_active,
+            :prompt_a, :prompt_b, :consent_message,
+            :voice_name, :language, :output_config,
+            :sip_number, :openai_project_id,
+            :voice_engine, :call_direction, :vapi_assistant_id,
+            :twilio_phone_number, :vapi_phone_number_id, :elevenlabs_voice_id,
+            :tenant_id, :created_by, :created_at, :updated_at
+        )
+        RETURNING *
+        """,
+        {
+            "name": project_data.name,
+            "slug": project_data.slug,
+            "type": project_data.type.value,
+            "description": project_data.description,
+            "is_active": project_data.is_active,
+            "prompt_a": project_data.prompt_a,
+            "prompt_b": project_data.prompt_b,
+            "consent_message": project_data.consent_message,
+            "voice_name": project_data.voice_name,
+            "language": project_data.language,
+            "output_config": output_config_json,
+            "sip_number": project_data.sip_number,
+            "openai_project_id": project_data.openai_project_id,
+            "voice_engine": project_data.voice_engine.value,
+            "call_direction": project_data.call_direction.value,
+            "vapi_assistant_id": project_data.vapi_assistant_id,
+            "twilio_phone_number": project_data.twilio_phone_number,
+            "vapi_phone_number_id": project_data.vapi_phone_number_id,
+            "elevenlabs_voice_id": project_data.elevenlabs_voice_id,
+            "tenant_id": str(current_user.tenant_id) if current_user.tenant_id else None,
+            "created_by": str(current_user.id),
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+
+    # Seed prompt version 1 for A and B as active (required by prompt history UI)
+    await db.execute(
+        """
+        INSERT INTO prompt_versions (project_id, prompt_type, version, content, is_active, created_by, created_at)
+        VALUES (:project_id, 'A', 1, :content, TRUE, :created_by, :created_at)
+        ON CONFLICT (project_id, prompt_type, version) DO NOTHING
+        """,
+        {
+            "project_id": str(created["id"]),
+            "content": project_data.prompt_a,
+            "created_by": str(current_user.id),
+            "created_at": now,
+        },
+    )
+    await db.execute(
+        """
+        INSERT INTO prompt_versions (project_id, prompt_type, version, content, is_active, created_by, created_at)
+        VALUES (:project_id, 'B', 1, :content, TRUE, :created_by, :created_at)
+        ON CONFLICT (project_id, prompt_type, version) DO NOTHING
+        """,
+        {
+            "project_id": str(created["id"]),
+            "content": project_data.prompt_b,
+            "created_by": str(current_user.id),
+            "created_at": now,
+        },
+    )
+
+    logger.info(f"Project created: {created['id']} by {current_user.email}")
+    return _serialize_project(created)
+
+
+@router.patch("/projects/{project_id}", response_model=Project)
+async def update_project(
+    project_id: UUID,
+    project_data: ProjectUpdate,
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator"])),
+):
+    """
+    Update an existing project.
+    """
+    db = get_database()
+
+    existing = await db.fetch_one(
+        "SELECT id, tenant_id FROM projects WHERE id = :project_id",
+        {"project_id": str(project_id)},
+    )
+    if not existing:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+
+    tenant_id = UUID(str(existing["tenant_id"])) if existing["tenant_id"] else None
+    if not check_tenant_access(current_user, tenant_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied to this project",
+        )
+
+    update_data = project_data.model_dump(exclude_unset=True)
+    if not update_data:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")
+
+    if "voice_engine" in update_data and update_data["voice_engine"] is not None:
+        update_data["voice_engine"] = update_data["voice_engine"].value
+    if "call_direction" in update_data and update_data["call_direction"] is not None:
+        update_data["call_direction"] = update_data["call_direction"].value
+    if "output_config" in update_data and update_data["output_config"] is not None:
+        update_data["output_config"] = json.dumps(update_data["output_config"])
+
+    set_clauses = []
+    params = {"project_id": str(project_id), "updated_at": datetime.now(timezone.utc)}
+    for field, value in update_data.items():
+        set_clauses.append(f"{field} = :{field}")
+        params[field] = value
+    set_clauses.append("updated_at = :updated_at")
+
+    updated = await db.fetch_one(
+        f"UPDATE projects SET {', '.join(set_clauses)} WHERE id = :project_id RETURNING *",
+        params,
+    )
+
+    logger.info(f"Project updated: {project_id} by {current_user.email}")
+    return _serialize_project(updated)
+
+
+@router.delete("/projects/{project_id}")
+async def delete_project(
+    project_id: UUID,
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator"])),
+):
+    """
+    Soft-delete a project by setting is_active to FALSE.
+    """
+    db = get_database()
+
+    existing = await db.fetch_one(
+        "SELECT id, slug, tenant_id FROM projects WHERE id = :project_id",
+        {"project_id": str(project_id)},
+    )
+    if not existing:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+
+    if existing["slug"] == "default":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Default project cannot be deactivated",
+        )
+
+    tenant_id = UUID(str(existing["tenant_id"])) if existing["tenant_id"] else None
+    if not check_tenant_access(current_user, tenant_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied to this project",
+        )
+
+    await db.execute(
+        "UPDATE projects SET is_active = FALSE, updated_at = :updated_at WHERE id = :project_id",
+        {"updated_at": datetime.now(timezone.utc), "project_id": str(project_id)},
+    )
+
+    logger.info(f"Project deactivated: {project_id} by {current_user.email}")
+    return {"success": True, "message": "Project deactivated"}
 
 
 # ===========================================
