@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Table, Button, Space, Input, Modal, Form, Select, message, Tag, Popconfirm, Typography, Tooltip, Switch, Card, Row, Col, Divider
+  Table, Button, Space, Input, Modal, Form, Select, message, Tag, Popconfirm, Typography, Tooltip, Switch, Card, Row, Col, Divider, Spin
 } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, HistoryOutlined, EyeOutlined, ApiOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, HistoryOutlined, EyeOutlined, ApiOutlined, CheckOutlined, EyeInvisibleOutlined } from '@ant-design/icons'
 import * as projectsApi from '../api/projects'
+import * as credentialsApi from '../api/credentials'
 
 const { Title, Text } = Typography
 const { TextArea } = Input
@@ -20,6 +21,15 @@ function Projects() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editingProject, setEditingProject] = useState(null)
   const [form] = Form.useForm()
+
+  // Credentials state
+  const [credentials, setCredentials] = useState([])
+  const [credentialsLoading, setCredentialsLoading] = useState(false)
+  const [credModalOpen, setCredModalOpen] = useState(false)
+  const [credForm] = Form.useForm()
+  const [selectedServiceType, setSelectedServiceType] = useState(null)
+  const [selectedProvider, setSelectedProvider] = useState(null)
+  const [testingCredential, setTestingCredential] = useState(null)
 
   useEffect(() => {
     loadProjects()
@@ -40,7 +50,7 @@ function Projects() {
     }
   }
 
-  const openModal = (project = null) => {
+  const openModal = async (project = null) => {
     setEditingProject(project)
     form.resetFields()
     if (project) {
@@ -56,14 +66,193 @@ function Projects() {
         vapi_phone_number_id: project.vapi_phone_number_id,
         elevenlabs_voice_id: project.elevenlabs_voice_id,
       })
+      // Load credentials for this project
+      await loadCredentials(project.id)
     } else {
       form.setFieldsValue({
         is_active: true,
         voice_engine: 'openai_realtime',
         call_direction: 'inbound',
       })
+      setCredentials([])
     }
     setModalOpen(true)
+  }
+
+  const loadCredentials = async (projectId) => {
+    setCredentialsLoading(true)
+    try {
+      const creds = await credentialsApi.getProjectCredentials(projectId)
+      setCredentials(creds)
+    } catch (error) {
+      message.error('Errore caricamento credenziali')
+    } finally {
+      setCredentialsLoading(false)
+    }
+  }
+
+  const openCredentialModal = () => {
+    credForm.resetFields()
+    setSelectedServiceType(null)
+    setSelectedProvider(null)
+    setCredModalOpen(true)
+  }
+
+  const handleCredentialSubmit = async (values) => {
+    if (!editingProject) {
+      message.error('Salva prima il progetto')
+      return
+    }
+
+    try {
+      const credData = {
+        service_type: values.service_type,
+        provider: values.provider,
+        credential_key: values.credential_key || 'default',
+        data: {},
+      }
+
+      // Build data object based on provider
+      if (values.provider === 'vapi') {
+        credData.data = { api_key: values.api_key }
+      } else if (values.provider === 'twilio') {
+        credData.data = {
+          account_sid: values.account_sid,
+          auth_token: values.auth_token,
+        }
+      } else if (values.provider === 'elevenlabs') {
+        credData.data = { api_key: values.api_key }
+      } else if (values.provider === 'hubspot') {
+        credData.data = { access_token: values.access_token }
+      } else if (values.provider === 'generic_webhook') {
+        credData.data = { secret: values.secret || '' }
+      }
+
+      await credentialsApi.createProjectCredential(editingProject.id, credData)
+      message.success('Credenziali salvate')
+      setCredModalOpen(false)
+      await loadCredentials(editingProject.id)
+    } catch (error) {
+      message.error(error.message || 'Errore salvataggio credenziali')
+    }
+  }
+
+  const handleDeleteCredential = async (credentialId) => {
+    try {
+      await credentialsApi.deleteProjectCredential(editingProject.id, credentialId)
+      message.success('Credenziali eliminate')
+      await loadCredentials(editingProject.id)
+    } catch (error) {
+      message.error('Errore eliminazione credenziali')
+    }
+  }
+
+  const handleTestCredential = async (credentialId) => {
+    setTestingCredential(credentialId)
+    try {
+      const result = await credentialsApi.testProjectCredential(editingProject.id, credentialId)
+      if (result.success) {
+        message.success(result.message || 'Connessione riuscita')
+      } else {
+        message.error(result.message || 'Connessione fallita')
+      }
+    } catch (error) {
+      message.error('Errore test connessione')
+    } finally {
+      setTestingCredential(null)
+    }
+  }
+
+  const providersByServiceType = {
+    voice: [{ value: 'vapi', label: 'Vapi.ai' }],
+    telephony: [{ value: 'twilio', label: 'Twilio' }],
+    tts: [{ value: 'elevenlabs', label: 'ElevenLabs' }],
+    crm: [
+      { value: 'hubspot', label: 'HubSpot' },
+      { value: 'generic_webhook', label: 'Generic Webhook' },
+    ],
+    calendar: [
+      { value: 'google_calendar', label: 'Google Calendar' },
+      { value: 'ms_graph', label: 'Microsoft Graph' },
+    ],
+  }
+
+  const renderCredentialFields = () => {
+    if (!selectedProvider) return null
+
+    const commonStyle = { marginBottom: 16 }
+
+    if (selectedProvider === 'vapi') {
+      return (
+        <Form.Item
+          name="api_key"
+          label="API Key"
+          rules={[{ required: true, message: 'Inserisci API Key' }]}
+          style={commonStyle}
+        >
+          <Input.Password placeholder="sk-..." />
+        </Form.Item>
+      )
+    }
+
+    if (selectedProvider === 'twilio') {
+      return (
+        <>
+          <Form.Item
+            name="account_sid"
+            label="Account SID"
+            rules={[{ required: true, message: 'Inserisci Account SID' }]}
+            style={commonStyle}
+          >
+            <Input placeholder="AC..." />
+          </Form.Item>
+          <Form.Item
+            name="auth_token"
+            label="Auth Token"
+            rules={[{ required: true, message: 'Inserisci Auth Token' }]}
+            style={commonStyle}
+          >
+            <Input.Password />
+          </Form.Item>
+        </>
+      )
+    }
+
+    if (selectedProvider === 'elevenlabs') {
+      return (
+        <Form.Item
+          name="api_key"
+          label="API Key"
+          rules={[{ required: true, message: 'Inserisci API Key' }]}
+          style={commonStyle}
+        >
+          <Input.Password />
+        </Form.Item>
+      )
+    }
+
+    if (selectedProvider === 'hubspot') {
+      return (
+        <Form.Item
+          name="access_token"
+          label="Access Token"
+          rules={[{ required: true, message: 'Inserisci Access Token' }]}
+          style={commonStyle}
+        >
+          <Input.Password />
+        </Form.Item>
+      )
+    }
+
+    if (selectedProvider === 'generic_webhook') {
+      return (
+        <Form.Item name="secret" label="Secret (opzionale)" style={commonStyle}>
+          <Input.Password placeholder="HMAC secret per firma webhook" />
+        </Form.Item>
+      )
+    }
+
+    return null
   }
 
   const handleSubmit = async (values) => {
@@ -257,7 +446,7 @@ function Projects() {
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
         footer={null}
-        width={600}
+        width={800}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item
@@ -346,6 +535,173 @@ function Projects() {
               <Button onClick={() => setModalOpen(false)}>Annulla</Button>
             </Space>
           </Form.Item>
+        </Form>
+
+        {editingProject && (
+          <>
+            <Divider orientation="left">
+              <Space>
+                <ApiOutlined /> API Credentials (M5.5)
+              </Space>
+            </Divider>
+            <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 16 }}>
+              Configura chiavi API specifiche per questo progetto. Se non configurate, verranno usate le chiavi globali da .env
+            </Text>
+
+            {credentialsLoading ? (
+              <div style={{ textAlign: 'center', padding: 20 }}>
+                <Spin />
+              </div>
+            ) : (
+              <>
+                <Table
+                  dataSource={credentials}
+                  rowKey="id"
+                  size="small"
+                  pagination={false}
+                  style={{ marginBottom: 16 }}
+                  columns={[
+                    {
+                      title: 'Service',
+                      dataIndex: 'service_type',
+                      key: 'service_type',
+                      render: (type) => (
+                        <Tag color="blue">{type}</Tag>
+                      ),
+                    },
+                    {
+                      title: 'Provider',
+                      dataIndex: 'provider',
+                      key: 'provider',
+                      render: (provider) => <code>{provider}</code>,
+                    },
+                    {
+                      title: 'Key',
+                      dataIndex: 'credential_key',
+                      key: 'key',
+                      render: (key) => <Text type="secondary">{key}</Text>,
+                    },
+                    {
+                      title: 'Status',
+                      dataIndex: 'is_active',
+                      key: 'status',
+                      render: (active) => (
+                        <Tag color={active ? 'green' : 'default'}>
+                          {active ? 'Active' : 'Inactive'}
+                        </Tag>
+                      ),
+                    },
+                    {
+                      title: 'Created',
+                      dataIndex: 'created_at',
+                      key: 'created',
+                      render: (date) => new Date(date).toLocaleDateString('it-IT'),
+                    },
+                    {
+                      title: 'Actions',
+                      key: 'actions',
+                      render: (_, record) => (
+                        <Space size="small">
+                          <Tooltip title="Test Connection">
+                            <Button
+                              icon={<CheckOutlined />}
+                              size="small"
+                              loading={testingCredential === record.id}
+                              onClick={() => handleTestCredential(record.id)}
+                            />
+                          </Tooltip>
+                          <Popconfirm
+                            title="Eliminare credenziali?"
+                            onConfirm={() => handleDeleteCredential(record.id)}
+                            okText="Sì"
+                            cancelText="No"
+                          >
+                            <Button icon={<DeleteOutlined />} size="small" danger />
+                          </Popconfirm>
+                        </Space>
+                      ),
+                    },
+                  ]}
+                />
+                <Button
+                  type="dashed"
+                  icon={<PlusOutlined />}
+                  onClick={openCredentialModal}
+                  block
+                >
+                  Aggiungi Credenziali
+                </Button>
+              </>
+            )}
+          </>
+        )}
+      </Modal>
+
+      {/* Credential Modal */}
+      <Modal
+        title="Aggiungi API Credentials"
+        open={credModalOpen}
+        onCancel={() => setCredModalOpen(false)}
+        footer={null}
+        width={500}
+      >
+        <Form form={credForm} layout="vertical" onFinish={handleCredentialSubmit}>
+          <Form.Item
+            name="service_type"
+            label="Service Type"
+            rules={[{ required: true, message: 'Seleziona tipo servizio' }]}
+          >
+            <Select
+              placeholder="Seleziona tipo servizio"
+              onChange={(value) => {
+                setSelectedServiceType(value)
+                setSelectedProvider(null)
+                credForm.setFieldsValue({ provider: undefined })
+              }}
+              options={[
+                { value: 'voice', label: 'Voice Engine' },
+                { value: 'telephony', label: 'Telephony' },
+                { value: 'tts', label: 'Text-to-Speech' },
+                { value: 'crm', label: 'CRM' },
+                { value: 'calendar', label: 'Calendar' },
+              ]}
+            />
+          </Form.Item>
+
+          {selectedServiceType && (
+            <Form.Item
+              name="provider"
+              label="Provider"
+              rules={[{ required: true, message: 'Seleziona provider' }]}
+            >
+              <Select
+                placeholder="Seleziona provider"
+                onChange={setSelectedProvider}
+                options={providersByServiceType[selectedServiceType] || []}
+              />
+            </Form.Item>
+          )}
+
+          <Form.Item
+            name="credential_key"
+            label="Reference Key (opzionale)"
+            tooltip="Usa per gestire multiple credenziali dello stesso provider"
+          >
+            <Input placeholder="default" />
+          </Form.Item>
+
+          {renderCredentialFields()}
+
+          {selectedProvider && (
+            <Form.Item>
+              <Space>
+                <Button type="primary" htmlType="submit">
+                  Salva
+                </Button>
+                <Button onClick={() => setCredModalOpen(false)}>Annulla</Button>
+              </Space>
+            </Form.Item>
+          )}
         </Form>
       </Modal>
     </div>

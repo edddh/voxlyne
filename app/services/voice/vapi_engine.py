@@ -46,18 +46,41 @@ class VapiEngine(BaseVoiceEngine):
 
     def __init__(self, settings=None):
         self.settings = settings
-        self._client: Optional[VapiClient] = None
 
-    @property
-    def client(self) -> VapiClient:
-        """Lazy-init the Vapi client."""
-        if self._client is None:
-            api_key = getattr(self.settings, "vapi_api_key", None)
-            if not api_key:
-                raise ValueError("VAPI_API_KEY is not configured")
-            base_url = getattr(self.settings, "vapi_base_url", "https://api.vapi.ai")
-            self._client = VapiClient(api_key=api_key, base_url=base_url)
-        return self._client
+    async def _get_vapi_client(self, project_id: UUID) -> VapiClient:
+        """
+        Get VapiClient with credentials for the given project.
+
+        Uses CredentialsManager to fetch project-level API key with fallback to global .env.
+
+        Args:
+            project_id: UUID of the project
+
+        Returns:
+            VapiClient instance with project-specific credentials
+
+        Raises:
+            ValueError: If no API key is configured (neither project-level nor global)
+        """
+        from app.services.credentials.manager import CredentialsManager
+
+        creds_manager = CredentialsManager()
+        creds = await creds_manager.get_credentials(
+            entity_type="project",
+            entity_id=project_id,
+            service_type="voice",
+            provider="vapi",
+        )
+
+        api_key = creds.get("api_key")
+        if not api_key:
+            raise ValueError(
+                f"Vapi API key not configured for project {project_id}. "
+                "Please configure it in project settings or set VAPI_API_KEY in .env"
+            )
+
+        base_url = getattr(self.settings, "vapi_base_url", "https://api.vapi.ai")
+        return VapiClient(api_key=api_key, base_url=base_url)
 
     async def start_outbound_call(
         self,
@@ -71,13 +94,16 @@ class VapiEngine(BaseVoiceEngine):
         2. An inline assistant with overrides (prompt, voice, etc.)
         """
         try:
+            # Get Vapi client with project-specific credentials
+            client = await self._get_vapi_client(request.project_id)
+
             # Build assistant overrides if no assistant_id
             assistant_id = request.vapi_assistant_id
             assistant_overrides = None
 
             if not assistant_id:
                 # Create inline assistant config with the project's prompt
-                assistant_overrides = self._build_assistant_overrides(request)
+                assistant_overrides = await self._build_assistant_overrides(request)
 
             # Build metadata to link back to our internal call
             metadata = {
@@ -95,7 +121,7 @@ class VapiEngine(BaseVoiceEngine):
 
             vapi_phone_number_id = getattr(self.settings, "vapi_phone_number_id", None)
 
-            result = await self.client.create_outbound_call(
+            result = await client.create_outbound_call(
                 phone_number=request.phone_number,
                 assistant_id=assistant_id,
                 assistant_overrides=assistant_overrides,
@@ -126,17 +152,31 @@ class VapiEngine(BaseVoiceEngine):
         call_id: UUID,
         provider_call_id: Optional[str] = None,
     ) -> bool:
-        """End a Vapi call."""
+        """
+        End a Vapi call.
+
+        Note: Uses global Vapi credentials (not project-specific) for simplicity.
+        """
         if not provider_call_id:
             logger.warning(f"No provider_call_id for Vapi hangup on call {call_id}")
             return False
 
         try:
-            await self.client.end_call(provider_call_id)
+            # Use global credentials for hangup (simpler, same account)
+            client = self._get_vapi_client_global()
+            await client.end_call(provider_call_id)
             return True
         except Exception as e:
             logger.error(f"Failed to end Vapi call {provider_call_id}: {e}")
             return False
+
+    def _get_vapi_client_global(self) -> VapiClient:
+        """Get VapiClient with global credentials from .env."""
+        api_key = getattr(self.settings, "vapi_api_key", None)
+        if not api_key:
+            raise ValueError("VAPI_API_KEY is not configured in .env")
+        base_url = getattr(self.settings, "vapi_base_url", "https://api.vapi.ai")
+        return VapiClient(api_key=api_key, base_url=base_url)
 
     async def handle_webhook(
         self,
@@ -193,8 +233,17 @@ class VapiEngine(BaseVoiceEngine):
             )
 
     async def test_connection(self) -> bool:
-        """Test Vapi API connectivity."""
-        return await self.client.test_connection()
+        """
+        Test Vapi API connectivity.
+
+        Note: Uses global credentials from .env.
+        """
+        try:
+            client = self._get_vapi_client_global()
+            return await client.test_connection()
+        except Exception as e:
+            logger.error(f"Vapi test connection failed: {e}")
+            return False
 
     def get_supported_directions(self) -> List[CallDirection]:
         """Vapi supports both inbound and outbound."""
@@ -204,7 +253,7 @@ class VapiEngine(BaseVoiceEngine):
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _build_assistant_overrides(self, request: OutboundCallRequest) -> Dict[str, Any]:
+    async def _build_assistant_overrides(self, request: OutboundCallRequest) -> Dict[str, Any]:
         """
         Build Vapi assistant overrides from an OutboundCallRequest.
         This allows dynamic configuration without pre-creating assistants in Vapi dashboard.
@@ -221,7 +270,7 @@ class VapiEngine(BaseVoiceEngine):
                     }
                 ],
             },
-            "voice": self._get_voice_config(request),
+            "voice": await self._get_voice_config(request),
             "silenceTimeoutSeconds": 10,
             "maxDurationSeconds": getattr(self.settings, "max_call_duration_seconds", 600),
             "backgroundSound": "off",
@@ -237,9 +286,40 @@ class VapiEngine(BaseVoiceEngine):
 
         return overrides
 
-    def _get_voice_config(self, request: OutboundCallRequest) -> Dict[str, Any]:
-        """Build Vapi voice configuration, preferring ElevenLabs for German."""
-        elevenlabs_voice_id = getattr(self.settings, "elevenlabs_voice_id", None)
+    async def _get_voice_config(self, request: OutboundCallRequest) -> Dict[str, Any]:
+        """
+        Build Vapi voice configuration, preferring ElevenLabs for German.
+
+        Priority for voice_id:
+        1. Request elevenlabs_voice_id (from project settings)
+        2. Project-level ElevenLabs credentials from DB
+        3. Global elevenlabs_voice_id from .env
+        4. Fallback to OpenAI voice
+        """
+        from app.services.credentials.manager import CredentialsManager
+
+        # Try to get ElevenLabs voice ID from request (project config)
+        elevenlabs_voice_id = getattr(request, "elevenlabs_voice_id", None)
+
+        # If not in request, try credentials manager
+        if not elevenlabs_voice_id:
+            try:
+                creds_manager = CredentialsManager()
+                elevenlabs_creds = await creds_manager.get_credentials(
+                    entity_type="project",
+                    entity_id=request.project_id,
+                    service_type="tts",
+                    provider="elevenlabs",
+                )
+                # Note: voice_id might be in project config, not credentials
+                # Credentials only contain api_key for ElevenLabs
+                # voice_id is usually in project.elevenlabs_voice_id field
+            except Exception as e:
+                logger.debug(f"Could not load ElevenLabs credentials: {e}")
+
+        # Fallback to global settings
+        if not elevenlabs_voice_id:
+            elevenlabs_voice_id = getattr(self.settings, "elevenlabs_voice_id", None)
 
         if elevenlabs_voice_id:
             return {

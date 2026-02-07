@@ -119,37 +119,40 @@ class Settings(BaseSettings):
     # ===========================================
     # Vapi.ai Configuration (M5)
     # ===========================================
+    # Global fallback - projects can override via API Credentials (M5.5)
     vapi_api_key: Optional[str] = Field(
-        default=None, description="Vapi.ai API key"
+        default=None, description="Vapi.ai API key (global fallback)"
     )
     vapi_base_url: str = Field(
         default="https://api.vapi.ai", description="Vapi.ai API base URL"
     )
     vapi_phone_number_id: Optional[str] = Field(
-        default=None, description="Vapi phone number ID for outbound calls"
+        default=None, description="Vapi phone number ID for outbound calls (global fallback)"
     )
 
     # ===========================================
     # ElevenLabs Configuration (M5)
     # ===========================================
+    # Global fallback - projects can override via API Credentials (M5.5)
     elevenlabs_api_key: Optional[str] = Field(
-        default=None, description="ElevenLabs API key for TTS"
+        default=None, description="ElevenLabs API key for TTS (global fallback)"
     )
     elevenlabs_voice_id: Optional[str] = Field(
-        default=None, description="Default ElevenLabs voice ID (German voice)"
+        default=None, description="Default ElevenLabs voice ID (German voice, global fallback)"
     )
 
     # ===========================================
     # Twilio Configuration (M5)
     # ===========================================
+    # Global fallback - projects can override via API Credentials (M5.5)
     twilio_account_sid: Optional[str] = Field(
-        default=None, description="Twilio Account SID"
+        default=None, description="Twilio Account SID (global fallback)"
     )
     twilio_auth_token: Optional[str] = Field(
-        default=None, description="Twilio Auth Token"
+        default=None, description="Twilio Auth Token (global fallback)"
     )
     twilio_phone_number: Optional[str] = Field(
-        default=None, description="Default Twilio phone number for outbound (E.164)"
+        default=None, description="Default Twilio phone number for outbound (E.164, global fallback)"
     )
 
     # ===========================================
@@ -168,20 +171,20 @@ class Settings(BaseSettings):
         description="Initial retry delay in seconds"
     )
 
-    # HubSpot credentials
+    # HubSpot credentials (global fallback - projects can override via API Credentials M5.5)
     hubspot_api_key: Optional[str] = Field(
         default=None,
-        description="HubSpot Private App API key (legacy)"
+        description="HubSpot Private App API key (legacy, global fallback)"
     )
     hubspot_access_token: Optional[str] = Field(
         default=None,
-        description="HubSpot OAuth or Private App access token"
+        description="HubSpot OAuth or Private App access token (global fallback)"
     )
 
-    # Generic webhook
+    # Generic webhook (global fallback)
     webhook_secret: Optional[str] = Field(
         default=None,
-        description="HMAC secret for webhook signature"
+        description="HMAC secret for webhook signature (global fallback)"
     )
 
     # ===========================================

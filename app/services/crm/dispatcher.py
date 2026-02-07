@@ -126,10 +126,24 @@ class CRMDispatcher:
 
             provider_name = crm_config.provider
 
-            # 3. Get credentials
-            credentials = await self._get_credentials(
-                call_id=call_id,
-                credentials_key=crm_config.credentials_key,
+            # 3. Get credentials via CredentialsManager
+            from app.services.credentials.manager import CredentialsManager
+
+            # Get project_id for this call
+            call_project = await db.fetch_one(
+                "SELECT project_id FROM calls WHERE id = :call_id",
+                {"call_id": str(call_id)},
+            )
+
+            if not call_project or not call_project["project_id"]:
+                logger.error(f"No project_id found for call {call_id}")
+                return False
+
+            creds_manager = CredentialsManager()
+            credentials = await creds_manager.get_credentials(
+                entity_type="project",
+                entity_id=call_project["project_id"],
+                service_type="crm",
                 provider=provider_name,
             )
 
@@ -253,67 +267,6 @@ class CRMDispatcher:
         crm_data = output_config.get("crm") if output_config else None
         return CRMConfig.from_dict(crm_data)
 
-    async def _get_credentials(
-        self,
-        call_id: UUID,
-        credentials_key: Optional[str],
-        provider: str,
-    ) -> Dict[str, str]:
-        """
-        Get CRM credentials from settings or environment.
-
-        Priority:
-        1. Database stored credentials (if credentials_key provided)
-        2. Environment variables (global fallback)
-        """
-        # First try environment variables (simplest for demo)
-        if provider == "hubspot":
-            if self.settings.hubspot_access_token:
-                return {"access_token": self.settings.hubspot_access_token}
-            if self.settings.hubspot_api_key:
-                return {"api_key": self.settings.hubspot_api_key}
-
-        elif provider == "generic_webhook":
-            if self.settings.webhook_secret:
-                return {"secret": self.settings.webhook_secret}
-            return {}  # Webhook can work without secret
-
-        # Then try database credentials (for per-project setup)
-        if credentials_key:
-            db = get_database()
-
-            # Get project_id for this call
-            call = await db.fetch_one(
-                "SELECT project_id FROM calls WHERE id = :call_id",
-                {"call_id": str(call_id)},
-            )
-
-            if call and call["project_id"]:
-                cred = await db.fetch_one(
-                    """
-                    SELECT encrypted_data
-                    FROM crm_credentials
-                    WHERE project_id = :project_id
-                      AND provider = :provider
-                      AND credential_key = :key
-                      AND is_active = TRUE
-                    """,
-                    {
-                        "project_id": str(call["project_id"]),
-                        "provider": provider,
-                        "key": credentials_key,
-                    },
-                )
-
-                if cred:
-                    # TODO: Decrypt credentials
-                    # For now, assume plain JSON (not recommended for production)
-                    try:
-                        return json.loads(cred["encrypted_data"])
-                    except Exception as e:
-                        logger.error(f"Failed to parse credentials: {e}")
-
-        return {}
 
     async def _create_sync_log(
         self,
