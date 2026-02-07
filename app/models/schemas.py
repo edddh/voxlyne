@@ -43,6 +43,19 @@ class ProjectType(str, Enum):
     OTHER = "other"
 
 
+class VoiceEngineType(str, Enum):
+    """Supported voice engine providers."""
+    OPENAI_REALTIME = "openai_realtime"
+    VAPI = "vapi"
+
+
+class CallDirection(str, Enum):
+    """Call direction."""
+    INBOUND = "inbound"
+    OUTBOUND = "outbound"
+    BOTH = "both"
+
+
 # ===========================================
 # Call Schemas
 # ===========================================
@@ -57,6 +70,11 @@ class CallBase(BaseModel):
 class CallCreate(CallBase):
     """Schema for creating a new call."""
     openai_session_id: Optional[str] = None
+    # M5: Voice engine & direction tracking
+    voice_engine: Optional[str] = None
+    direction: str = "inbound"
+    vapi_call_id: Optional[str] = None
+    twilio_call_sid: Optional[str] = None
 
 
 class CallUpdate(BaseModel):
@@ -79,6 +97,11 @@ class Call(CallBase):
     ended_at: Optional[datetime] = None
     duration_seconds: Optional[int] = None
     openai_session_id: Optional[str] = None
+    # M5: Voice engine & direction tracking
+    voice_engine: Optional[str] = None
+    direction: str = "inbound"
+    vapi_call_id: Optional[str] = None
+    twilio_call_sid: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -213,6 +236,13 @@ class ProjectCreate(ProjectBase):
     )
     sip_number: Optional[str] = None
     openai_project_id: Optional[str] = None
+    # M5: Voice engine configuration
+    voice_engine: VoiceEngineType = VoiceEngineType.OPENAI_REALTIME
+    call_direction: CallDirection = CallDirection.INBOUND
+    vapi_assistant_id: Optional[str] = None
+    twilio_phone_number: Optional[str] = None
+    vapi_phone_number_id: Optional[str] = None
+    elevenlabs_voice_id: Optional[str] = None
 
 
 class ProjectUpdate(BaseModel):
@@ -228,6 +258,13 @@ class ProjectUpdate(BaseModel):
     output_config: Optional[Dict[str, Any]] = None
     sip_number: Optional[str] = None
     openai_project_id: Optional[str] = None
+    # M5: Voice engine configuration
+    voice_engine: Optional[VoiceEngineType] = None
+    call_direction: Optional[CallDirection] = None
+    vapi_assistant_id: Optional[str] = None
+    twilio_phone_number: Optional[str] = None
+    vapi_phone_number_id: Optional[str] = None
+    elevenlabs_voice_id: Optional[str] = None
 
 
 class Project(ProjectBase):
@@ -241,6 +278,13 @@ class Project(ProjectBase):
     output_config: Dict[str, Any]
     sip_number: Optional[str] = None
     openai_project_id: Optional[str] = None
+    # M5: Voice engine configuration
+    voice_engine: str = "openai_realtime"
+    call_direction: str = "inbound"
+    vapi_assistant_id: Optional[str] = None
+    twilio_phone_number: Optional[str] = None
+    vapi_phone_number_id: Optional[str] = None
+    elevenlabs_voice_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -805,6 +849,39 @@ class ProjectStatsResponse(BaseModel):
     completed_calls: int = 0
     conversion_rate: float = 0.0
     avg_duration_seconds: float = 0.0
+
+
+# ===========================================
+# Outbound Call Schemas (M5)
+# ===========================================
+
+class OutboundCallRequest(BaseModel):
+    """Request to initiate an outbound call."""
+    phone_number: str = Field(..., description="Phone number to call (E.164 format)")
+    project_id: UUID = Field(..., description="Project to use for the call")
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class OutboundCallResponse(BaseModel):
+    """Response from initiating an outbound call."""
+    success: bool
+    call_id: Optional[UUID] = None
+    provider_call_id: Optional[str] = None
+    message: str = ""
+    voice_engine: Optional[str] = None
+
+
+class OutboundCallStatusResponse(BaseModel):
+    """Outbound call status."""
+    call_id: UUID
+    status: CallStatus
+    direction: str = "outbound"
+    voice_engine: Optional[str] = None
+    vapi_call_id: Optional[str] = None
+    phone_number: Optional[str] = None
+    started_at: Optional[datetime] = None
+    ended_at: Optional[datetime] = None
+    duration_seconds: Optional[int] = None
 
 
 # Update forward references

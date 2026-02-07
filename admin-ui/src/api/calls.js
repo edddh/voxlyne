@@ -29,3 +29,19 @@ export const reprocessCall = async (id) => {
   const response = await client.post(`/api/calls/${id}/reprocess`)
   return response.data
 }
+
+// M5: Outbound calls
+export const createOutboundCall = async (data) => {
+  const response = await client.post('/api/outbound/call', data)
+  return response.data
+}
+
+export const getOutboundCallStatus = async (id) => {
+  const response = await client.get(`/api/outbound/call/${id}/status`)
+  return response.data
+}
+
+export const hangupOutboundCall = async (id) => {
+  const response = await client.post(`/api/outbound/call/${id}/hangup`)
+  return response.data
+}

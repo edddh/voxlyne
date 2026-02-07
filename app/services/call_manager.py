@@ -1,6 +1,6 @@
 """
 Ascolta - Call Manager Service
-Manages call lifecycle and OpenAI Realtime session orchestration
+Manages call lifecycle for both inbound (OpenAI Realtime) and outbound (Vapi) calls.
 """
 
 import asyncio
@@ -22,14 +22,18 @@ logger = logging.getLogger(__name__)
 
 class CallManager:
     """
-    Manages active calls and their associated Realtime sessions.
+    Manages active calls and their associated sessions.
 
     Responsibilities:
-    - Track active calls
-    - Manage OpenAI Realtime WebSocket sessions
-    - Handle consent flow
+    - Track active inbound calls (OpenAI Realtime WebSocket sessions)
+    - Handle consent flow for inbound calls
     - Process DTMF cancellation
     - Coordinate with GDPR controller
+    - Trigger post-processing pipeline (JSON extraction, PDF, email, CRM)
+
+    Note: Outbound calls via Vapi are managed through the outbound router
+    and webhook_vapi router. The CallManager handles outbound post-processing
+    via the shared _post_process_interview method.
     """
 
     def __init__(self):

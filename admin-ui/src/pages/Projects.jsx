@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Table, Button, Space, Input, Modal, Form, message, Tag, Popconfirm, Typography, Tooltip, Switch, Card, Row, Col
+  Table, Button, Space, Input, Modal, Form, Select, message, Tag, Popconfirm, Typography, Tooltip, Switch, Card, Row, Col, Divider
 } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, HistoryOutlined, EyeOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, HistoryOutlined, EyeOutlined, ApiOutlined } from '@ant-design/icons'
 import * as projectsApi from '../api/projects'
 
 const { Title, Text } = Typography
@@ -49,10 +49,18 @@ function Projects() {
         slug: project.slug,
         description: project.description,
         is_active: project.is_active,
+        voice_engine: project.voice_engine || 'openai_realtime',
+        call_direction: project.call_direction || 'inbound',
+        vapi_assistant_id: project.vapi_assistant_id,
+        twilio_phone_number: project.twilio_phone_number,
+        vapi_phone_number_id: project.vapi_phone_number_id,
+        elevenlabs_voice_id: project.elevenlabs_voice_id,
       })
     } else {
       form.setFieldsValue({
         is_active: true,
+        voice_engine: 'openai_realtime',
+        call_direction: 'inbound',
       })
     }
     setModalOpen(true)
@@ -110,6 +118,25 @@ function Projects() {
       render: (active) => (
         <Tag color={active ? 'green' : 'red'}>{active ? 'Attivo' : 'Inattivo'}</Tag>
       ),
+    },
+    {
+      title: 'Engine',
+      key: 'voice_engine',
+      align: 'center',
+      render: (_, record) => {
+        const engine = record.voice_engine || 'openai_realtime'
+        const direction = record.call_direction || 'inbound'
+        return (
+          <Space direction="vertical" size={0}>
+            <Tag color={engine === 'vapi' ? 'cyan' : 'geekblue'}>
+              {engine === 'vapi' ? 'Vapi' : 'OpenAI RT'}
+            </Tag>
+            <Tag color={direction === 'outbound' ? 'orange' : direction === 'both' ? 'purple' : 'default'} style={{ fontSize: 10 }}>
+              {direction === 'outbound' ? 'Outbound' : direction === 'both' ? 'In+Out' : 'Inbound'}
+            </Tag>
+          </Space>
+        )
+      },
     },
     {
       title: 'Chiamate',
@@ -261,6 +288,56 @@ function Projects() {
               <Switch checkedChildren="Attivo" unCheckedChildren="Inattivo" />
             </Form.Item>
           )}
+          <Divider orientation="left" style={{ fontSize: 13 }}>Voice Engine (M5)</Divider>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="voice_engine" label="Voice Engine">
+                <Select
+                  options={[
+                    { value: 'openai_realtime', label: 'OpenAI Realtime (Inbound)' },
+                    { value: 'vapi', label: 'Vapi + ElevenLabs (Outbound)' },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="call_direction" label="Direzione Chiamata">
+                <Select
+                  options={[
+                    { value: 'inbound', label: 'Solo Inbound' },
+                    { value: 'outbound', label: 'Solo Outbound' },
+                    { value: 'both', label: 'Inbound + Outbound' },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item noStyle shouldUpdate={(prev, curr) => prev.voice_engine !== curr.voice_engine}>
+            {({ getFieldValue }) =>
+              getFieldValue('voice_engine') === 'vapi' ? (
+                <>
+                  <Form.Item name="vapi_assistant_id" label="Vapi Assistant ID">
+                    <Input placeholder="ID assistente Vapi (dalla dashboard Vapi)" />
+                  </Form.Item>
+                  <Row gutter={16}>
+                    <Col span={12}>
+                      <Form.Item name="twilio_phone_number" label="Numero Twilio (da)">
+                        <Input placeholder="+4915123456789" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item name="vapi_phone_number_id" label="Vapi Phone Number ID">
+                        <Input placeholder="ID numero in Vapi" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Form.Item name="elevenlabs_voice_id" label="ElevenLabs Voice ID">
+                    <Input placeholder="ID voce ElevenLabs (tedesco)" />
+                  </Form.Item>
+                </>
+              ) : null
+            }
+          </Form.Item>
           <Form.Item>
             <Space>
               <Button type="primary" htmlType="submit">

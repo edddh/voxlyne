@@ -117,6 +117,42 @@ class Settings(BaseSettings):
     email_enabled: bool = Field(default=False, description="Enable email sending")
 
     # ===========================================
+    # Vapi.ai Configuration (M5)
+    # ===========================================
+    vapi_api_key: Optional[str] = Field(
+        default=None, description="Vapi.ai API key"
+    )
+    vapi_base_url: str = Field(
+        default="https://api.vapi.ai", description="Vapi.ai API base URL"
+    )
+    vapi_phone_number_id: Optional[str] = Field(
+        default=None, description="Vapi phone number ID for outbound calls"
+    )
+
+    # ===========================================
+    # ElevenLabs Configuration (M5)
+    # ===========================================
+    elevenlabs_api_key: Optional[str] = Field(
+        default=None, description="ElevenLabs API key for TTS"
+    )
+    elevenlabs_voice_id: Optional[str] = Field(
+        default=None, description="Default ElevenLabs voice ID (German voice)"
+    )
+
+    # ===========================================
+    # Twilio Configuration (M5)
+    # ===========================================
+    twilio_account_sid: Optional[str] = Field(
+        default=None, description="Twilio Account SID"
+    )
+    twilio_auth_token: Optional[str] = Field(
+        default=None, description="Twilio Auth Token"
+    )
+    twilio_phone_number: Optional[str] = Field(
+        default=None, description="Default Twilio phone number for outbound (E.164)"
+    )
+
+    # ===========================================
     # CRM Integration (M3)
     # ===========================================
     crm_sync_enabled: bool = Field(

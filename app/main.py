@@ -19,7 +19,7 @@ from app.database.db import (
     run_migrations,
 )
 from app.models.schemas import ErrorResponse, HealthResponse
-from app.routers import analytics, api, auth, calendar, calls, crm, health, prompts, tenants, users, webhook
+from app.routers import analytics, api, auth, calendar, calls, crm, health, outbound, prompts, tenants, users, webhook, webhook_vapi
 from app.services.session_cleanup import SessionCleanup
 
 # ===========================================
@@ -135,8 +135,8 @@ async def root():
     """Root endpoint - API information."""
     return {
         "name": "Ascolta",
-        "version": "4.0.0-alpha",
-        "milestone": "M4 - Admin Panel + Multi-Tenant + Prompt Versioning",
+        "version": "5.0.0-alpha",
+        "milestone": "M5 - Dual Voice Engine + Outbound Calling",
         "status": "running",
         "docs": "/docs" if not settings.is_production else None,
     }
@@ -194,6 +194,12 @@ app.include_router(analytics.router, tags=["Analytics"])
 
 # Calls router (M4: Enhanced calls management)
 app.include_router(calls.router, tags=["Calls V2"])
+
+# Outbound router (M5: Outbound call management)
+app.include_router(outbound.router, tags=["Outbound"])
+
+# Vapi webhook router (M5: Vapi.ai events)
+app.include_router(webhook_vapi.router, prefix="/api", tags=["Webhook Vapi"])
 
 
 # ===========================================

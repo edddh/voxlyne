@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Table, Button, Space, Input, Select, DatePicker, Typography, Tag, Card, Row, Col, Statistic
+  Table, Button, Space, Input, Select, DatePicker, Typography, Tag, Card, Row, Col, Statistic, Modal, Form, message
 } from 'antd'
 import {
   SearchOutlined, PhoneOutlined, FileTextOutlined, FilePdfOutlined, EyeOutlined,
-  CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined
+  CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, PhoneFilled
 } from '@ant-design/icons'
 import * as callsApi from '../api/calls'
 import * as projectsApi from '../api/projects'
@@ -30,6 +30,11 @@ function Calls() {
 
   // Stats
   const [stats, setStats] = useState({ today: 0, completed: 0, processing: 0 })
+
+  // Outbound call modal
+  const [outboundModalOpen, setOutboundModalOpen] = useState(false)
+  const [outboundLoading, setOutboundLoading] = useState(false)
+  const [outboundForm] = Form.useForm()
 
   useEffect(() => {
     loadProjects()
@@ -81,6 +86,30 @@ function Calls() {
     }
   }
 
+  // M5: Outbound call
+  const outboundProjects = projects.filter(p =>
+    (p.call_direction === 'outbound' || p.call_direction === 'both') && p.voice_engine === 'vapi'
+  )
+
+  const handleOutboundCall = async (values) => {
+    setOutboundLoading(true)
+    try {
+      const result = await callsApi.createOutboundCall({
+        phone_number: values.phone_number,
+        project_id: values.project_id,
+      })
+      message.success(`Chiamata avviata: ${result.call_id}`)
+      setOutboundModalOpen(false)
+      outboundForm.resetFields()
+      loadCalls()
+    } catch (error) {
+      const msg = error.response?.data?.detail || 'Errore avvio chiamata'
+      message.error(msg)
+    } finally {
+      setOutboundLoading(false)
+    }
+  }
+
   const getStatusConfig = (status) => {
     const configs = {
       pending_consent: { color: 'default', icon: <ClockCircleOutlined />, label: 'In attesa consenso' },
@@ -113,6 +142,20 @@ function Calls() {
           <Text copyable={{ text: phone }}>{phone}</Text>
         </Space>
       ),
+    },
+    {
+      title: 'Dir.',
+      key: 'direction',
+      align: 'center',
+      width: 60,
+      render: (_, record) => {
+        const dir = record.direction || 'inbound'
+        return (
+          <Tag color={dir === 'outbound' ? 'orange' : 'default'} style={{ fontSize: 10 }}>
+            {dir === 'outbound' ? 'OUT' : 'IN'}
+          </Tag>
+        )
+      },
     },
     {
       title: 'Candidato',
@@ -202,7 +245,18 @@ function Calls() {
 
   return (
     <div>
-      <Title level={3} style={{ marginBottom: 24 }}>Chiamate</Title>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <Title level={3} style={{ margin: 0 }}>Chiamate</Title>
+        <Button
+          type="primary"
+          icon={<PhoneFilled />}
+          onClick={() => setOutboundModalOpen(true)}
+          disabled={outboundProjects.length === 0}
+          title={outboundProjects.length === 0 ? 'Nessun progetto configurato per outbound (Vapi)' : ''}
+        >
+          Nuova Chiamata Outbound
+        </Button>
+      </div>
 
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         <Col span={8}>
@@ -305,6 +359,51 @@ function Calls() {
           showTotal: (t) => `Totale: ${t} chiamate`,
         }}
       />
+
+      {/* M5: Outbound Call Modal */}
+      <Modal
+        title="Nuova Chiamata Outbound"
+        open={outboundModalOpen}
+        onCancel={() => { setOutboundModalOpen(false); outboundForm.resetFields() }}
+        footer={null}
+        width={500}
+      >
+        <Form form={outboundForm} layout="vertical" onFinish={handleOutboundCall}>
+          <Form.Item
+            name="phone_number"
+            label="Numero di Telefono"
+            rules={[
+              { required: true, message: 'Inserisci numero di telefono' },
+              { pattern: /^\+?[0-9\s\-()]+$/, message: 'Formato numero non valido' },
+            ]}
+          >
+            <Input placeholder="+49 151 23456789" prefix={<PhoneOutlined />} />
+          </Form.Item>
+          <Form.Item
+            name="project_id"
+            label="Progetto"
+            rules={[{ required: true, message: 'Seleziona un progetto' }]}
+          >
+            <Select
+              placeholder="Seleziona progetto outbound..."
+              options={outboundProjects.map(p => ({
+                value: p.id,
+                label: `${p.name} (${p.language || 'it'})`,
+              }))}
+            />
+          </Form.Item>
+          <Form.Item>
+            <Space>
+              <Button type="primary" htmlType="submit" loading={outboundLoading} icon={<PhoneFilled />}>
+                Avvia Chiamata
+              </Button>
+              <Button onClick={() => { setOutboundModalOpen(false); outboundForm.resetFields() }}>
+                Annulla
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   )
 }
