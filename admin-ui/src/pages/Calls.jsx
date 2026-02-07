@@ -110,6 +110,39 @@ function Calls() {
     }
   }
 
+  const handleDownloadPDF = async (callId) => {
+    try {
+      const blob = await callsApi.downloadCallPdf(callId)
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `call_${callId}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      message.error('Errore download PDF')
+    }
+  }
+
+  const handleDownloadJSON = async (callId) => {
+    try {
+      const data = await callsApi.getCallJson(callId)
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `call_${callId}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      message.error('Errore download JSON')
+    }
+  }
+
   const getStatusConfig = (status) => {
     const configs = {
       pending_consent: { color: 'default', icon: <ClockCircleOutlined />, label: 'In attesa consenso' },
@@ -201,10 +234,24 @@ function Calls() {
       render: (_, record) => (
         <Space>
           {record.has_record && (
-            <Tag color="blue" icon={<FileTextOutlined />}>JSON</Tag>
+            <Button
+              type="link"
+              size="small"
+              icon={<FileTextOutlined />}
+              onClick={() => handleDownloadJSON(record.id)}
+            >
+              JSON
+            </Button>
           )}
           {record.has_pdf && (
-            <Tag color="green" icon={<FilePdfOutlined />}>PDF</Tag>
+            <Button
+              type="link"
+              size="small"
+              icon={<FilePdfOutlined />}
+              onClick={() => handleDownloadPDF(record.id)}
+            >
+              PDF
+            </Button>
           )}
           {!record.has_record && !record.has_pdf && (
             <Text type="secondary">-</Text>

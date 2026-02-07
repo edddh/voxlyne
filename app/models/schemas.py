@@ -309,6 +309,97 @@ class Project(ProjectBase):
 
 
 # ===========================================
+# Template Schemas (M4+)
+# ===========================================
+
+class TemplateCreate(BaseModel):
+    """Schema for creating a template (super_admin only)."""
+    name: str = Field(..., min_length=1, max_length=255)
+    slug: str = Field(..., min_length=1, max_length=100, pattern="^[a-z0-9-]+$")
+    type: ProjectType = ProjectType.RECRUITING
+    template_category: Optional[str] = Field(None, max_length=50)
+    description: Optional[str] = None
+    prompt_a: str = Field(..., min_length=100, description="Conversation prompt template")
+    prompt_b: str = Field(..., min_length=100, description="Extraction prompt template")
+    consent_message: Optional[str] = None
+    voice_name: str = "alloy"
+    language: str = "it"
+
+
+class TemplateUpdate(BaseModel):
+    """Schema for updating a template (super_admin only)."""
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = None
+    template_category: Optional[str] = Field(None, max_length=50)
+    prompt_a: Optional[str] = Field(None, min_length=100)
+    prompt_b: Optional[str] = Field(None, min_length=100)
+    consent_message: Optional[str] = None
+    voice_name: Optional[str] = None
+    language: Optional[str] = None
+
+
+class TemplateResponse(BaseModel):
+    """Complete template response."""
+    id: UUID
+    name: str
+    slug: str
+    type: ProjectType
+    template_category: Optional[str]
+    description: Optional[str]
+    prompt_a: str
+    prompt_b: str
+    consent_message: Optional[str]
+    voice_name: str
+    language: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class TemplateListResponse(BaseModel):
+    """List of templates."""
+    templates: List[TemplateResponse]
+    total: int
+
+
+class TemplateAssignmentCreate(BaseModel):
+    """Schema for assigning template to tenants."""
+    tenant_ids: List[UUID] = Field(..., min_items=1, description="List of tenant IDs to assign")
+
+
+class TemplateAssignment(BaseModel):
+    """Template assignment to tenant."""
+    id: UUID
+    template_id: UUID
+    tenant_id: UUID
+    is_active: bool
+    assigned_by: Optional[UUID]
+    assigned_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class TemplateAssignmentListResponse(BaseModel):
+    """List of template assignments."""
+    assignments: List[TemplateAssignment]
+    total: int
+
+
+class ProjectCreateFromTemplate(BaseModel):
+    """Schema for creating a project from a template."""
+    name: str = Field(..., min_length=1, max_length=255)
+    slug: str = Field(..., min_length=1, max_length=100, pattern="^[a-z0-9-]+$")
+    description: Optional[str] = None
+    # Optional overrides (defaults from template)
+    voice_name: Optional[str] = None
+    language: Optional[str] = None
+
+
+# ===========================================
 # Record Schemas (M2)
 # ===========================================
 

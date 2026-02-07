@@ -5,8 +5,10 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Users from './pages/Users'
 import Tenants from './pages/Tenants'
+import Templates from './pages/Templates'
 import Projects from './pages/Projects'
 import ProjectEdit from './pages/ProjectEdit'
+import ProjectConfig from './pages/ProjectConfig'
 import PromptHistory from './pages/PromptHistory'
 import Calls from './pages/Calls'
 import CallDetail from './pages/CallDetail'
@@ -54,8 +56,17 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="templates"
+          element={
+            <ProtectedRoute allowedRoles={['super_admin']}>
+              <Templates />
+            </ProtectedRoute>
+          }
+        />
         <Route path="projects" element={<Projects />} />
         <Route path="projects/:id/edit" element={<ProjectEdit />} />
+        <Route path="projects/:id/config" element={<ProjectConfig />} />
         <Route path="projects/:id/history" element={<PromptHistory />} />
         <Route path="calls" element={<Calls />} />
         <Route path="calls/:id" element={<CallDetail />} />

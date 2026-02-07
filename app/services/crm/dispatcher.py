@@ -233,39 +233,53 @@ class CRMDispatcher:
             return False
 
     async def _get_crm_config(self, call_id: UUID) -> Optional[CRMConfig]:
-        """Fetch CRM config from project's output_config."""
+        """Fetch CRM config from project_crm_config table (M4+)."""
         db = get_database()
 
-        result = await db.fetch_one(
-            """
-            SELECT p.output_config
-            FROM calls c
-            JOIN projects p ON c.project_id = p.id
-            WHERE c.id = :call_id
-            """,
-            {"call_id": str(call_id)},
+        # Get project_id from call
+        call_data = await db.fetch_one(
+            "SELECT project_id FROM calls WHERE id = :call_id",
+            {"call_id": str(call_id)}
         )
 
-        if not result:
-            # Fallback: try default project
-            result = await db.fetch_one(
-                """
-                SELECT p.output_config
-                FROM projects p
-                JOIN settings s ON s.key = 'default_project_slug' AND p.slug = s.value
-                LIMIT 1
-                """
-            )
-
-        if not result:
+        if not call_data or not call_data["project_id"]:
+            logger.warning(f"Call {call_id} has no project_id, CRM sync skipped")
             return None
 
-        output_config = result["output_config"]
-        if isinstance(output_config, str):
-            output_config = json.loads(output_config)
+        # Query project_crm_config (M4+)
+        config = await db.fetch_one(
+            """
+            SELECT enabled, provider, hubspot_api_key_encrypted, hubspot_portal_id,
+                   webhook_url, webhook_secret_encrypted, config
+            FROM project_crm_config
+            WHERE project_id = :project_id AND enabled = TRUE
+            """,
+            {"project_id": str(call_data["project_id"])}
+        )
 
-        crm_data = output_config.get("crm") if output_config else None
-        return CRMConfig.from_dict(crm_data)
+        if not config:
+            logger.info(f"No CRM config for project {call_data['project_id']}, sync skipped")
+            return None
+
+        # Decrypt API keys
+        from app.services.encryption import decrypt
+
+        credentials = {}
+        if config["provider"] == "hubspot":
+            if config["hubspot_api_key_encrypted"]:
+                credentials["api_key"] = decrypt(config["hubspot_api_key_encrypted"])
+            credentials["portal_id"] = config["hubspot_portal_id"]
+        elif config["provider"] == "webhook":
+            credentials["url"] = config["webhook_url"]
+            if config["webhook_secret_encrypted"]:
+                credentials["secret"] = decrypt(config["webhook_secret_encrypted"])
+
+        return CRMConfig(
+            enabled=True,
+            provider=config["provider"],
+            credentials=credentials,
+            config=config["config"] or {}
+        )
 
 
     async def _create_sync_log(

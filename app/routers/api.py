@@ -48,6 +48,32 @@ def _serialize_project(project_row) -> dict:
 # Projects
 # ===========================================
 
+@router.get("/projects/templates", response_model=List[Project])
+async def list_assigned_templates(
+    current_user: CurrentUser = Depends(require_roles(["admin", "creator"]))
+):
+    """
+    List templates assigned to current user's tenant.
+
+    Returns templates that can be used to create new projects.
+    """
+    db = get_database()
+
+    query = """
+        SELECT p.* FROM projects p
+        INNER JOIN template_assignments ta ON p.id = ta.template_id
+        WHERE p.is_template = TRUE
+          AND ta.tenant_id = :tenant_id
+          AND ta.is_active = TRUE
+          AND p.is_active = TRUE
+        ORDER BY p.created_at DESC
+    """
+
+    templates = await db.fetch_all(query, {"tenant_id": str(current_user.tenant_id)})
+
+    return [_serialize_project(t) for t in templates]
+
+
 @router.get("/projects", response_model=List[Project])
 async def list_projects(
     active_only: bool = Query(True, description="Only return active projects")
@@ -71,6 +97,95 @@ async def list_projects(
     projects = await db.fetch_all(query)
 
     return [_serialize_project(p) for p in projects]
+
+
+@router.post("/projects/from-template/{template_id}", response_model=Project, status_code=status.HTTP_201_CREATED)
+async def create_project_from_template(
+    template_id: UUID,
+    name: str = Query(..., min_length=1),
+    slug: str = Query(..., pattern="^[a-z0-9-]+$"),
+    description: str = Query(None),
+    current_user: CurrentUser = Depends(require_roles(["admin", "creator"]))
+):
+    """
+    Create a new project from a template.
+
+    Copies prompt_a, prompt_b from template and creates:
+    - Project with is_template=FALSE, tenant_id=current_user.tenant_id
+    - Prompt placeholders entry with defaults
+    - Project CRM config entry (disabled)
+    - Project calendar config entry (disabled)
+    """
+    db = get_database()
+
+    # Verify template exists and is assigned to tenant
+    template = await db.fetch_one(
+        """
+        SELECT p.* FROM projects p
+        INNER JOIN template_assignments ta ON p.id = ta.template_id
+        WHERE p.id = :template_id
+          AND p.is_template = TRUE
+          AND ta.tenant_id = :tenant_id
+          AND ta.is_active = TRUE
+        """,
+        {"template_id": str(template_id), "tenant_id": str(current_user.tenant_id)}
+    )
+
+    if not template:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Template not found or not assigned to your tenant"
+        )
+
+    # Check slug uniqueness
+    existing = await db.fetch_one(
+        "SELECT id FROM projects WHERE slug = :slug",
+        {"slug": slug}
+    )
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Project with slug '{slug}' already exists"
+        )
+
+    # Create project from template
+    project_id = await db.execute(
+        """
+        INSERT INTO projects (
+            tenant_id, name, slug, type, description,
+            prompt_a, prompt_b, consent_message, voice_name, language,
+            is_template, from_template_id, created_by
+        ) VALUES (
+            :tenant_id, :name, :slug, :type, :description,
+            :prompt_a, :prompt_b, :consent_message, :voice_name, :language,
+            FALSE, :template_id, :created_by
+        ) RETURNING id
+        """,
+        {
+            "tenant_id": str(current_user.tenant_id),
+            "name": name,
+            "slug": slug,
+            "type": template["type"],
+            "description": description or template["description"],
+            "prompt_a": template["prompt_a"],
+            "prompt_b": template["prompt_b"],
+            "consent_message": template["consent_message"],
+            "voice_name": template["voice_name"],
+            "language": template["language"],
+            "template_id": str(template_id),
+            "created_by": str(current_user.id),
+        }
+    )
+
+    # Create default prompt placeholders
+    await db.execute(
+        "INSERT INTO prompt_placeholders (project_id) VALUES (:project_id) ON CONFLICT DO NOTHING",
+        {"project_id": str(project_id)}
+    )
+
+    # Return created project
+    project = await db.fetch_one("SELECT * FROM projects WHERE id = :id", {"id": str(project_id)})
+    return _serialize_project(project)
 
 
 @router.get("/projects/{project_identifier}", response_model=Project)

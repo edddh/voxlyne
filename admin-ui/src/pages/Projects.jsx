@@ -505,6 +505,13 @@ function Projects() {
               onClick={() => openModal(record)}
             />
           </Tooltip>
+          <Tooltip title="Configura (SIP, CRM, Calendar)">
+            <Button
+              icon={<ApiOutlined />}
+              size="small"
+              onClick={() => navigate(`/projects/${record.id}/config`)}
+            />
+          </Tooltip>
           {record.slug !== 'default' && (
             <Popconfirm
               title="Disattivare questo progetto?"
@@ -527,9 +534,14 @@ function Projects() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <Title level={3} style={{ margin: 0 }}>Progetti</Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>
-          Nuovo Progetto
-        </Button>
+        <Space>
+          <Button type="default" onClick={() => message.info('Template selection coming soon')}>
+            Crea da Template
+          </Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>
+            Nuovo Progetto
+          </Button>
+        </Space>
       </div>
 
       <Input

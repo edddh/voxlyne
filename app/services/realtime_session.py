@@ -154,9 +154,11 @@ class RealtimeSession:
         """
         if not transcript:
             return False
-        message_text = (self.settings.cancellation_message_text or "").strip()
-        if not message_text:
-            message_text = "Va bene, procedo con la cancellazione della telefonata."
+        # Use placeholders loaded from DB (M4+)
+        message_text = getattr(self, "_placeholders", {}).get(
+            "cancel_phrase",
+            "Va bene, procedo con la cancellazione della telefonata."
+        )
         normalized_transcript = self._normalize_text(transcript)
         normalized_phrase = self._normalize_text(message_text)
         return normalized_phrase and normalized_phrase in normalized_transcript
@@ -167,9 +169,11 @@ class RealtimeSession:
         """
         if not transcript:
             return False
-        message_text = (self.settings.goodbye_message_text or "").strip()
-        if not message_text:
-            message_text = "Le auguro una buona giornata! Arrivederci."
+        # Use placeholders loaded from DB (M4+)
+        message_text = getattr(self, "_placeholders", {}).get(
+            "goodbye_phrase",
+            "Le auguro una buona giornata! Arrivederci."
+        )
         normalized_transcript = self._normalize_text(transcript)
         normalized_phrase = self._normalize_text(message_text)
         return normalized_phrase and normalized_phrase in normalized_transcript
@@ -270,17 +274,64 @@ class RealtimeSession:
         finally:
             self._finalized = True
 
+    async def _load_project_placeholders(self) -> dict:
+        """
+        Load prompt placeholders from database for the call's project.
+        Falls back to default values if not found.
+        """
+        db = get_database()
+
+        # Get project_id from call
+        call_data = await db.fetch_one(
+            "SELECT project_id FROM calls WHERE id = :call_id",
+            {"call_id": str(self.call_id)}
+        )
+
+        if not call_data or not call_data["project_id"]:
+            # No project associated, use defaults
+            logger.warning(f"Call {self.call_id} has no project_id, using default placeholders")
+            return {
+                "cancel_phrase": "Va bene, procedo con la cancellazione della telefonata.",
+                "cancellation_confirmation": "Cancellazione dei dati della telefonata eseguita.",
+                "goodbye_phrase": "Le auguro una buona giornata! Arrivederci.",
+            }
+
+        # Load placeholders from project config
+        placeholders = await db.fetch_one(
+            """
+            SELECT cancel_phrase, cancellation_confirmation, goodbye_phrase, intent_config
+            FROM prompt_placeholders
+            WHERE project_id = :project_id
+            """,
+            {"project_id": str(call_data["project_id"])}
+        )
+
+        if not placeholders:
+            # No custom placeholders, use defaults
+            logger.info(f"No custom placeholders for project {call_data['project_id']}, using defaults")
+            return {
+                "cancel_phrase": "Va bene, procedo con la cancellazione della telefonata.",
+                "cancellation_confirmation": "Cancellazione dei dati della telefonata eseguita.",
+                "goodbye_phrase": "Le auguro una buona giornata! Arrivederci.",
+            }
+
+        return {
+            "cancel_phrase": placeholders["cancel_phrase"],
+            "cancellation_confirmation": placeholders["cancellation_confirmation"],
+            "goodbye_phrase": placeholders["goodbye_phrase"],
+        }
+
     async def _configure_session(self) -> None:
         """
         Configure the Realtime session with system prompt and settings.
         """
         is_sip_call = self.openai_session_id and self.openai_session_id.startswith("rtc_")
-        cancel_phrase = (self.settings.cancellation_message_text or "").strip()
-        if not cancel_phrase:
-            cancel_phrase = "Va bene, procedo con la cancellazione della telefonata."
-        goodbye_phrase = (self.settings.goodbye_message_text or "").strip()
-        if not goodbye_phrase:
-            goodbye_phrase = "Le auguro una buona giornata! Arrivederci."
+
+        # Load placeholders from database (M4+)
+        self._placeholders = await self._load_project_placeholders()
+        cancel_phrase = self._placeholders["cancel_phrase"]
+        goodbye_phrase = self._placeholders["goodbye_phrase"]
+
         instructions = DEFAULT_PROMPT_A.format(
             cancel_phrase=cancel_phrase,
             goodbye_phrase=goodbye_phrase,

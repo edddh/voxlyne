@@ -19,7 +19,7 @@ from app.database.db import (
     run_migrations,
 )
 from app.models.schemas import ErrorResponse, HealthResponse
-from app.routers import analytics, api, auth, calendar, calls, credentials, crm, health, outbound, prompts, tenants, users, webhook, webhook_vapi
+from app.routers import analytics, api, auth, calendar, calls, credentials, crm, health, outbound, project_config, prompt_blocks, prompts, templates, tenants, users, webhook, webhook_vapi
 from app.services.session_cleanup import SessionCleanup
 
 # ===========================================
@@ -188,6 +188,15 @@ app.include_router(tenants.router, tags=["Tenants"])
 
 # Prompts router (M4: Prompt versioning)
 app.include_router(prompts.router, tags=["Prompts"])
+
+# Templates router (M4+: Template management)
+app.include_router(templates.router, tags=["Templates"])
+
+# Prompt Blocks router (M4+: Prompt composer blocks)
+app.include_router(prompt_blocks.router, tags=["Prompt Blocks"])
+
+# Project Config router (M4+: SIP, CRM, Calendar, Placeholders)
+app.include_router(project_config.router, tags=["Project Configuration"])
 
 # Analytics router (M4: Dashboard stats)
 app.include_router(analytics.router, tags=["Analytics"])

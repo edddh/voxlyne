@@ -47,7 +47,13 @@ class Settings(BaseSettings):
     # ===========================================
     # Security
     # ===========================================
-    secret_key: str = Field(..., description="Secret key for session signing")
+    secret_key: str = Field(..., description="Secret key for session signing and JWT")
+    encryption_key: Optional[str] = Field(
+        default=None,
+        description="Fernet encryption key for sensitive data (API keys, passwords, OAuth tokens). "
+                    "Generate with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'. "
+                    "If not set, falls back to secret_key."
+    )
     admin_username: str = Field(default="admin", description="Admin username")
     admin_password: str = Field(..., description="Admin password")
 

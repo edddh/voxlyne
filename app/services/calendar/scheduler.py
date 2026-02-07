@@ -250,28 +250,51 @@ class CalendarScheduler:
             )
 
     async def _get_calendar_config(self, call_id: UUID) -> Optional[CalendarConfig]:
-        """Fetch calendar config from project's output_config."""
+        """Fetch calendar config from project_calendar_config table (M4+)."""
         db = get_database()
 
-        result = await db.fetch_one(
-            """
-            SELECT p.output_config
-            FROM calls c
-            JOIN projects p ON c.project_id = p.id
-            WHERE c.id = :call_id
-            """,
-            {"call_id": str(call_id)},
+        # Get project_id from call
+        call_data = await db.fetch_one(
+            "SELECT project_id FROM calls WHERE id = :call_id",
+            {"call_id": str(call_id)}
         )
 
-        if not result:
+        if not call_data or not call_data["project_id"]:
+            logger.warning(f"Call {call_id} has no project_id, calendar sync skipped")
             return None
 
-        output_config = result["output_config"]
-        if isinstance(output_config, str):
-            output_config = json.loads(output_config)
+        # Query project_calendar_config (M4+)
+        config = await db.fetch_one(
+            """
+            SELECT enabled, provider, access_token_encrypted, refresh_token_encrypted,
+                   expires_at, calendar_id, timezone, config
+            FROM project_calendar_config
+            WHERE project_id = :project_id AND enabled = TRUE
+            """,
+            {"project_id": str(call_data["project_id"])}
+        )
 
-        calendar_data = output_config.get("calendar") if output_config else None
-        return CalendarConfig.from_dict(calendar_data)
+        if not config:
+            logger.info(f"No calendar config for project {call_data['project_id']}, calendar sync skipped")
+            return None
+
+        # Decrypt OAuth tokens
+        from app.services.encryption import decrypt
+
+        credentials = {}
+        if config["access_token_encrypted"]:
+            credentials["access_token"] = decrypt(config["access_token_encrypted"])
+        if config["refresh_token_encrypted"]:
+            credentials["refresh_token"] = decrypt(config["refresh_token_encrypted"])
+
+        return CalendarConfig(
+            enabled=True,
+            provider=config["provider"],
+            credentials=credentials,
+            calendar_id=config["calendar_id"] or "primary",
+            timezone=config["timezone"] or "Europe/Rome",
+            config=config["config"] or {}
+        )
 
     async def _get_provider(
         self,
