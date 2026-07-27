@@ -1,5 +1,9 @@
 # Ascolta - Git Ignore
 
+# Node
+node_modules/
+admin-ui/dist/
+
 # Environment variables
 .env
 .env.local

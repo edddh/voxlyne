@@ -103,7 +103,7 @@ class GenericWebhookProvider(BaseCRMProvider):
         # Build headers
         headers = {
             "Content-Type": "application/json",
-            "User-Agent": "LegacyPrototype/1.0",
+            "User-Agent": "Ascolta/1.0",
             **self.custom_headers,
         }
 
