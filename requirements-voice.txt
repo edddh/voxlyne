@@ -1,0 +1,21 @@
+# Optional dependencies for the new voice/telephony providers ported from earlier-prototype
+# (LiveKit + xAI/OpenAI realtime, ElevenLabs conversational agent).
+#
+# NOT merged into requirements.txt yet: livekit-agents requires openai>=2.x and
+# websockets>=15, while the existing openai_realtime engine (app/services/voice/
+# openai_realtime.py, app/services/realtime_session.py) is pinned to openai==1.59.5 /
+# websockets==14.1. Bumping those pins must be regression-tested against the
+# existing production OpenAI-Realtime call flow before merging - deferred to the
+# "first end-to-end new provider" implementation phase (see README Milestone 5).
+#
+# Install into a separate venv/service (e.g. the voice-worker container) until
+# that regression pass is done, rather than into the main app's environment.
+
+livekit==1.1.13
+livekit-agents==1.6.6
+livekit-api==1.2.0
+livekit-plugins-openai==1.6.6
+livekit-plugins-xai==1.6.6
+openai==2.47.0
+websockets==15.0.1
+httpx==0.28.1
