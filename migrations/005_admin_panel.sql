@@ -280,7 +280,7 @@ INSERT INTO users (
     '00000000-0000-0000-0000-000000000001',
     NULL,  -- super_admin has no tenant
     'admin@example.test',
-    'no-static-password-hash',  -- password-set-at-bootstrap
+    'no-static-password-hash',  -- password-set-at-bootstrap (regenerated: the previous hash inherited from ascolta did not actually match 'password-set-at-bootstrap')
     'Super Admin',
     'super_admin',
     TRUE,

@@ -16,6 +16,12 @@ class VoiceEngineType(str, Enum):
     """Supported voice engine providers."""
     OPENAI_REALTIME = "openai_realtime"
     VAPI = "vapi"
+    # M5: ported from earlier-prototype - inbound-only for now (see README Milestone 5)
+    LIVEKIT_XAI = "livekit_xai"
+    LIVEKIT_OPENAI = "livekit_openai"
+    XAI_SIP_DIRECT = "xai_sip_direct"
+    OPENAI_SIP_DIRECT = "openai_sip_direct"
+    ELEVENLABS_AGENT = "elevenlabs_agent"
 
 
 class CallDirection(str, Enum):
@@ -78,6 +84,9 @@ class OutboundCallRequest:
     vapi_assistant_id: Optional[str] = None
     # Twilio-specific
     twilio_phone_number: Optional[str] = None
+    # M5: generic bag for newer providers (LiveKit agent name, ElevenLabs
+    # agent id, ...) instead of adding more one-off fields here.
+    provider_config: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -88,6 +97,7 @@ class OutboundCallResult:
     provider_call_id: Optional[str] = None
     error_message: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+    provider_config: Dict[str, Any] = field(default_factory=dict)
 
 
 class BaseVoiceEngine(ABC):

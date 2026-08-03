@@ -125,7 +125,7 @@ function AppLayout() {
             borderBottom: '1px solid rgba(255,255,255,0.1)',
           }}
         >
-          {collapsed ? 'AT' : 'Ascolta'}
+          {collapsed ? 'XC' : 'Ascolta'}
         </div>
         <Menu
           theme="dark"

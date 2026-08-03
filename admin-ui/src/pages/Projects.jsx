@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Table, Button, Space, Input, Modal, Form, Select, message, Tag, Popconfirm, Typography, Tooltip, Switch, Card, Row, Col, Divider, Spin
+  Table, Button, Space, Input, Modal, Form, Select, message, Tag, Popconfirm, Typography, Tooltip, Switch, Card, Row, Col, Divider, Spin, Alert
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, HistoryOutlined, SettingOutlined, ApiOutlined, CheckOutlined, InfoCircleOutlined } from '@ant-design/icons'
 import * as projectsApi from '../api/projects'
@@ -9,6 +9,8 @@ import * as credentialsApi from '../api/credentials'
 
 const { Title, Text } = Typography
 const { TextArea } = Input
+
+const NEW_VOICE_ENGINES = ['livekit_xai', 'livekit_openai', 'xai_sip_direct', 'openai_sip_direct', 'elevenlabs_agent']
 
 function Projects() {
   const navigate = useNavigate()
@@ -64,6 +66,7 @@ function Projects() {
         slug: project.slug,
         description: project.description,
         is_active: project.is_active,
+        language: project.language || 'it',
         voice_engine: project.voice_engine || 'openai_realtime',
         call_direction: project.call_direction || 'inbound',
         vapi_assistant_id: project.vapi_assistant_id,
@@ -76,6 +79,7 @@ function Projects() {
     } else {
       form.setFieldsValue({
         is_active: true,
+        language: 'it',
         voice_engine: 'openai_realtime',
         call_direction: 'inbound',
       })
@@ -427,6 +431,16 @@ function Projects() {
       ),
     },
     {
+      title: 'Lingua',
+      dataIndex: 'language',
+      key: 'language',
+      align: 'center',
+      render: (lang) => {
+        const flags = { it: '🇮🇹', en: '🇬🇧', es: '🇪🇸', fr: '🇫🇷', de: '🇩🇪' }
+        return <span>{flags[lang] || '🌐'} {(lang || 'it').toUpperCase()}</span>
+      },
+    },
+    {
       title: 'Engine',
       key: 'voice_engine',
       align: 'center',
@@ -602,11 +616,28 @@ function Projects() {
           >
             <TextArea rows={3} placeholder="Descrizione del progetto..." />
           </Form.Item>
-          {editingProject && (
-            <Form.Item name="is_active" label="Stato" valuePropName="checked">
-              <Switch checkedChildren="Attivo" unCheckedChildren="Inattivo" />
-            </Form.Item>
-          )}
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="language" label="Lingua chiamata">
+                <Select
+                  options={[
+                    { value: 'it', label: '🇮🇹 Italiano' },
+                    { value: 'en', label: '🇬🇧 English' },
+                    { value: 'es', label: '🇪🇸 Español' },
+                    { value: 'fr', label: '🇫🇷 Français' },
+                    { value: 'de', label: '🇩🇪 Deutsch' },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+            {editingProject && (
+              <Col span={12}>
+                <Form.Item name="is_active" label="Stato" valuePropName="checked">
+                  <Switch checkedChildren="Attivo" unCheckedChildren="Inattivo" />
+                </Form.Item>
+              </Col>
+            )}
+          </Row>
           <Divider orientation="left" style={{ fontSize: 13 }}>Voice Engine (M5)</Divider>
           <Row gutter={16}>
             <Col span={12}>
@@ -615,22 +646,51 @@ function Projects() {
                   options={[
                     { value: 'openai_realtime', label: 'OpenAI Realtime (Inbound)' },
                     { value: 'vapi', label: 'Vapi + ElevenLabs (Outbound)' },
+                    { value: 'livekit_xai', label: 'LiveKit + xAI (Inbound, in sviluppo)' },
+                    { value: 'livekit_openai', label: 'LiveKit + OpenAI (Inbound, in sviluppo)' },
+                    { value: 'xai_sip_direct', label: 'SIP diretto + xAI voice-to-voice (Inbound, in sviluppo)' },
+                    { value: 'openai_sip_direct', label: 'SIP diretto + OpenAI (Inbound, in sviluppo)' },
+                    { value: 'elevenlabs_agent', label: 'ElevenLabs Agent (Inbound, in sviluppo)' },
                   ]}
                 />
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="call_direction" label="Direzione Chiamata">
-                <Select
-                  options={[
-                    { value: 'inbound', label: 'Solo Inbound' },
-                    { value: 'outbound', label: 'Solo Outbound' },
-                    { value: 'both', label: 'Inbound + Outbound' },
-                  ]}
-                />
+              <Form.Item noStyle shouldUpdate={(prev, curr) => prev.voice_engine !== curr.voice_engine}>
+                {({ getFieldValue }) => {
+                  const isNewProvider = NEW_VOICE_ENGINES.includes(getFieldValue('voice_engine'))
+                  return (
+                    <Form.Item name="call_direction" label="Direzione Chiamata">
+                      <Select
+                        options={
+                          isNewProvider
+                            ? [{ value: 'inbound', label: 'Solo Inbound' }]
+                            : [
+                                { value: 'inbound', label: 'Solo Inbound' },
+                                { value: 'outbound', label: 'Solo Outbound' },
+                                { value: 'both', label: 'Inbound + Outbound' },
+                              ]
+                        }
+                      />
+                    </Form.Item>
+                  )
+                }}
               </Form.Item>
             </Col>
           </Row>
+          <Form.Item noStyle shouldUpdate={(prev, curr) => prev.voice_engine !== curr.voice_engine}>
+            {({ getFieldValue }) =>
+              NEW_VOICE_ENGINES.includes(getFieldValue('voice_engine')) ? (
+                <Alert
+                  type="warning"
+                  showIcon
+                  style={{ marginBottom: 16 }}
+                  message="Provider in fase di completamento"
+                  description="Questo motore vocale è stato importato da earlier-prototype (voice_core/runtime) ma non è ancora collegato alla pipeline di simulazione di test: selezionabile e salvabile, ma una chiamata in ingresso userà ancora il fallback finché l'integrazione non è completata (vedi README, Milestone 5)."
+                />
+              ) : null
+            }
+          </Form.Item>
           <Form.Item noStyle shouldUpdate={(prev, curr) => prev.voice_engine !== curr.voice_engine}>
             {({ getFieldValue }) =>
               getFieldValue('voice_engine') === 'vapi' ? (

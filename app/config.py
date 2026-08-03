@@ -266,6 +266,54 @@ class Settings(BaseSettings):
     )
 
     # ===========================================
+    # xAI / Grok Realtime Configuration (M5 - voice/telephony providers)
+    # ===========================================
+    # Global fallback - tenants/projects can override via Credentials API
+    xai_api_key: Optional[str] = Field(
+        default=None, description="xAI API key for Grok realtime voice (global fallback)"
+    )
+
+    # ===========================================
+    # LiveKit Configuration (M5 - voice/telephony providers)
+    # ===========================================
+    livekit_url: Optional[str] = Field(
+        default=None, description="LiveKit server URL, e.g. wss://<project>.livekit.cloud (global fallback)"
+    )
+    livekit_api_key: Optional[str] = Field(
+        default=None, description="LiveKit API key (global fallback)"
+    )
+    livekit_api_secret: Optional[str] = Field(
+        default=None, description="LiveKit API secret (global fallback)"
+    )
+
+    # ===========================================
+    # Zadarma SIP Configuration (M5 - voice/telephony providers)
+    # ===========================================
+    zadarma_sip_login: Optional[str] = Field(
+        default=None, description="Zadarma SIP login (global fallback)"
+    )
+    zadarma_sip_password: Optional[str] = Field(
+        default=None, description="Zadarma SIP password (global fallback)"
+    )
+    zadarma_number: Optional[str] = Field(
+        default=None, description="Zadarma phone number (global fallback)"
+    )
+
+    # ===========================================
+    # ElevenLabs Conversational Agent (M5 - distinct from plain TTS elevenlabs_api_key above)
+    # ===========================================
+    elevenlabs_tool_secret: Optional[str] = Field(
+        default=None, description="Shared secret to authorize ElevenLabs agent tool-call webhooks (global fallback)"
+    )
+
+    # ===========================================
+    # Cal.com Configuration (M5 - calendar provider)
+    # ===========================================
+    calcom_api_key: Optional[str] = Field(
+        default=None, description="Cal.com API key (global fallback)"
+    )
+
+    # ===========================================
     # Validators
     # ===========================================
     @field_validator("log_level")

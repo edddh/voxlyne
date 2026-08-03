@@ -5,11 +5,13 @@ FastAPI entry point with lifecycle management
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncGenerator
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.database.db import (
@@ -130,9 +132,9 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 # Root Endpoints
 # ===========================================
 
-@app.get("/", tags=["Root"])
+@app.get("/api/info", tags=["Root"])
 async def root():
-    """Root endpoint - API information."""
+    """API information endpoint."""
     return {
         "name": "Ascolta",
         "version": "5.0.0-alpha",
@@ -212,6 +214,31 @@ app.include_router(webhook_vapi.router, prefix="/api", tags=["Webhook Vapi"])
 
 # Credentials router (M5.5: Service credentials management)
 app.include_router(credentials.router, prefix="/api", tags=["Credentials"])
+
+
+# ===========================================
+# Admin UI (built React SPA) - must be registered after all API routers
+# ===========================================
+
+ADMIN_UI_DIST = Path(__file__).resolve().parent.parent / "admin-ui" / "dist"
+
+if ADMIN_UI_DIST.exists():
+    assets_dir = ADMIN_UI_DIST / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="admin-assets")
+
+    @app.get("/", include_in_schema=False)
+    @app.head("/", include_in_schema=False)
+    async def serve_admin_index():
+        return FileResponse(ADMIN_UI_DIST / "index.html")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    @app.head("/{full_path:path}", include_in_schema=False)
+    async def serve_admin_spa(full_path: str):
+        candidate = ADMIN_UI_DIST / full_path
+        if candidate.exists() and candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(ADMIN_UI_DIST / "index.html")
 
 
 # ===========================================

@@ -52,6 +52,22 @@ def _create_engine(vtype: VoiceEngineType) -> BaseVoiceEngine:
         from app.services.voice.vapi_engine import VapiEngine
         return VapiEngine(settings=settings)
 
+    elif vtype in (
+        VoiceEngineType.LIVEKIT_XAI,
+        VoiceEngineType.LIVEKIT_OPENAI,
+        VoiceEngineType.XAI_SIP_DIRECT,
+        VoiceEngineType.OPENAI_SIP_DIRECT,
+        VoiceEngineType.ELEVENLABS_AGENT,
+    ):
+        # M5: ported from earlier-prototype, not wired into the factory yet - concrete
+        # engine classes (app/services/voice/livekit_engine.py,
+        # direct_sip_engine.py, elevenlabs_agent_engine.py) land in the next
+        # implementation phase. See README Milestone 5 and runtime_workers/.
+        raise NotImplementedError(
+            f"Voice engine '{vtype.value}' is not implemented yet - "
+            "the provider integration phase (see README Milestone 5) adds it."
+        )
+
     else:
         raise ValueError(f"Unsupported voice engine type: {vtype}")
 

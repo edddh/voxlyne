@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Table, Button, Space, Input, Modal, Form, message, Tag, Popconfirm, Typography, Tooltip
 } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, KeyOutlined } from '@ant-design/icons'
 import * as tenantsApi from '../api/tenants'
 
 const { Title } = Typography
 
 function Tenants() {
+  const navigate = useNavigate()
   const [tenants, setTenants] = useState([])
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
@@ -122,6 +124,13 @@ function Tenants() {
         <Space>
           <Tooltip title="Modifica">
             <Button icon={<EditOutlined />} size="small" onClick={() => openModal(record)} />
+          </Tooltip>
+          <Tooltip title="Credenziali (API key LLM/voce/telefonia per questo tenant)">
+            <Button
+              icon={<KeyOutlined />}
+              size="small"
+              onClick={() => navigate(`/tenants/${record.id}/credentials`)}
+            />
           </Tooltip>
           {record.slug !== 'default' && (
             <Popconfirm

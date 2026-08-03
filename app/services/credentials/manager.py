@@ -65,10 +65,94 @@ class CredentialsManager:
             ... )
             >>> vapi_key = creds.get("api_key")
         """
+        db_creds = await self._fetch_db_credentials(
+            entity_type, entity_id, service_type, provider, credential_key
+        )
+        if db_creds:
+            return db_creds
+
+        # Fallback to global .env settings
+        env_creds = self._get_env_fallback(service_type, provider)
+        if env_creds:
+            logger.debug(
+                f"Using global .env fallback for {service_type}/{provider} "
+                f"(no {entity_type}-level credentials found)"
+            )
+            return env_creds
+
+        logger.warning(
+            f"No credentials found for {service_type}/{provider} "
+            f"(entity_type={entity_type}, entity_id={entity_id})"
+        )
+        return {}
+
+    async def get_credentials_with_fallback(
+        self,
+        tenant_id: UUID,
+        project_id: Optional[UUID],
+        service_type: str,
+        provider: str,
+        credential_key: Optional[str] = None,
+    ) -> Dict[str, str]:
+        """
+        Resolve credentials with project → tenant → .env fallback.
+
+        This is the resolution order needed for tenant-configurable LLM/voice
+        provider keys: a project can override its tenant's default, a tenant
+        can set a default for all its projects, and .env remains the final
+        global fallback (same as get_credentials).
+
+        Args:
+            tenant_id: UUID of the owning tenant (always required)
+            project_id: UUID of the project, if resolving for a specific
+                project; pass None to resolve tenant-level only
+            service_type: 'crm', 'voice', 'telephony', 'tts', 'calendar'
+            provider: Provider name (vapi, xai, livekit, zadarma, etc.)
+            credential_key: Optional reference key for multiple credentials
+
+        Returns:
+            Dict[str, str]: Credential key-value pairs (empty dict if not found)
+        """
+        if project_id is not None:
+            project_creds = await self._fetch_db_credentials(
+                "project", project_id, service_type, provider, credential_key
+            )
+            if project_creds:
+                return project_creds
+
+        tenant_creds = await self._fetch_db_credentials(
+            "tenant", tenant_id, service_type, provider, credential_key
+        )
+        if tenant_creds:
+            return tenant_creds
+
+        env_creds = self._get_env_fallback(service_type, provider)
+        if env_creds:
+            logger.debug(
+                f"Using global .env fallback for {service_type}/{provider} "
+                f"(no project/tenant-level credentials found for tenant {tenant_id}"
+                f"{f', project {project_id}' if project_id else ''})"
+            )
+            return env_creds
+
+        logger.warning(
+            f"No credentials found for {service_type}/{provider} "
+            f"(tenant={tenant_id}, project={project_id})"
+        )
+        return {}
+
+    async def _fetch_db_credentials(
+        self,
+        entity_type: str,
+        entity_id: UUID,
+        service_type: str,
+        provider: str,
+        credential_key: Optional[str] = None,
+    ) -> Dict[str, str]:
+        """DB-only lookup (no .env fallback). Returns {} if not found."""
         db = get_database()
 
         try:
-            # 1. Try database credentials
             query = """
                 SELECT encrypted_data, id
                 FROM service_credentials
@@ -94,7 +178,6 @@ class CredentialsManager:
             result = await db.fetch_one(query, params)
 
             if result:
-                # Update last_used_at
                 await db.execute(
                     """UPDATE service_credentials
                        SET last_used_at = :now
@@ -102,7 +185,6 @@ class CredentialsManager:
                     {"now": datetime.now(timezone.utc), "id": result["id"]},
                 )
 
-                # Decrypt and return
                 credentials = decrypt_credentials(result["encrypted_data"])
                 logger.debug(
                     f"Loaded {service_type}/{provider} credentials from DB "
@@ -114,21 +196,7 @@ class CredentialsManager:
             logger.error(
                 f"Failed to load credentials from DB for {service_type}/{provider}: {e}"
             )
-            # Continue to fallback
 
-        # 2. Fallback to global .env settings
-        env_creds = self._get_env_fallback(service_type, provider)
-        if env_creds:
-            logger.debug(
-                f"Using global .env fallback for {service_type}/{provider} "
-                f"(no {entity_type}-level credentials found)"
-            )
-            return env_creds
-
-        logger.warning(
-            f"No credentials found for {service_type}/{provider} "
-            f"(entity_type={entity_type}, entity_id={entity_id})"
-        )
         return {}
 
     def _get_env_fallback(self, service_type: str, provider: str) -> Dict[str, str]:
@@ -148,6 +216,8 @@ class CredentialsManager:
                 return {"api_key": self.settings.vapi_api_key}
             if provider in ("openai_realtime", "openai") and self.settings.openai_api_key:
                 return {"api_key": self.settings.openai_api_key}
+            if provider == "xai" and self.settings.xai_api_key:
+                return {"api_key": self.settings.xai_api_key}
 
         # Telephony providers
         elif service_type == "telephony":
@@ -157,11 +227,32 @@ class CredentialsManager:
                         "account_sid": self.settings.twilio_account_sid,
                         "auth_token": self.settings.twilio_auth_token,
                     }
+            if provider == "livekit":
+                if self.settings.livekit_url and self.settings.livekit_api_key and self.settings.livekit_api_secret:
+                    return {
+                        "url": self.settings.livekit_url,
+                        "api_key": self.settings.livekit_api_key,
+                        "api_secret": self.settings.livekit_api_secret,
+                    }
+            if provider == "zadarma":
+                if self.settings.zadarma_sip_login and self.settings.zadarma_sip_password:
+                    creds = {
+                        "sip_login": self.settings.zadarma_sip_login,
+                        "sip_password": self.settings.zadarma_sip_password,
+                    }
+                    if self.settings.zadarma_number:
+                        creds["number"] = self.settings.zadarma_number
+                    return creds
 
         # TTS providers
         elif service_type == "tts":
             if provider == "elevenlabs" and self.settings.elevenlabs_api_key:
                 return {"api_key": self.settings.elevenlabs_api_key}
+            if provider == "elevenlabs_agent" and self.settings.elevenlabs_api_key:
+                creds = {"api_key": self.settings.elevenlabs_api_key}
+                if self.settings.elevenlabs_tool_secret:
+                    creds["tool_secret"] = self.settings.elevenlabs_tool_secret
+                return creds
 
         # CRM providers
         elif service_type == "crm":
@@ -200,6 +291,9 @@ class CredentialsManager:
                 if self.settings.ms_graph_tenant_id:
                     creds["tenant_id"] = self.settings.ms_graph_tenant_id
                 return creds if creds else {}
+
+            elif provider == "calcom" and self.settings.calcom_api_key:
+                return {"api_key": self.settings.calcom_api_key}
 
         return {}
 
@@ -431,6 +525,26 @@ class CredentialsManager:
                         "error": response.text[:300],
                     }
 
+            elif service_type == "voice" and provider == "xai":
+                import httpx
+
+                api_key = credentials.get("api_key")
+                if not api_key:
+                    return {"success": False, "message": "Missing api_key"}
+
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.get(
+                        "https://api.x.ai/v1/models",
+                        headers={"Authorization": f"Bearer {api_key}"},
+                    )
+                    if response.status_code == 200:
+                        return {"success": True, "message": "Connection successful"}
+                    return {
+                        "success": False,
+                        "message": f"Connection failed ({response.status_code})",
+                        "error": response.text[:300],
+                    }
+
             # Telephony providers
             elif service_type == "telephony" and provider == "twilio":
                 from app.services.telephony.twilio_client import TwilioClient
@@ -447,8 +561,45 @@ class CredentialsManager:
                     "message": "Connection successful" if is_valid else "Connection failed",
                 }
 
+            elif service_type == "telephony" and provider == "livekit":
+                # Full API validation (room listing) requires the livekit-server-sdk,
+                # which lives in requirements-voice.txt and isn't merged into the main
+                # app environment yet (see that file for why). Structural check only
+                # until the voice-worker service (with the SDK installed) takes this over.
+                url = credentials.get("url")
+                api_key = credentials.get("api_key")
+                api_secret = credentials.get("api_secret")
+                missing = [
+                    name for name, val in (("url", url), ("api_key", api_key), ("api_secret", api_secret))
+                    if not val
+                ]
+                if missing:
+                    return {"success": False, "message": f"Missing {', '.join(missing)}"}
+                if not (url.startswith("wss://") or url.startswith("ws://")):
+                    return {"success": False, "message": "url must start with wss:// or ws://"}
+                return {
+                    "success": True,
+                    "message": "Fields present (full LiveKit API check pending voice-worker integration)",
+                }
+
+            elif service_type == "telephony" and provider == "zadarma":
+                # Zadarma's REST API needs HMAC-signed requests; deferred to the
+                # concrete telephony provider implementation. Structural check only.
+                sip_login = credentials.get("sip_login")
+                sip_password = credentials.get("sip_password")
+                missing = [
+                    name for name, val in (("sip_login", sip_login), ("sip_password", sip_password))
+                    if not val
+                ]
+                if missing:
+                    return {"success": False, "message": f"Missing {', '.join(missing)}"}
+                return {
+                    "success": True,
+                    "message": "Fields present (full Zadarma API check pending telephony provider implementation)",
+                }
+
             # TTS providers
-            elif service_type == "tts" and provider == "elevenlabs":
+            elif service_type == "tts" and provider in ("elevenlabs", "elevenlabs_agent"):
                 import httpx
 
                 api_key = credentials.get("api_key")
@@ -541,6 +692,26 @@ class CredentialsManager:
                     "success": is_valid,
                     "message": "Connection successful" if is_valid else "Connection failed",
                 }
+
+            elif service_type == "calendar" and provider == "calcom":
+                import httpx
+
+                api_key = credentials.get("api_key")
+                if not api_key:
+                    return {"success": False, "message": "Missing api_key"}
+
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.get(
+                        "https://api.cal.com/v2/me",
+                        headers={"Authorization": f"Bearer {api_key}"},
+                    )
+                    if response.status_code == 200:
+                        return {"success": True, "message": "Connection successful"}
+                    return {
+                        "success": False,
+                        "message": f"Connection failed ({response.status_code})",
+                        "error": response.text[:300],
+                    }
 
             else:
                 return {

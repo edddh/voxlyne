@@ -47,6 +47,12 @@ class VoiceEngineType(str, Enum):
     """Supported voice engine providers."""
     OPENAI_REALTIME = "openai_realtime"
     VAPI = "vapi"
+    # M5: ported from earlier-prototype - inbound-only for now (see README Milestone 5)
+    LIVEKIT_XAI = "livekit_xai"
+    LIVEKIT_OPENAI = "livekit_openai"
+    XAI_SIP_DIRECT = "xai_sip_direct"
+    OPENAI_SIP_DIRECT = "openai_sip_direct"
+    ELEVENLABS_AGENT = "elevenlabs_agent"
 
 
 class CallDirection(str, Enum):

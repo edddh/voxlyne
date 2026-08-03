@@ -14,6 +14,7 @@ import Calls from './pages/Calls'
 import CallDetail from './pages/CallDetail'
 import CRMIntegration from './pages/CRMIntegration'
 import CalendarIntegration from './pages/CalendarIntegration'
+import TenantCredentials from './pages/TenantCredentials'
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth()
@@ -61,6 +62,14 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['super_admin']}>
               <Templates />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="tenants/:tenantId/credentials"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+              <TenantCredentials />
             </ProtectedRoute>
           }
         />

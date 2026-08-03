@@ -50,7 +50,8 @@ if ! command -v psql &> /dev/null; then
         exit 1
     fi
 else
-    RUN_CMD="PGPASSWORD=$DB_PASS psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME"
+    export PGPASSWORD="$DB_PASS"
+    RUN_CMD="psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME"
 fi
 
 # Create migrations table if not exists
