@@ -85,6 +85,54 @@ async def publish_version(project_id: UUID, created_by: Optional[UUID] = None) -
     return {"id": new_id, "version_number": next_version}
 
 
+async def list_versions(project_id: UUID) -> list[Dict[str, Any]]:
+    """All versions of a project (draft/published/archived), newest first."""
+    db = get_database()
+    rows = await db.fetch_all(
+        """
+        SELECT id, version_number, status, voice_name, language, voice_engine,
+               published_at, created_by, created_at
+        FROM agent_versions
+        WHERE project_id = :project_id
+        ORDER BY version_number DESC
+        """,
+        {"project_id": str(project_id)},
+    )
+    return [dict(r) for r in rows]
+
+
+async def rollback_to_version(project_id: UUID, version_id: UUID) -> Dict[str, Any]:
+    """
+    Make an existing (already-published-at-some-point, i.e. not still a
+    draft) version the active one again - instant, no new version_number,
+    no snapshot re-taken. Does NOT touch the live `projects` row: rollback
+    changes what resolve_inbound() serves right now, it doesn't discard
+    whatever draft edits an admin currently has open in the project editor.
+    """
+    db = get_database()
+    async with db.transaction():
+        target = await db.fetch_one(
+            "SELECT id, project_id, status FROM agent_versions WHERE id = :id AND project_id = :project_id",
+            {"id": str(version_id), "project_id": str(project_id)},
+        )
+        if not target:
+            raise ValueError(f"Version not found: {version_id}")
+        if target["status"] == "draft":
+            raise ValueError("Cannot roll back to a version that was never published")
+
+        await db.execute(
+            "UPDATE agent_versions SET status = 'archived' WHERE project_id = :id AND status = 'published'",
+            {"id": str(project_id)},
+        )
+        await db.execute(
+            "UPDATE agent_versions SET status = 'published', published_at = now() WHERE id = :id",
+            {"id": str(version_id)},
+        )
+
+    logger.info(f"Rolled back: project={project_id} -> version={version_id}")
+    return {"id": str(version_id), "status": "published"}
+
+
 async def resolve_inbound(identifier: str) -> Optional[Dict[str, Any]]:
     """
     Resolve a dialed SIP identifier (the "To" header, or a phone number for

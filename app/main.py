@@ -21,7 +21,7 @@ from app.database.db import (
     run_migrations,
 )
 from app.models.schemas import ErrorResponse, HealthResponse
-from app.routers import analytics, api, auth, calendar, calls, credentials, crm, health, outbound, project_config, prompt_blocks, prompts, templates, tenants, users, webhook, webhook_vapi
+from app.routers import agent_versions, analytics, api, auth, calendar, calls, credentials, crm, health, outbound, project_config, prompt_blocks, prompts, templates, tenants, users, webhook, webhook_vapi
 from app.services.session_cleanup import SessionCleanup
 
 # ===========================================
@@ -211,6 +211,7 @@ app.include_router(calls.router, tags=["Calls V2"])
 
 # Outbound router (M5: Outbound call management)
 app.include_router(outbound.router, tags=["Outbound"])
+app.include_router(agent_versions.router, tags=["Agent Versions"])
 
 # Vapi webhook router (M5: Vapi.ai events)
 app.include_router(webhook_vapi.router, prefix="/api", tags=["Webhook Vapi"])
