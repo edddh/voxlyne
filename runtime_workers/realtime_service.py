@@ -2,11 +2,38 @@
 """
 Ported from earlier-prototype via ascolta-salvage-2026-07-24, adapted for ascolta.
 Self-contained: no import/runtime dependency on the earlier-prototype or ascolta directories.
-Status: starting point for Milestone 5 (see README) - not yet wired into
-app.services.voice.factory / CallManager. Config/env resolution here is still
-file-based (ascolta-stack-config.json); the DB-driven credential/config
-resolution (CredentialsManager.get_credentials_with_fallback) will replace it
-when the concrete voice engine classes are implemented.
+
+18/08/2026 (Grok/xAI priority - see memory ascolta-grok-priority, and
+runtime_workers/livekit_agent.py's identical treatment): the
+"realtime.call.incoming" path in handle_webhook() no longer resolves
+prompt/voice/language from the static scenario config file - it calls the
+Fase 2 kernel resolver (app.services.agent_versions.resolve_inbound()),
+keyed on the SIP "To" header, same as webhook.py's OpenAI path.
+
+Per explicit request ("non voglio il fallback su .env"): the xAI api_key is
+NO LONGER read from an environment variable at all, anywhere, including at
+process startup - LegacyController.__init__() no longer builds an
+AsyncOpenAI client or requires XAI_API_KEY. The key is resolved strictly
+per-tenant (resolve_provider_api_key(), CredentialsManager, service_type
+"voice", provider "xai") once a call's dialed number resolves to a tenant.
+No resolvable tenant or no stored credential for it = the call is declined
+(see handle_webhook), never answered with a fallback/shared/global key.
+
+Tools (call_tool/handle_function_call, Cal.com/Nextcloud) intentionally
+UNTOUCHED by this pass - still built once at startup from the static
+scenario_config file (self.tools = build_tools(scenario_config) in
+__init__). Same scope limit as the LiveKit worker: the Tool Registry
+governance layer is Fase 4, not built, so wiring tools to real per-tenant
+config now would be built on sand. Every call answered by this worker
+today runs with the tools defined in whatever scenario file happened to be
+loaded at process startup, regardless of which tenant actually answers -
+a known, deliberate gap, not silently ignored.
+
+NOT VERIFIED against a live xAI SIP call or webhook (no network path to
+xAI/a real SIP trunk from this environment). Verified: py_compile, a full
+in-process handle_webhook() call with a synthetic realtime.call.incoming
+payload - correctly resolves tenant/project/prompt/voice/api_key for a
+known number, and declines (not crashes) for an unresolvable one.
 """
 import asyncio
 import json
@@ -37,6 +64,7 @@ from app.integrations.common.tools import build_tools
 from app.integrations.voice_core.scenario import resolve_voice_bundle
 from app.integrations.voice_core.state import VoiceCallState, VoiceStateStore
 from app.integrations.voice_core.xai_session import build_xai_session_update
+from app.services.agent_versions import resolve_inbound, resolve_provider_api_key
 
 SERVICE_DIR = Path(__file__).resolve().parent
 ROOT = SERVICE_DIR
@@ -107,18 +135,18 @@ class LegacyController:
         self.calcom_default_event_type_id = str(calcom_cfg.get("event_type_id") or "").strip() or None
         self.calcom_standard_event_type_id = str(calcom_cfg.get("standard_event_type_id") or "").strip() or None
         self.calcom_sport_event_type_id = str(calcom_cfg.get("sport_event_type_id") or "").strip() or None
-        if self.provider in {"xai", "grok"}:
-            api_key = os.environ.get("XAI_API_KEY", "").strip() or os.environ.get("OPENAI_API_KEY", "").strip()
-            if not api_key:
-                raise RuntimeError("XAI_API_KEY missing")
-            base_url = str(realtime_cfg.get("base_url") or "https://api.x.ai/v1").rstrip("/")
-            websocket_base_url = str(realtime_cfg.get("websocket_base_url") or "wss://api.x.ai/v1/realtime").rstrip("/")
-            self.client = AsyncOpenAI(api_key=api_key, base_url=base_url, websocket_base_url=websocket_base_url)
-        else:
-            api_key = os.environ.get("OPENAI_API_KEY", "").strip()
-            if not api_key:
-                raise RuntimeError("OPENAI_API_KEY missing")
-            self.client = AsyncOpenAI(api_key=api_key)
+
+        # 18/08: NO client built here anymore, and no XAI_API_KEY/OPENAI_API_KEY
+        # read from env at all - explicit request from maintainer ("non voglio il
+        # fallback su .env"). The api_key is per-tenant, only known once a call
+        # comes in and the kernel resolver (resolve_inbound) says which tenant
+        # it belongs to - see handle_webhook() below, which builds a fresh
+        # AsyncOpenAI client per call instead of once here at startup.
+        # base_url/websocket_base_url are NOT secrets (they're the same xAI
+        # endpoint for everyone), kept as process-level config.
+        self.xai_base_url = str(realtime_cfg.get("base_url") or "https://api.x.ai/v1").rstrip("/")
+        self.xai_websocket_base_url = str(realtime_cfg.get("websocket_base_url") or "wss://api.x.ai/v1/realtime").rstrip("/")
+
         self.tools = build_tools(scenario_config)
         self.active_calls: dict[str, asyncio.Task[Any]] = {}
         self.call_context = VoiceStateStore()
@@ -323,6 +351,15 @@ class LegacyController:
         return normalized_start.isoformat(), normalized_end.isoformat()
 
     def extract_phone_from_sip_headers(self, sip_headers: list[Any]) -> str | None:
+        return self.extract_header_value(sip_headers, {"from", "p-asserted-identity", "remote-party-id"})
+
+    def extract_header_value(self, sip_headers: list[Any], header_names: set[str]) -> str | None:
+        """
+        Generalized version of extract_phone_from_sip_headers (which now
+        delegates here) - added 18/08 to also read the "To" header (the
+        dialed number), needed by the kernel resolver in handle_webhook().
+        Same regex, same header dict/object shape handling.
+        """
         for header in sip_headers or []:
             if isinstance(header, dict):
                 name = header.get("name", "") or ""
@@ -330,7 +367,7 @@ class LegacyController:
             else:
                 name = getattr(header, "name", "") or ""
                 value = getattr(header, "value", "") or ""
-            if name.lower() not in {"from", "p-asserted-identity", "remote-party-id"}:
+            if name.lower() not in header_names:
                 continue
             match = re.search(r"(?:sip:|tel:)(\+?[0-9][0-9]{5,})", value)
             if match:
@@ -834,8 +871,12 @@ class LegacyController:
     async def handle_webhook(self, payload: bytes, headers: dict[str, str]) -> dict[str, Any]:
         text = payload.decode()
         if self.webhook_secret:
-            self.client.webhooks.verify_signature(text, headers, secret=self.webhook_secret)
-            event = self.client.webhooks.unwrap(text, headers, secret=self.webhook_secret)
+            # Crypto-only operation (HMAC/signature check), doesn't call
+            # xAI over the network - a throwaway client is fine here, no
+            # tenant context exists yet at this point anyway.
+            verify_client = AsyncOpenAI(api_key="signature-verification-only", base_url=self.xai_base_url)
+            verify_client.webhooks.verify_signature(text, headers, secret=self.webhook_secret)
+            event = verify_client.webhooks.unwrap(text, headers, secret=self.webhook_secret)
             event_type = event.type
             event_data = event.data
         else:
@@ -846,30 +887,58 @@ class LegacyController:
         logging.info("Webhook received: %s", event_type)
 
         if event_type == "realtime.call.incoming":
-            config = load_config()
-            services = active_services(config)
-            if "realtime" not in services and "openai" not in services:
-                return {"status": "ignored", "reason": "realtime_disabled"}
             call_id = getattr(event_data, "call_id", None) or event_data.get("call_id")
             if not call_id:
                 raise ValueError("Missing call_id")
             sip_headers = getattr(event_data, "sip_headers", None) or event_data.get("sip_headers", [])
             caller_number = self.extract_phone_from_sip_headers(sip_headers)
-            variant, instructions, first_message = self.prompt_bundle()
+            dialed_number = self.extract_header_value(sip_headers, {"to"})
+
+            # Fase 2 kernel resolver, same function already proven on the
+            # OpenAI SIP and LiveKit paths - see app/routers/webhook.py and
+            # runtime_workers/livekit_agent.py. No static config fallback
+            # here: without a resolved tenant there is no api_key to answer
+            # with at all (see __init__), so an unresolved number can only
+            # be declined, not silently answered with someone else's key.
+            resolved = await resolve_inbound(dialed_number) if dialed_number else None
+            if not resolved:
+                logging.warning(
+                    "xAI SIP diretto: nessun inbound_endpoint per '%s' - chiamata rifiutata (nessuna chiave globale di fallback).",
+                    dialed_number,
+                )
+                return {"status": "declined", "reason": "no_endpoint", "call_id": call_id}
+
+            api_key = await resolve_provider_api_key(resolved["tenant_id"], "xai")
+            if not api_key:
+                logging.warning(
+                    "xAI SIP diretto: nessuna credenziale voice/xai per tenant=%s - chiamata rifiutata.",
+                    resolved["tenant_id"],
+                )
+                return {"status": "declined", "reason": "no_credentials", "call_id": call_id}
+
+            instructions = resolved["prompt_a"]
+            first_message = resolved.get("consent_message") or "Salve, come posso aiutarla?"
+            voice = resolved.get("voice_name") or self.voice
+            language = resolved.get("language") or self.response_language or "it"
+
             self.call_context.put(
                 VoiceCallState(
                     call_id=call_id,
-                    scenario_name=variant,
+                    scenario_name=str(resolved["project_id"]),
                     caller_number=caller_number,
                     instructions=instructions,
                     first_message=first_message,
-                    response_language=self.response_language or "it",
-                    provider=self.provider,
-                    model=str(self.model or ""),
-                    voice=str(self.voice or ""),
+                    response_language=language,
+                    provider="xai",
+                    model=str(self.model or "grok-voice-fast-1.0"),
+                    voice=str(voice),
+                    api_key=api_key,
                 )
             )
-            logging.info("Incoming call %s prompt_variant=%s caller_number=%s", call_id, variant, caller_number or "unknown")
+            logging.info(
+                "Inbound xAI risolto: '%s' -> tenant=%s project=%s agent_version=%s caller=%s",
+                dialed_number, resolved["tenant_id"], resolved["project_id"], resolved["agent_version_id"], caller_number or "unknown",
+            )
             await self.start_call_session(call_id)
             return {"status": "accepted", "call_id": call_id}
 
@@ -916,7 +985,9 @@ class LegacyController:
         first_message = call_state.first_message
         query = urlencode({"call_id": call_id})
         ws_url = f"wss://api.x.ai/v1/realtime?{query}"
-        headers = {"Authorization": f"Bearer {self.client.api_key}"}
+        if not call_state.api_key:
+            raise RuntimeError(f"Call {call_id} has no api_key in its resolved state - this should be unreachable (handle_webhook declines before reaching here)")
+        headers = {"Authorization": f"Bearer {call_state.api_key}"}
 
         async with websockets.connect(ws_url, additional_headers=headers) as conn:
             await conn.send(
@@ -924,8 +995,8 @@ class LegacyController:
                     {
                         "type": "session.update",
                         "session": build_xai_session_update(
-                            voice=self.voice,
-                            language=self.response_language,
+                            voice=call_state.voice,
+                            language=call_state.response_language,
                             instructions=instructions,
                             tools=self.tools,
                         ),

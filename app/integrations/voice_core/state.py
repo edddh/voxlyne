@@ -15,6 +15,7 @@ class VoiceCallState:
     provider: str = "openai"
     model: str = ""
     voice: str = ""
+    api_key: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
 
 

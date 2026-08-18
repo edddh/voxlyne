@@ -15,6 +15,31 @@ from uuid import UUID
 
 from app.database.db import get_database
 
+
+async def resolve_provider_api_key(tenant_id: Any, provider: str) -> Optional[str]:
+    """
+    Strictly per-tenant, no fallback to a global env var - explicit request
+    from maintainer, 18/08 (see .env: "XAI_API_KEY volutamente NON qui").
+    Shared by runtime_workers/livekit_agent.py and realtime_service.py -
+    every voice worker resolves provider credentials the same way.
+
+    Uses CredentialsManager._fetch_db_credentials(), not get_credentials()/
+    get_credentials_with_fallback() - those two fall back to os.environ,
+    which is exactly what must not happen here. None means "this tenant
+    has no voice/{provider} credential stored", and the caller must treat
+    that as a hard failure (decline the call), not silently reuse another
+    tenant's key or a global one.
+    """
+    if not tenant_id:
+        return None
+    from app.services.credentials.manager import CredentialsManager
+
+    manager = CredentialsManager()
+    creds = await manager._fetch_db_credentials(
+        entity_type="tenant", entity_id=tenant_id, service_type="voice", provider=provider,
+    )
+    return creds.get("api_key") if creds else None
+
 logger = logging.getLogger(__name__)
 
 

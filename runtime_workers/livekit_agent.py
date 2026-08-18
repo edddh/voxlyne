@@ -43,7 +43,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from app.integrations.common.tools import build_tools
-from app.services.agent_versions import resolve_inbound
+from app.services.agent_versions import resolve_inbound, resolve_provider_api_key
 from livekit.agents import Agent, AgentServer, AgentSession, JobContext, RunContext, cli, function_tool
 from livekit.agents.llm.tool_context import ToolFlag
 from livekit.plugins import openai, xai
@@ -238,13 +238,25 @@ async def entrypoint(ctx: JobContext) -> None:
     if provider == "openai":
         model = "gpt-realtime"
         voice = (resolved or {}).get("voice_name") or "marin"
-        realtime_model = openai.realtime.RealtimeModel(model=model, voice=voice)
+        openai_api_key = await resolve_provider_api_key((resolved or {}).get("tenant_id"), "openai")
+        if not openai_api_key:
+            raise RuntimeError(
+                f"Nessuna credenziale voice/openai per tenant={((resolved or {}).get('tenant_id'))} - "
+                f"niente fallback su env (richiesta esplicita 18/08), la chiamata non puo' procedere."
+            )
+        realtime_model = openai.realtime.RealtimeModel(model=model, voice=voice, api_key=openai_api_key)
     else:
         model = "grok-voice-fast-1.0"
         voice = (resolved or {}).get("voice_name") or "eve"
         if voice.islower():
             voice = voice.title()
-        realtime_model = xai.realtime.RealtimeModel(model=model, voice=voice)
+        xai_api_key = await resolve_provider_api_key((resolved or {}).get("tenant_id"), "xai")
+        if not xai_api_key:
+            raise RuntimeError(
+                f"Nessuna credenziale voice/xai per tenant={((resolved or {}).get('tenant_id'))} - "
+                f"niente fallback su env (richiesta esplicita 18/08), la chiamata non puo' procedere."
+            )
+        realtime_model = xai.realtime.RealtimeModel(model=model, voice=voice, api_key=xai_api_key)
     logging.info("LiveKit realtime provider=%s model=%s voice=%s", provider, model, voice)
 
     session = AgentSession(
