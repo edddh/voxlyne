@@ -60,6 +60,19 @@ DETAIL_SLUG_TO_OTYPE = {
 }
 
 
+OTYPE_TO_SLUG = {v: k for k, v in DETAIL_SLUG_TO_OTYPE.items() if k in {"notizia", "avviso", "comunicato-stampa", "evento", "documento", "servizio"}}
+
+
+def _slugify(text: str) -> str:
+    text = re.sub(r"[àá]", "a", text.lower())
+    text = re.sub(r"[èé]", "e", text)
+    text = re.sub(r"[ìí]", "i", text)
+    text = re.sub(r"[òó]", "o", text)
+    text = re.sub(r"[ùú]", "u", text)
+    text = re.sub(r"[^a-z0-9]+", "-", text).strip("-")
+    return text
+
+
 def _strip_html(text: str) -> str:
     if "<" in text and ">" in text:
         text = re.sub(r"<[^>]+>", " ", text)
@@ -116,21 +129,14 @@ async def discover_sitemap_urls(client: httpx.AsyncClient, seed_url: str) -> lis
     return list(dict.fromkeys(all_urls))
 
 
-async def fetch_kapi_detail(client: httpx.AsyncClient, url: str, kapi_url: str, depth: int = DEFAULT_KAPI_DEPTH) -> Optional[tuple[str, str]]:
-    """Returns (title, text) if `url` is a kPortal content-detail page and the kapi has it, else None."""
-    if not kapi_url:
-        return None
-    match = DETAIL_URL_RE.search(url)
-    if not match:
-        return None
-    raw_id = match.group("id")
-    if not raw_id.isdigit():
-        return None
-    otype = DETAIL_SLUG_TO_OTYPE.get(match.group("slug").lower())
-    if not otype:
-        return None
-
-    detail_url = f"{kapi_url}sito/detail-no-live/{otype}/{raw_id}?profondita={depth}"
+async def fetch_detail_by_otype_id(
+    client: httpx.AsyncClient, kapi_url: str, otype: int, item_id: int, depth: int = DEFAULT_KAPI_DEPTH,
+) -> Optional[tuple[str, str]]:
+    """Same as fetch_kapi_detail() but skips URL parsing - used when the
+    caller already has (otype, id) directly from a kapi listing endpoint
+    (see discover_novita_items()), which is exact instead of inferred
+    from a URL slug."""
+    detail_url = f"{kapi_url}sito/detail-no-live/{otype}/{item_id}?profondita={depth}"
     try:
         resp = await client.get(detail_url, headers={"Accept": "application/json"}, timeout=15)
         payload = resp.json()
@@ -154,3 +160,58 @@ async def fetch_kapi_detail(client: httpx.AsyncClient, url: str, kapi_url: str, 
     if not text:
         return None
     return title, text
+
+
+async def fetch_kapi_detail(client: httpx.AsyncClient, url: str, kapi_url: str, depth: int = DEFAULT_KAPI_DEPTH) -> Optional[tuple[str, str]]:
+    """Returns (title, text) if `url` is a kPortal content-detail page and the kapi has it, else None."""
+    if not kapi_url:
+        return None
+    match = DETAIL_URL_RE.search(url)
+    if not match:
+        return None
+    raw_id = match.group("id")
+    if not raw_id.isdigit():
+        return None
+    otype = DETAIL_SLUG_TO_OTYPE.get(match.group("slug").lower())
+    if not otype:
+        return None
+    return await fetch_detail_by_otype_id(client, kapi_url, otype, int(raw_id), depth)
+
+
+async def discover_novita_items(
+    client: httpx.AsyncClient, seed_url: str, max_items: int = 1000,
+) -> list[tuple[int, int, str]]:
+    """
+    The "sito/novita" kapi endpoint (found 18/08, after the sitemap turned
+    out to be missing a real, currently-live article - maintainer caught this
+    live: an article from 21/07/2026 about CIE issuance hours simply
+    wasn't in sitemap.xml, but IS reachable via detail-no-live once you
+    know its otype/id) - an aggregated, paginated listing of notizie +
+    avvisi + comunicati-stampa together, sorted newest first, that (unlike
+    the sitemap) is provably complete and current: its first page's dates
+    match "today" on a live check. Returns (otypeId, id, title) tuples,
+    paginated (10 per page per this endpoint) up to max_items.
+    """
+    parsed = urlparse(seed_url)
+    root = f"{parsed.scheme}://{parsed.netloc}/kapi/api/"
+    items: list[tuple[int, int, str]] = []
+    page = 0
+    while len(items) < max_items:
+        try:
+            resp = await client.get(f"{root}sito/novita", params={"page": page}, timeout=15)
+            data = resp.json()
+        except Exception:
+            break
+        results = data.get("results") or []
+        if not results:
+            break
+        for item in results:
+            otype = item.get("otypeId")
+            item_id = item.get("id")
+            title = str(item.get("cntTitle") or "").strip()
+            if isinstance(otype, int) and isinstance(item_id, int):
+                items.append((otype, item_id, title))
+        if page + 1 >= data.get("totalPages", 0):
+            break
+        page += 1
+    return items[:max_items]

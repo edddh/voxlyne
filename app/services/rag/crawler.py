@@ -36,7 +36,17 @@ import httpx
 from bs4 import BeautifulSoup
 
 from app.services.rag.extractors import extract_html_text
-from app.services.rag.kportal import DETAIL_SLUG_TO_OTYPE, DETAIL_URL_RE, discover_kapi_url, discover_sitemap_urls, fetch_kapi_detail
+from app.services.rag.kportal import (
+    DETAIL_SLUG_TO_OTYPE,
+    DETAIL_URL_RE,
+    OTYPE_TO_SLUG,
+    _slugify,
+    discover_kapi_url,
+    discover_novita_items,
+    discover_sitemap_urls,
+    fetch_detail_by_otype_id,
+    fetch_kapi_detail,
+)
 
 
 def _is_fetchable_detail_url(url: str) -> bool:
@@ -120,6 +130,45 @@ async def _crawl_kportal(
     root_domain: str,
     max_pages: int,
 ) -> AsyncIterator[tuple[str, str]]:
+    # "sito/novita" (found 18/08) instead of sitemap.xml as the primary
+    # discovery source: maintainer caught a real, currently-live article
+    # (21/07/2026, CIE issuance hours) that simply wasn't in the site's
+    # sitemap - proving it can silently lag behind real content. novita is
+    # a paginated, aggregated listing (notizie+avvisi+comunicati-stampa),
+    # newest first, and its first page matched "today" on a live check -
+    # provably current in a way the sitemap wasn't. Falls back to the
+    # sitemap only if a kPortal site doesn't expose this endpoint (some
+    # installs may differ).
+    novita_items = await discover_novita_items(client, real_start, max_items=max_pages * 2)
+
+    count = 0
+    if novita_items:
+        for otype, item_id, title in novita_items:
+            if count >= max_pages:
+                break
+            if count > 0:
+                await asyncio.sleep(REQUEST_DELAY_SECONDS)
+
+            detail = await fetch_detail_by_otype_id(client, kapi_url, otype, item_id)
+            if not detail:
+                continue
+            detail_title, text = detail
+            full_text = f"{detail_title}\n\n{text}" if detail_title else text
+            if len(full_text.strip()) < MIN_USEFUL_TEXT_LENGTH:
+                continue
+
+            # Reconstruct the human-facing URL for citation purposes - not
+            # load-bearing (the content already came from otype+id
+            # directly), best-effort only.
+            slug = OTYPE_TO_SLUG.get(otype)
+            origin_url = (
+                f"{real_start.rstrip('/')}/{slug}/{item_id}-{_slugify(detail_title or title)}"
+                if slug else f"{kapi_url}sito/detail-no-live/{otype}/{item_id}"
+            )
+            yield (origin_url, full_text)
+            count += 1
+        return
+
     sitemap_urls = [u for u in await discover_sitemap_urls(client, real_start) if _same_domain(u, root_domain)]
     # Content-detail pages (the ones fetch_kapi_detail can actually pull
     # real text from) first - a sitemap's first entries are typically
@@ -130,7 +179,6 @@ async def _crawl_kportal(
     other_urls = [u for u in sitemap_urls if not _is_fetchable_detail_url(u)]
     candidate_urls = (detail_urls + other_urls)[:max_pages] or [real_start]
 
-    count = 0
     for url in candidate_urls:
         if count >= max_pages:
             break
