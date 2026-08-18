@@ -17,6 +17,11 @@ from app.database.db import get_database
 from app.models.schemas import CallStatus
 from app.services.call_manager import CallManager
 from app.services.realtime_session import DEFAULT_PROMPT_A
+from app.services.webhook_security import (
+    WebhookVerificationError,
+    is_duplicate_event,
+    verify_openai_signature,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -46,10 +51,30 @@ async def handle_call_webhook(
     settings = get_settings()
 
     try:
+        # Raw bytes first: signature verification needs the exact bytes
+        # OpenAI signed, not a re-serialized version of the parsed JSON.
+        # Starlette caches this, so request.json() below still works.
+        raw_body = await request.body()
+
+        try:
+            await verify_openai_signature(raw_body, request)
+        except WebhookVerificationError as e:
+            logger.warning(f"Rejected OpenAI webhook: {e}")
+            raise HTTPException(status_code=401, detail="Invalid webhook signature")
+
         # Parse the webhook payload
         payload = await request.json()
         logger.info(f"Received webhook: {payload.get('type', 'unknown')}")
         logger.debug(f"Webhook payload: {payload}")
+
+        # Idempotency: prefer the provider's own delivery id (present when
+        # OPENAI_WEBHOOK_SECRET is set, since only the Standard Webhooks
+        # path guarantees it); fall back to whatever the payload itself
+        # offers. A retry of the exact same delivery is skipped instead of
+        # re-processing (e.g. re-inserting a duplicate `calls` row).
+        event_id = request.headers.get("webhook-id") or payload.get("id")
+        if await is_duplicate_event("openai", event_id):
+            return {"status": "duplicate", "event_id": event_id}
 
         event_type = payload.get("type", "")
 

@@ -10,18 +10,24 @@ Vapi sends webhooks for call lifecycle events:
 - hang: Vapi detected conversation should end
 """
 
+import hashlib
 import logging
 from datetime import datetime
 from typing import Any, Dict
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
 from app.config import get_settings
 from app.database.db import get_database
 from app.models.schemas import CallStatus
 from app.services.voice.base import WebhookEventType
 from app.services.voice.factory import get_voice_engine
+from app.services.webhook_security import (
+    WebhookVerificationError,
+    is_duplicate_event,
+    verify_vapi_signature,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -36,12 +42,30 @@ async def handle_vapi_webhook(
     Handle incoming webhooks from Vapi.ai.
     """
     try:
+        raw_body = await request.body()
+
+        try:
+            await verify_vapi_signature(raw_body, request)
+        except WebhookVerificationError as e:
+            logger.warning(f"Rejected Vapi webhook: {e}")
+            raise HTTPException(status_code=401, detail="Invalid webhook signature")
+
         payload = await request.json()
         message = payload.get("message", payload)
         msg_type = message.get("type", "unknown")
 
         logger.info(f"Vapi webhook received: {msg_type}")
         logger.debug(f"Vapi payload: {payload}")
+
+        # Vapi doesn't document a stable per-delivery event id, unlike
+        # OpenAI's Standard Webhooks scheme - a hash of the raw body is
+        # still a correct idempotency key for the case that actually
+        # matters here (the provider retrying the exact same delivery),
+        # just not for "the same logical event sent with different
+        # framing", which isn't a documented Vapi behavior anyway.
+        event_id = f"{msg_type}:{hashlib.sha256(raw_body).hexdigest()[:32]}"
+        if await is_duplicate_event("vapi", event_id):
+            return {"status": "duplicate", "event_id": event_id}
 
         # Parse through the Vapi engine
         engine = get_voice_engine("vapi")

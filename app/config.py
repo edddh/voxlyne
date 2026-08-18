@@ -193,6 +193,20 @@ class Settings(BaseSettings):
         description="HMAC secret for webhook signature (global fallback)"
     )
 
+    # Inbound webhook signature verification (opt-in: verification is
+    # skipped with a warning, not enforced, while these are unset - turning
+    # verification on with no matching secret configured on the provider
+    # side would reject every real webhook and stop live calls, so this
+    # must be a deliberate two-sided change, not a default).
+    openai_webhook_secret: Optional[str] = Field(
+        default=None,
+        description="OpenAI webhook signing secret (Standard Webhooks scheme, from the OpenAI console). Unset = signature not verified."
+    )
+    vapi_webhook_secret: Optional[str] = Field(
+        default=None,
+        description="Vapi webhook HMAC secret (x-vapi-signature header, configured on the Vapi server URL). Unset = signature not verified."
+    )
+
     # ===========================================
     # JWT Authentication (M4)
     # ===========================================
