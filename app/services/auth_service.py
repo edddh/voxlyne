@@ -422,13 +422,19 @@ class AuthService:
             logger.debug(f"Invalid password for user: {email}")
             return None
 
-        # Update last login
-        await db.execute(
-            """
-            UPDATE users SET last_login_at = :now WHERE id = :id
-            """,
-            {"now": datetime.now(timezone.utc), "id": user["id"]},
-        )
+        # Same bypass as the SELECT above, and for the same reason: this
+        # runs after that transaction already committed (GUC reset), so
+        # without it the UPDATE's USING clause matches zero rows - not an
+        # error, just a silently-skipped last_login_at (found live: this
+        # exact gap, after fixing the SELECT half of this same function).
+        async with db.transaction():
+            await db.execute("SELECT set_config('app.is_super_admin', 'true', true)")
+            await db.execute(
+                """
+                UPDATE users SET last_login_at = :now WHERE id = :id
+                """,
+                {"now": datetime.now(timezone.utc), "id": user["id"]},
+            )
 
         return {
             "id": UUID(str(user["id"])),

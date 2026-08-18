@@ -59,14 +59,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     # Connect to database
     await connect_database()
 
-    # Run migrations
-    try:
-        await run_migrations()
-    except Exception as e:
-        logger.error(f"Migration error: {e}")
-        # Continue anyway for development
-        if settings.is_production:
-            raise
+    # Migrations are now owned by Alembic (18/08, see db_migrations/ and
+    # migrations/README-legacy.md) - applied deliberately with
+    # `alembic upgrade head`, not automatically on every boot. This legacy
+    # runner used to re-execute every migrations/*.sql file on every
+    # startup, relying on catching "already exists" errors to skip what
+    # was already applied - it just crash-looped the service in
+    # production, because one of those files does a seed INSERT that
+    # RLS now rejects (no bypass GUC set at boot time), and
+    # settings.is_production re-raises that into a hard startup failure.
+    # Left disabled, not deleted, in case something still depends on it
+    # in an environment without an .env DATABASE_URL Alembic can reach.
 
     # Start cleanup service
     cleanup_service = SessionCleanup()

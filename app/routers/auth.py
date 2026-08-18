@@ -10,7 +10,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.config import get_settings
-from app.middleware.auth_middleware import CurrentUser, get_current_user
+from app.middleware.auth_middleware import CurrentUser, get_current_user_rls_scoped
 from app.models.schemas import (
     LoginRequest,
     LoginResponse,
@@ -160,7 +160,7 @@ async def refresh_token(data: RefreshTokenRequest):
 @router.post("/logout")
 async def logout(
     data: RefreshTokenRequest,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_rls_scoped),
 ):
     """
     Logout user by revoking refresh token.
@@ -177,7 +177,7 @@ async def logout(
 
 @router.post("/logout-all")
 async def logout_all(
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_rls_scoped),
 ):
     """
     Logout user from all devices by revoking all refresh tokens.
@@ -193,7 +193,7 @@ async def logout_all(
 
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_info(
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_rls_scoped),
 ):
     """
     Get current authenticated user info.
@@ -227,7 +227,7 @@ async def get_current_user_info(
 async def change_password(
     current_password: str,
     new_password: str,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_rls_scoped),
 ):
     """
     Change current user's password.

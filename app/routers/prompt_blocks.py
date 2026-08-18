@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from app.database.db import get_database
 from app.middleware.auth_middleware import (
     CurrentUser,
-    get_current_user,
+    get_current_user_rls_scoped,
 )
 
 logger = logging.getLogger(__name__)
@@ -70,7 +70,7 @@ class BlockListResponse(BaseModel):
 @router.get("", response_model=BlockListResponse)
 async def list_blocks(
     category: Optional[str] = None,
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_rls_scoped)
 ):
     """
     List prompt blocks visible to current user.
@@ -132,7 +132,7 @@ async def list_blocks(
 @router.post("", response_model=BlockResponse, status_code=status.HTTP_201_CREATED)
 async def create_block(
     data: BlockCreate,
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_rls_scoped)
 ):
     """
     Create a new prompt block.
@@ -196,7 +196,7 @@ async def create_block(
 @router.get("/{block_id}", response_model=BlockResponse)
 async def get_block(
     block_id: UUID,
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_rls_scoped)
 ):
     """Get single block by ID (if accessible)."""
     db = get_database()
@@ -248,7 +248,7 @@ async def get_block(
 async def update_block(
     block_id: UUID,
     data: BlockUpdate,
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_rls_scoped)
 ):
     """
     Update a prompt block.
@@ -306,7 +306,7 @@ async def update_block(
 @router.delete("/{block_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_block(
     block_id: UUID,
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_rls_scoped)
 ):
     """
     Delete a prompt block.
