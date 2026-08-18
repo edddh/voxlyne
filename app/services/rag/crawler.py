@@ -25,6 +25,7 @@ indexing - a municipal site with a broken robots.txt is far more likely
 than one that deliberately wants to block us).
 """
 
+import asyncio
 import logging
 import re
 import urllib.robotparser
@@ -56,6 +57,13 @@ USER_AGENT = "AscoltaBot/1.0 (+https://ascolta.example.invalid.com)"
 # root page yielded exactly that. Not a scientific threshold, just clearly
 # above "page title only, no body".
 MIN_USEFUL_TEXT_LENGTH = 60
+
+# Polite pause between requests to the SAME site being crawled - a crawl
+# of a real municipal site's full sitemap (hundreds of pages) shouldn't
+# hammer their server in a tight burst just because httpx can do that.
+# Not configurable from the admin UI on purpose: this protects the target
+# site, not something a tenant should be able to turn off to go faster.
+REQUEST_DELAY_SECONDS = 0.3
 
 
 async def _fetch_robots(client: httpx.AsyncClient, base_url: str) -> urllib.robotparser.RobotFileParser:
@@ -129,6 +137,9 @@ async def _crawl_kportal(
         if not robots.can_fetch(USER_AGENT, url):
             continue
 
+        if count > 0:
+            await asyncio.sleep(REQUEST_DELAY_SECONDS)
+
         detail = await fetch_kapi_detail(client, url, kapi_url)
         if detail:
             title, text = detail
@@ -173,6 +184,9 @@ async def _crawl_plain_html(
         if not robots.can_fetch(USER_AGENT, url):
             logger.info(f"robots.txt disallows {url}, skipping")
             continue
+
+        if visited:
+            await asyncio.sleep(REQUEST_DELAY_SECONDS)
 
         try:
             resp = await client.get(url)
