@@ -101,13 +101,21 @@ class AnalyticsService:
             {k: v for k, v in base_params.items() if k in ("tenant_id",)},
         )
 
-        # Active projects
+        # Active projects. Was interpolating tenant_id straight into the
+        # SQL string (f"... = '{tenant_id}'") instead of binding it like
+        # every other filter in this file - tenant_id is always a UUID
+        # from the authenticated request context here, never raw user
+        # input, so there wasn't an actual injection path, but it's the
+        # kind of inconsistency worth fixing on sight (18/08).
         project_filter = "WHERE p.is_active = TRUE"
+        project_params: Dict = {}
         if tenant_id:
-            project_filter += f" AND p.tenant_id = '{tenant_id}'"
+            project_filter += " AND p.tenant_id = :tenant_id"
+            project_params["tenant_id"] = str(tenant_id)
 
         active_projects = await db.fetch_one(
             f"SELECT COUNT(*) as count FROM projects p {project_filter}",
+            project_params,
         )
 
         # CRM synced count
