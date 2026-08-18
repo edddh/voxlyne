@@ -10,12 +10,12 @@ import './index.css'
 // Palette di brand Ascolta: bianco e arancione su sfondo scuro.
 // Valori esatti prelevati dal logo (Ascolta.png) — non arrotondati a occhio.
 export const BRAND = {
-  bg: '#20262D',
-  bgElevated: '#2A313A',
-  bgContainer: '#262D35',
-  border: '#3A424C',
+  bg: '#121417', // quasi nero: usato per la maggior parte dello schermo (sider, layout)
+  bgElevated: '#1E2227', // grigio molto scuro: solo per header/dropdown/modali
+  bgContainer: '#191C20', // grigio molto scuro, appena sopra il nero: card/contenuto
+  border: '#2A2E34',
   orange: '#F47A1F',
-  orangeSoft: 'rgba(248, 126, 19, 0.16)',
+  orangeSoft: 'rgba(244, 122, 31, 0.16)',
   white: '#FFFFFF',
   textDim: 'rgba(255, 255, 255, 0.65)',
 }
