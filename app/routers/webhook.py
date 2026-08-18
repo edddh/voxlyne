@@ -22,6 +22,7 @@ from app.services.webhook_security import (
     is_duplicate_event,
     verify_openai_signature,
 )
+from app.services.agent_versions import resolve_inbound
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -121,9 +122,35 @@ async def handle_call_webhook(
 
 
 
-async def _accept_realtime_call(call_id: str, settings) -> None:
+def _extract_dialed_identifier(payload: Dict[str, Any], event_type: str) -> str | None:
+    """
+    Extract the "To" SIP header (the number/URI that was actually dialed),
+    the same way caller_number already extracts "From" below. Confirmed
+    against OpenAI's docs: realtime.call.incoming's sip_headers includes
+    both "From" and "To" entries with values like "sip:+18005551212@...".
+    """
+    if event_type != "realtime.call.incoming":
+        return None
+    sip_headers = payload.get("data", {}).get("sip_headers") or []
+    to_header = next((h for h in sip_headers if h.get("name") == "To"), None)
+    if not to_header or not to_header.get("value"):
+        return None
+    match = re.search(r'sip:([^@;>]+)', to_header["value"])
+    return match.group(1) if match else None
+
+
+async def _accept_realtime_call(call_id: str, settings, resolved: Dict[str, Any] | None) -> None:
     """
     Accept an incoming SIP call via OpenAI Realtime API.
+
+    `resolved` is what app.services.agent_versions.resolve_inbound()
+    returned for the dialed number, or None if no inbound_endpoint matched
+    it (or it matched but has no published version) - see that function's
+    docstring for why None is a real, tracked fallback, not treated as
+    "just use the global default" silently. That fallback is exactly what
+    every field below defaults to when resolved is None or missing a
+    field, preserving today's behavior for numbers that haven't been
+    migrated to an inbound_endpoint yet.
     """
     cancel_phrase = (settings.cancellation_message_text or "").strip()
     if not cancel_phrase:
@@ -131,10 +158,15 @@ async def _accept_realtime_call(call_id: str, settings) -> None:
     goodbye_phrase = (settings.goodbye_message_text or "").strip()
     if not goodbye_phrase:
         goodbye_phrase = "Le auguro una buona giornata! Arrivederci."
-    instructions = DEFAULT_PROMPT_A.format(
+
+    prompt_a = (resolved or {}).get("prompt_a") or DEFAULT_PROMPT_A
+    instructions = prompt_a.format(
         cancel_phrase=cancel_phrase,
         goodbye_phrase=goodbye_phrase,
     )
+    voice = (resolved or {}).get("voice_name") or settings.openai_realtime_voice
+    language = (resolved or {}).get("language") or "it"
+
     url = f"https://api.openai.com/v1/realtime/calls/{call_id}/accept"
     headers = {
         "Authorization": f"Bearer {settings.openai_api_key}",
@@ -149,12 +181,12 @@ async def _accept_realtime_call(call_id: str, settings) -> None:
                 "format": {"type": "audio/pcma"},
                 "transcription": {
                     "model": "whisper-1",
-                    "language": "it",
+                    "language": language,
                 },
             },
             "output": {
                 "format": {"type": "audio/pcma"},
-                "voice": settings.openai_realtime_voice,
+                "voice": voice,
             },
         },
     }
@@ -200,18 +232,41 @@ async def handle_call_started(
             if match:
                 caller_number = match.group(1)
 
+    # Resolve which tenant/project/published-version answers this number,
+    # from the "To" SIP header - the Fase 2 kernel resolver (ADR-0001 P0).
+    # None is a tracked fallback (logged below), not silently "use global
+    # defaults" - see resolve_inbound()'s docstring and ADR-0001 rule 9.
+    dialed_identifier = _extract_dialed_identifier(payload, event_type)
+    resolved = await resolve_inbound(dialed_identifier) if dialed_identifier else None
+    if dialed_identifier and not resolved:
+        logger.warning(
+            f"Nessun inbound_endpoint attivo per '{dialed_identifier}' (o nessuna "
+            f"versione pubblicata) - fallback su prompt/voce/lingua globali."
+        )
+    elif resolved:
+        logger.info(
+            f"Inbound risolto: '{dialed_identifier}' -> tenant={resolved['tenant_id']} "
+            f"project={resolved['project_id']} agent_version={resolved['agent_version_id']}"
+        )
+
     # Accept incoming SIP calls
     if event_type == "realtime.call.incoming":
         if not session_id:
             raise ValueError("Missing call_id in realtime.call.incoming payload")
-        await _accept_realtime_call(session_id, settings)
+        await _accept_realtime_call(session_id, settings, resolved)
 
     # Create call record
     call_id = uuid4()
     await db.execute(
         """
-        INSERT INTO calls (id, phone_number, status, openai_session_id, started_at)
-        VALUES (:id, :phone_number, :status, :session_id, :started_at)
+        INSERT INTO calls (
+            id, phone_number, status, openai_session_id, started_at,
+            project_id, tenant_id, agent_version_id
+        )
+        VALUES (
+            :id, :phone_number, :status, :session_id, :started_at,
+            :project_id, :tenant_id, :agent_version_id
+        )
         """,
         {
             "id": str(call_id),
@@ -219,6 +274,9 @@ async def handle_call_started(
             "status": CallStatus.PENDING_CONSENT.value,
             "session_id": session_id,
             "started_at": datetime.utcnow(),
+            "project_id": str(resolved["project_id"]) if resolved else None,
+            "tenant_id": str(resolved["tenant_id"]) if resolved else None,
+            "agent_version_id": str(resolved["agent_version_id"]) if resolved and resolved.get("agent_version_id") else None,
         }
     )
 
