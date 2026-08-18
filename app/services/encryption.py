@@ -9,12 +9,26 @@ Encrypts/decrypts:
 - Webhook secrets
 
 Key Management:
-- Encryption key loaded from environment variable ENCRYPTION_KEY
-- If not set, uses SECRET_KEY as fallback
-- Key must be 32 url-safe base64-encoded bytes
-- Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+- Key material comes from ENCRYPTION_KEY if set, else SECRET_KEY.
+- That material is SHA256-hashed into a proper 32-byte Fernet key (18/08
+  fix - see below), so it works with any passphrase-shaped string, not
+  just an already-Fernet-formatted one.
+- Same derivation as app/utils/encryption.py's CredentialsManager
+  encryption (encrypt_credentials/decrypt_credentials) - two separate
+  Fernet-based services in this codebase, now consistent instead of one
+  being fragile. Before this fix, this service required ENCRYPTION_KEY/
+  SECRET_KEY to already BE a raw 32-byte url-safe base64 Fernet key -
+  neither was, in this deployment's real .env (SECRET_KEY is a 64-char
+  hex string), so every call here raised ValueError at import time.
+  Concretely: calendar OAuth token storage (app/routers/project_config.py)
+  would have crashed on save, and app/services/calendar/scheduler.py was
+  separately reading those (never-actually-written) tokens back as plain
+  text instead of decrypting them - two compounding bugs, both real, not
+  just a TODO placeholder (fixed together, 18/08).
 """
 
+import hashlib
+import base64
 import logging
 from typing import Optional
 from cryptography.fernet import Fernet, InvalidToken
@@ -28,24 +42,22 @@ class EncryptionService:
 
     def __init__(self):
         """Initialize encryption service with key from settings"""
-        # Try encryption_key first, fallback to secret_key
         settings = get_settings()
-        encryption_key = settings.encryption_key or settings.secret_key
+        key_material = settings.encryption_key or settings.secret_key
+        if not key_material:
+            raise ValueError("ENCRYPTION_KEY or SECRET_KEY must be configured in .env for encryption")
 
-        # Ensure key is bytes
-        if isinstance(encryption_key, str):
-            encryption_key = encryption_key.encode()
+        # SHA256-hash whatever passphrase-shaped string we got into a
+        # proper 32-byte Fernet key - see the module docstring for why
+        # this replaced using the raw value directly.
+        derived_key = base64.urlsafe_b64encode(hashlib.sha256(key_material.encode()).digest())
 
-        # Validate key length and format
         try:
-            self.cipher = Fernet(encryption_key)
+            self.cipher = Fernet(derived_key)
             logger.info("Encryption service initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize encryption service: {e}")
-            raise ValueError(
-                "Invalid encryption key. Generate with: "
-                "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
-            )
+            raise ValueError(f"Invalid derived encryption key: {e}")
 
     def encrypt(self, plaintext: Optional[str]) -> Optional[str]:
         """

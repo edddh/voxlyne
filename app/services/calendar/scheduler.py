@@ -22,6 +22,7 @@ from app.services.calendar.base import (
 )
 from app.services.calendar.providers.google import GoogleCalendarProvider
 from app.services.calendar.providers.microsoft import MicrosoftCalendarProvider
+from app.services.encryption import decrypt
 
 logger = logging.getLogger(__name__)
 
@@ -313,17 +314,21 @@ class CalendarScheduler:
         if not call or not call["project_id"]:
             return None
 
-        # Get tokens from database
+        # Get tokens from database. Reads project_calendar_config, NOT the
+        # older calendar_tokens table (migrations/004_calendar_integration.sql)
+        # this used to query - project_calendar_config is what
+        # app/routers/project_config.py's save_calendar_config() actually
+        # writes to (verified 18/08: calendar_tokens has no writer anywhere
+        # in the codebase, only this now-fixed reader - a token saved from
+        # the admin UI was never going to be found here, silently falling
+        # through to the .env fallback below on every real booking attempt).
         token_record = await db.fetch_one(
             """
-            SELECT access_token_encrypted, refresh_token_encrypted,
-                   expires_at, account_email
-            FROM calendar_tokens
+            SELECT access_token_encrypted, refresh_token_encrypted, expires_at
+            FROM project_calendar_config
             WHERE project_id = :project_id
               AND provider = :provider
-              AND is_active = TRUE
-            ORDER BY updated_at DESC
-            LIMIT 1
+              AND enabled = TRUE
             """,
             {
                 "project_id": str(call["project_id"]),
@@ -332,9 +337,13 @@ class CalendarScheduler:
         )
 
         if token_record:
-            # TODO: Decrypt tokens (for now, assume plain text - NOT for production)
-            access_token = token_record["access_token_encrypted"]
-            refresh_token = token_record["refresh_token_encrypted"]
+            # Tokens are written encrypted (see app/routers/project_config.py's
+            # encrypt() call before the INSERT/UPDATE) - this was reading them
+            # back as plain text, which would hand the calendar provider a
+            # Fernet ciphertext instead of a real OAuth token on every booking
+            # attempt that actually has a stored token (18/08 fix).
+            access_token = decrypt(token_record["access_token_encrypted"])
+            refresh_token = decrypt(token_record["refresh_token_encrypted"])
         else:
             # Fall back to environment variables
             if provider_name == "google":
