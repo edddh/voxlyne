@@ -1,11 +1,30 @@
 """
 Ported from earlier-prototype via ascolta-salvage-2026-07-24, adapted for ascolta.
-Self-contained: no import/runtime dependency on the earlier-prototype or ascolta directories.
-Status: starting point for Milestone 5 (see README) - not yet wired into
-app.services.voice.factory / CallManager. Config/env resolution here is still
-file-based (ascolta-stack-config.json); the DB-driven credential/config
-resolution (CredentialsManager.get_credentials_with_fallback) will replace it
-when the concrete voice engine classes are implemented.
+
+18/08/2026 (Grok/xAI priority - see memory ascolta-grok-priority): config
+resolution switched from the static file loader (load_config/
+load_realtime_config/resolve_voice_bundle - earlier-prototype's original, single-tenant
+approach) to the Fase 2 kernel resolver (app.services.agent_versions.
+resolve_inbound), keyed on the SIP trunk's dialed number instead of a
+process-wide config file. Same contract as ADR-0002: the algorithm (LiveKit
+session tuning, endpointing/interruption/preemptive-generation config,
+latency logging) is earlier-prototype's, unchanged; the config *source* is the kernel,
+not a file.
+
+Tools deliberately NOT wired to the resolver yet (kept as _livekit_tools/
+_load_legacy_controller below, unused for now): the Tool Registry governance
+layer (policy/idempotency/audit) is Fase 4, not built. Every call answered
+through this worker today runs with tools=[] - a real, honest scope limit,
+not an oversight.
+
+NOT VERIFIED against a live LiveKit connection - this environment has no
+network path to a real LiveKit server/SIP trunk. Verified: py_compile,
+that resolve_inbound() (already proven end-to-end against calls.py's
+webhook path) is called correctly here too. The LiveKit-specific parts
+(wait_for_participant, sip.trunkPhoneNumber attribute) are implemented per
+LiveKit's own docs (confirmed via WebSearch before writing this, not
+guessed) but need a real inbound SIP call to confirm end-to-end - same
+kind of gap as the Dockerfile before it was build-tested.
 """
 from __future__ import annotations
 
@@ -23,14 +42,18 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.integrations.common.config import load_config, load_realtime_config
 from app.integrations.common.tools import build_tools
+from app.services.agent_versions import resolve_inbound
 from livekit.agents import Agent, AgentServer, AgentSession, JobContext, RunContext, cli, function_tool
 from livekit.agents.llm.tool_context import ToolFlag
 from livekit.plugins import openai, xai
-from app.integrations.voice_core.scenario import resolve_voice_bundle
 
 DEFAULT_AGENT_NAME = os.environ.get("ASCOLTA_LIVEKIT_AGENT_NAME", "ascolta-livekit")
+FALLBACK_PROMPT = (
+    "Rispondi in modo cortese e sintetico, nella lingua dell'interlocutore. "
+    "Se non hai informazioni certe sull'argomento, dillo esplicitamente invece di inventare."
+)
+FALLBACK_FIRST_MESSAGE = "Salve, sono un assistente AI. Come posso aiutarla?"
 WRITE_TOOL_NAMES = {
     "calcom_book_appointment",
     "calcom_reschedule_booking",
@@ -159,33 +182,66 @@ if os.environ.get("LIVEKIT_WORKER_PORT"):
 server = AgentServer(**_agent_server_kwargs)
 
 
+async def _resolve_trunk_number(ctx: JobContext) -> str | None:
+    """
+    The dialed number for an inbound SIP call arrives as a participant
+    attribute (sip.trunkPhoneNumber), not in job/room metadata - confirmed
+    via LiveKit's own docs before writing this (see module docstring), the
+    same way OpenAI's "To" SIP header was confirmed before webhook.py's
+    resolver. wait_for_participant() returns immediately if the SIP
+    participant already joined, otherwise waits for it.
+    """
+    try:
+        participant = await ctx.wait_for_participant()
+    except Exception:
+        logging.exception("wait_for_participant failed - no SIP participant joined?")
+        return None
+    number = (participant.attributes or {}).get("sip.trunkPhoneNumber")
+    return number.strip() if isinstance(number, str) and number.strip() else None
+
+
 @server.rtc_session(agent_name=DEFAULT_AGENT_NAME)
 async def entrypoint(ctx: JobContext) -> None:
     call_started = time.monotonic()
-    config = load_config()
-    realtime_cfg = load_realtime_config(config)
-    bundle = resolve_voice_bundle("realtime")
-    minimal_latency_test = bool(realtime_cfg.get("minimal_latency_test")) or os.environ.get("ASCOLTA_MINIMAL_LATENCY_TEST", "").lower() in {"1", "true", "yes", "on"}
-    if minimal_latency_test:
-        logging.info("LiveKit minimal latency test enabled: tools disabled and prompt minimized")
-        tools = []
-        prompt_text = "Rispondi garbatamente, in modo molto breve e naturale, nella lingua dell'interlocutore."
-        first_message = "Salve, sono un assistente AI. Come posso aiutarla?"
-    else:
-        controller = _load_legacy_controller()
-        caller_phone = _extract_caller_phone(ctx)
-        tools = _livekit_tools(controller, caller_phone, bundle.scenario_config)
-        prompt_text = bundle.prompt_text
-        first_message = bundle.first_message
 
-    provider = str(realtime_cfg.get("provider") or "xai").strip().lower()
+    # Fase 2 kernel resolver (app.services.agent_versions.resolve_inbound),
+    # not earlier-prototype's static config file - see module docstring. `resolved`
+    # is None both when the number has no active inbound_endpoint and when
+    # extraction itself fails; either way this is a tracked fallback
+    # (logged below), never a silent "just answer somehow" (ADR-0001 rule
+    # 9), same policy already applied to the OpenAI SIP path.
+    trunk_number = await _resolve_trunk_number(ctx)
+    resolved = await resolve_inbound(trunk_number) if trunk_number else None
+
+    if trunk_number and not resolved:
+        logging.warning(
+            f"Nessun inbound_endpoint attivo per '{trunk_number}' (LiveKit) - "
+            f"fallback su prompt generico."
+        )
+    elif not trunk_number:
+        logging.warning("sip.trunkPhoneNumber non disponibile sul participant - fallback su prompt generico.")
+    else:
+        logging.info(
+            f"Inbound LiveKit risolto: '{trunk_number}' -> tenant={resolved['tenant_id']} "
+            f"project={resolved['project_id']} agent_version={resolved['agent_version_id']}"
+        )
+
+    # Tools deliberately not wired here yet - Fase 4 (Tool Registry), see
+    # module docstring. _livekit_tools/_load_legacy_controller are kept in
+    # this file, unused, for when that governance layer exists.
+    tools: list[Any] = []
+    prompt_text = (resolved or {}).get("prompt_a") or FALLBACK_PROMPT
+    first_message = (resolved or {}).get("consent_message") or FALLBACK_FIRST_MESSAGE
+
+    provider_raw = (resolved or {}).get("voice_engine") or "livekit_xai"
+    provider = "openai" if "openai" in provider_raw else "xai"
     if provider == "openai":
-        model = str(realtime_cfg.get("model") or "gpt-realtime").strip() or "gpt-realtime"
-        voice = str(realtime_cfg.get("voice") or "marin").strip() or "marin"
+        model = "gpt-realtime"
+        voice = (resolved or {}).get("voice_name") or "marin"
         realtime_model = openai.realtime.RealtimeModel(model=model, voice=voice)
     else:
-        model = str(realtime_cfg.get("model") or "grok-voice-fast-1.0").strip() or "grok-voice-fast-1.0"
-        voice = str(realtime_cfg.get("voice") or "eve").strip() or "eve"
+        model = "grok-voice-fast-1.0"
+        voice = (resolved or {}).get("voice_name") or "eve"
         if voice.islower():
             voice = voice.title()
         realtime_model = xai.realtime.RealtimeModel(model=model, voice=voice)
