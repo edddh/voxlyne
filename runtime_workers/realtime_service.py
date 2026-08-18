@@ -601,23 +601,31 @@ class LegacyController:
             # first-class project_id field to it is a bigger change than
             # this needs (same reuse the resolver itself already relies on).
             state = self.call_context.get(call_id) if call_id else None
+            query = arguments.get("query", "")
             if not state or not state.scenario_name:
+                logging.warning("search_knowledge_base: no call context for call_id=%s query=%r", call_id, query)
                 return {"status": "error", "message": "No project context for this call"}
             from uuid import UUID as _UUID
 
             from app.services.rag.search import search_knowledge_base
 
             tenant_id = state.metadata.get("tenant_id")
+            project_id = state.scenario_name
             try:
                 results = await search_knowledge_base(
-                    project_id=_UUID(state.scenario_name),
+                    project_id=_UUID(project_id),
                     tenant_id=_UUID(tenant_id) if tenant_id else None,
-                    query=arguments["query"],
+                    query=query,
                     top_k=5,
                 )
             except ValueError as e:
-                logging.warning("search_knowledge_base unavailable: %s", e)
+                logging.warning("search_knowledge_base unavailable: project=%s query=%r error=%s", project_id, query, e)
                 return {"status": "unavailable", "message": "Knowledge base not configured for this project"}
+            top_score = round(results[0]["similarity"], 3) if results else None
+            logging.info(
+                "search_knowledge_base: project=%s query=%r -> %d result(s), top_similarity=%s",
+                project_id, query, len(results), top_score,
+            )
             if not results:
                 return {"status": "no_results"}
             return {"status": "ok", "results": results}
