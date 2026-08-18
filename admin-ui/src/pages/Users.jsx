@@ -6,6 +6,7 @@ import {
   PlusOutlined, EditOutlined, DeleteOutlined, KeyOutlined, SearchOutlined
 } from '@ant-design/icons'
 import * as usersApi from '../api/users'
+import { getTenants } from '../api/tenants'
 import { useAuth } from '../hooks/useAuth'
 
 const { Title } = Typography
@@ -41,11 +42,22 @@ function Users() {
   const [selectedUserId, setSelectedUserId] = useState(null)
   const [form] = Form.useForm()
   const [passwordForm] = Form.useForm()
+  const [tenants, setTenants] = useState([])
   const { isSuperAdmin } = useAuth()
 
   useEffect(() => {
     loadUsers()
   }, [page, pageSize, search, roleFilter])
+
+  useEffect(() => {
+    // Il campo tenant nel modale serve solo al super_admin - un admin di
+    // tenant crea sempre utenti nel proprio, il backend lo assegna da solo.
+    if (isSuperAdmin) {
+      getTenants({ page_size: 200 })
+        .then((data) => setTenants(data.tenants || []))
+        .catch(() => setTenants([]))
+    }
+  }, [isSuperAdmin])
 
   const loadUsers = async () => {
     setLoading(true)
@@ -269,6 +281,24 @@ function Users() {
               ]}
             >
               <Input.Password />
+            </Form.Item>
+          )}
+          {isSuperAdmin && !editingUser && (
+            <Form.Item
+              name="tenant_id"
+              label="Tenant"
+              rules={[{ required: true, message: 'Seleziona il tenant di questo utente' }]}
+              tooltip="Senza tenant l'utente non appartiene a nessun cliente: non potrà vedere progetti, chiamate o altri utenti."
+            >
+              <Select
+                placeholder="Seleziona tenant"
+                showSearch
+                optionFilterProp="children"
+              >
+                {tenants.map((t) => (
+                  <Option key={t.id} value={t.id}>{t.name}</Option>
+                ))}
+              </Select>
             </Form.Item>
           )}
           <Form.Item

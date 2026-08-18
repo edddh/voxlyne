@@ -129,6 +129,22 @@ async def get_current_user(
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Every non-super-admin role is expected to belong to exactly one
+    # tenant. A user with tenant_id = NULL here isn't a valid "sees
+    # nothing" state - every tenant-scoped query in the app builds its
+    # WHERE clause from str(current_user.tenant_id), and str(None) is the
+    # literal string "None", which Postgres rejects as an invalid UUID.
+    # Without this check that surfaces as an opaque 500 on whatever screen
+    # the user opens first (found live: this is exactly what produced
+    # "errore caricamento utenti" on the Users page). Fail clearly here
+    # instead, at the one place every authenticated request passes through.
+    if not user.is_super_admin and user.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Questo account non è associato a nessun tenant. Contatta un amministratore.",
+        )
+
     return user
 
 
