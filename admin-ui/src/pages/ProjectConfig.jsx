@@ -8,6 +8,7 @@ import * as projectConfigApi from '../api/projectConfig'
 import * as projectsApi from '../api/projects'
 import TelephonyTab from '../components/TelephonyTab'
 import KnowledgeBaseTab from '../components/KnowledgeBaseTab'
+import PdfEmailTab from '../components/PdfEmailTab'
 import dayjs from 'dayjs'
 
 const { Title, Text } = Typography
@@ -590,6 +591,11 @@ function ProjectConfig() {
       key: 'knowledge-base',
       label: 'Knowledge Base',
       children: <KnowledgeBaseTab projectId={projectId} />,
+    },
+    {
+      key: 'pdf-email',
+      label: 'PDF & Email',
+      children: <PdfEmailTab projectId={projectId} />,
     },
   ]
 
