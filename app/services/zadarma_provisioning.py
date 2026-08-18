@@ -66,21 +66,36 @@ async def _resolve_zadarma_api_credentials(tenant_id: UUID) -> Optional[Dict[str
 
 def _sign_request(method_path: str, params: Dict[str, Any], api_secret: str) -> str:
     """
-    Zadarma's HMAC-SHA1 signature scheme, exactly as documented:
-    sort params alphabetically by key, http_build_query-encode them,
-    then HMAC-SHA1( method_path + encoded_params + md5(encoded_params),
-    api_secret ), base64-encoded.
+    Zadarma's HMAC-SHA1 signature scheme. The published docs describe this
+    as "base64(hmac_sha1(...))", which reads as base64 of the raw digest
+    bytes - that version 401s every time. Cross-checked against the
+    official client (github.com/zadarma/user-api-py-v1, zadarma/api.py,
+    __get_auth_string_for_header): it base64-encodes the *hex-string*
+    representation of the HMAC digest, not the raw bytes - i.e.
+    base64(hmac.hexdigest().encode()), not base64(hmac.digest()). Also:
+    `format=json` is always added to params and included in the signed
+    string, even though it's not documented as mandatory. Verified live
+    against GET /v1/info/balance/ (18/08) - only this exact combination
+    (hex-then-base64 + format=json) returns 200 instead of 401.
     """
+    params = dict(params)
+    params.setdefault("format", "json")
     sorted_params = dict(sorted(params.items()))
     encoded = urllib.parse.urlencode(sorted_params)
     md5_hash = hashlib.md5(encoded.encode("utf-8")).hexdigest()
     to_sign = f"{method_path}{encoded}{md5_hash}"
-    digest = hmac.new(api_secret.encode("utf-8"), to_sign.encode("utf-8"), hashlib.sha1).digest()
-    return base64.b64encode(digest).decode("utf-8")
+    hex_digest = hmac.new(api_secret.encode("utf-8"), to_sign.encode("utf-8"), hashlib.sha1).hexdigest()
+    return base64.b64encode(hex_digest.encode("utf-8")).decode("utf-8")
 
 
 def xai_sip_uri(phone_number: str) -> str:
-    """The exact URI xAI's byo_trunk docs specify - see module docstring."""
+    """
+    The URI xAI's byo_trunk docs specify for the carrier to dial:
+    sip:{number}@sip.voice.x.ai;transport=tls. Used as-is in instructions
+    text shown to a human. point_number_at_sip_uri() normalizes it itself
+    before calling Zadarma (see its docstring) - callers don't need a
+    separate Zadarma-specific variant of this URI.
+    """
     return f"sip:{phone_number}@sip.voice.x.ai;transport=tls"
 
 
@@ -105,7 +120,18 @@ async def point_number_at_sip_uri(
             f"build_manual_instructions() to show the manual dashboard steps instead."
         )
 
-    params = {"number": phone_number, "sip_id": sip_uri}
+    # format=json added by _sign_request() (mandatory for the signature to
+    # validate, see its docstring) - build params here first so the exact
+    # same dict (with format included) is both signed and sent.
+    #
+    # Found empirically (18/08, undocumented): `number` must have no
+    # leading "+" - Zadarma replies 400 "Check phone's number" otherwise.
+    # `sip_id` just needs the "sip:" scheme stripped - the "+" inside the
+    # user part is fine there. Verified live: number="390200000000",
+    # sip_id="+39 000 000 0000 admin@example.test;transport=tls" -> 200 success.
+    zadarma_number = phone_number.lstrip("+")
+    zadarma_sip_id_value = sip_uri.removeprefix("sip:")
+    params = {"number": zadarma_number, "sip_id": zadarma_sip_id_value, "format": "json"}
     signature = _sign_request(SET_SIP_ID_PATH, params, creds["api_secret"])
 
     async with httpx.AsyncClient(timeout=20) as client:
