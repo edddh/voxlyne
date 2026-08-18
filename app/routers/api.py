@@ -132,11 +132,23 @@ async def create_project_from_template(
     """
     Create a new project from a template.
 
-    Copies prompt_a, prompt_b from template and creates:
-    - Project with is_template=FALSE, tenant_id=current_user.tenant_id
-    - Prompt placeholders entry with defaults
-    - Project CRM config entry (disabled)
-    - Project calendar config entry (disabled)
+    Copies the template's "personality" (prompt_a, prompt_b, consent
+    message, voice, language, voice engine, output_config incl. PDF/email
+    settings) - NOT instance-specific fields that would make two projects
+    collide on the same external resource if copied verbatim (sip_number,
+    vapi_assistant_id, twilio_phone_number, vapi_phone_number_id,
+    elevenlabs_agent_id, livekit_agent_name - each new project gets its
+    own via Telefonia/Credenziali, not inherited).
+
+    Fixed 18/08 (found while checking on maintainer's "il meccanismo dei
+    template e' completo?"): this used to (a) run as two separate
+    statements with no transaction - a crash between them left an
+    orphaned project with no prompt_placeholders row, (b) not copy
+    voice_engine/output_config at all - cloning a Grok-based template
+    silently produced an openai_realtime project instead, (c) claim in
+    its docstring to also create CRM/calendar config rows it never
+    actually created - removed that claim rather than adding dead rows
+    those integrations' own save endpoints already upsert on first use.
     """
     db = get_database()
 
@@ -170,40 +182,58 @@ async def create_project_from_template(
             detail=f"Project with slug '{slug}' already exists"
         )
 
-    # Create project from template
-    project_id = await db.execute(
-        """
-        INSERT INTO projects (
-            tenant_id, name, slug, type, description,
-            prompt_a, prompt_b, consent_message, voice_name, language,
-            is_template, from_template_id, created_by
-        ) VALUES (
-            :tenant_id, :name, :slug, :type, :description,
-            :prompt_a, :prompt_b, :consent_message, :voice_name, :language,
-            FALSE, :template_id, :created_by
-        ) RETURNING id
-        """,
-        {
-            "tenant_id": str(current_user.tenant_id),
-            "name": name,
-            "slug": slug,
-            "type": template["type"],
-            "description": description or template["description"],
-            "prompt_a": template["prompt_a"],
-            "prompt_b": template["prompt_b"],
-            "consent_message": template["consent_message"],
-            "voice_name": template["voice_name"],
-            "language": template["language"],
-            "template_id": str(template_id),
-            "created_by": str(current_user.id),
-        }
-    )
+    template_output_config = template["output_config"]
+    if isinstance(template_output_config, str):
+        try:
+            template_output_config = json.loads(template_output_config)
+        except (json.JSONDecodeError, TypeError):
+            template_output_config = {}
 
-    # Create default prompt placeholders
-    await db.execute(
-        "INSERT INTO prompt_placeholders (project_id) VALUES (:project_id) ON CONFLICT DO NOTHING",
-        {"project_id": str(project_id)}
-    )
+    async with db.transaction():
+        project_id = await db.fetch_val(
+            """
+            INSERT INTO projects (
+                tenant_id, name, slug, type, description,
+                prompt_a, prompt_b, consent_message, voice_name, language,
+                voice_engine, ai_provider, output_config, voice_provider_config,
+                is_template, from_template_id, created_by
+            ) VALUES (
+                :tenant_id, :name, :slug, :type, :description,
+                :prompt_a, :prompt_b, :consent_message, :voice_name, :language,
+                :voice_engine, :ai_provider, :output_config, :voice_provider_config,
+                FALSE, :template_id, :created_by
+            ) RETURNING id
+            """,
+            {
+                "tenant_id": str(current_user.tenant_id),
+                "name": name,
+                "slug": slug,
+                "type": template["type"],
+                "description": description or template["description"],
+                "prompt_a": template["prompt_a"],
+                "prompt_b": template["prompt_b"],
+                "consent_message": template["consent_message"],
+                "voice_name": template["voice_name"],
+                "language": template["language"],
+                "voice_engine": template["voice_engine"],
+                "ai_provider": template["ai_provider"],
+                "output_config": json.dumps(template_output_config or {}),
+                "voice_provider_config": json.dumps(template["voice_provider_config"] or {})
+                    if not isinstance(template["voice_provider_config"], str)
+                    else template["voice_provider_config"],
+                "template_id": str(template_id),
+                "created_by": str(current_user.id),
+            }
+        )
+
+        # Default prompt placeholders - the one bootstrap row a new
+        # project actually needs up front (CRM/calendar config rows are
+        # upserted lazily by their own save endpoints, no need to
+        # pre-create empty ones here).
+        await db.execute(
+            "INSERT INTO prompt_placeholders (project_id) VALUES (:project_id) ON CONFLICT DO NOTHING",
+            {"project_id": str(project_id)}
+        )
 
     # Return created project
     project = await db.fetch_one("SELECT * FROM projects WHERE id = :id", {"id": str(project_id)})
