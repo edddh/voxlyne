@@ -125,7 +125,19 @@ function KnowledgeBaseTab({ projectId }) {
         </Space>
       ),
     },
-    { title: 'Stato', dataIndex: 'status', render: (v) => <Tag color={STATUS_COLORS[v]}>{v}</Tag> },
+    {
+      title: 'Stato',
+      key: 'status',
+      render: (_, r) => (
+        <Space>
+          <Tag color={STATUS_COLORS[r.status]}>{r.status}</Tag>
+          {r.status === 'processing' && (
+            <Text type="secondary">{r.pages_crawled} pagine analizzate finora</Text>
+          )}
+        </Space>
+      ),
+    },
+    { title: 'Pagine indicizzate', dataIndex: 'pages_crawled' },
     { title: 'Chunk indicizzati', dataIndex: 'chunk_count' },
     {
       title: 'Ricrawl automatico',

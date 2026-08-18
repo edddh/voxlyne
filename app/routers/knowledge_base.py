@@ -165,7 +165,7 @@ async def list_sources(
     db = get_database()
     rows = await db.fetch_all(
         """
-        SELECT id, source_type, url, filename, status, error, chunk_count, created_at, indexed_at,
+        SELECT id, source_type, url, filename, status, error, chunk_count, pages_crawled, created_at, indexed_at,
                crawl_max_pages, recrawl_interval_hours, next_crawl_at
         FROM kb_sources WHERE project_id = :project_id ORDER BY created_at DESC
         """,
