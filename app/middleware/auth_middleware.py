@@ -7,12 +7,13 @@ FastAPI dependencies for JWT authentication and RBAC.
 import logging
 from dataclasses import dataclass
 from functools import wraps
-from typing import Callable, List, Optional
+from typing import AsyncGenerator, Callable, List, Optional
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from app.database.db import get_database
 from app.services.auth_service import AuthService
 
 logger = logging.getLogger(__name__)
@@ -148,6 +149,46 @@ async def get_current_user(
     return user
 
 
+async def get_current_user_rls_scoped(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> AsyncGenerator[CurrentUser, None]:
+    """
+    Same as get_current_user, but additionally opens a transaction for the
+    rest of the request and sets the Postgres session GUCs (app.tenant_id,
+    app.is_super_admin) that the RLS policies added 18/08 (see
+    db_migrations/versions/d6554c3662e6_*.py) read via current_setting().
+
+    Verified empirically (not just from reading the `databases` library
+    source, which is misleading here) against the real DB before wiring
+    this in: set_config(..., true) inside `async with db.transaction()`
+    stays scoped to that transaction under real concurrent load - no
+    leakage between requests, no residue after commit, and a value set in
+    one function (this dependency) is correctly visible to db.execute()
+    calls made later in a completely different function (the route
+    handler), because `databases` tracks the open transaction via a
+    contextvar bound to the current asyncio task, which is the same task
+    for the whole request in FastAPI.
+
+    Deliberately a separate dependency from get_current_user rather than
+    folded into it: webhooks and other unauthenticated paths must keep
+    working exactly as before, with no transaction and no GUC set (RLS
+    then default-denies the 4 protected tables to them, which is correct -
+    none of those paths touch those tables today, see the migration's own
+    docstring).
+    """
+    db = get_database()
+    async with db.transaction():
+        await db.execute(
+            "SELECT set_config('app.tenant_id', :tenant_id, true), "
+            "set_config('app.is_super_admin', :is_super_admin, true)",
+            {
+                "tenant_id": str(current_user.tenant_id) if current_user.tenant_id else "",
+                "is_super_admin": "true" if current_user.is_super_admin else "false",
+            },
+        )
+        yield current_user
+
+
 async def get_current_user_optional(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
@@ -171,7 +212,7 @@ def require_role(role: str):
     """
 
     async def role_checker(
-        current_user: CurrentUser = Depends(get_current_user),
+        current_user: CurrentUser = Depends(get_current_user_rls_scoped),
     ) -> CurrentUser:
         if current_user.role != role and current_user.role != "super_admin":
             raise HTTPException(
@@ -194,7 +235,7 @@ def require_roles(roles: List[str]):
     """
 
     async def roles_checker(
-        current_user: CurrentUser = Depends(get_current_user),
+        current_user: CurrentUser = Depends(get_current_user_rls_scoped),
     ) -> CurrentUser:
         if current_user.role not in roles and current_user.role != "super_admin":
             raise HTTPException(
@@ -269,7 +310,7 @@ class TenantContext:
 
 
 async def get_tenant_context(
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_rls_scoped),
 ) -> TenantContext:
     """
     FastAPI dependency to get tenant context for the current user.
@@ -310,7 +351,7 @@ def require_tenant_access(resource_tenant_id: Optional[UUID]):
     """
 
     async def checker(
-        current_user: CurrentUser = Depends(get_current_user),
+        current_user: CurrentUser = Depends(get_current_user_rls_scoped),
     ) -> CurrentUser:
         if not check_tenant_access(current_user, resource_tenant_id):
             raise HTTPException(

@@ -48,6 +48,15 @@ function AppLayout() {
       icon: <UserOutlined />,
       label: 'Utenti',
     },
+    // Il super_admin gestisce le credenziali di ogni tenant dalla lista
+    // Tenant (icona per riga) - qui serve solo per l'admin del proprio
+    // tenant, che altrimenti non ha alcuna via per raggiungere una pagina
+    // che esiste ed e' gia' protetta correttamente lato backend.
+    user?.role === 'admin' && {
+      key: `/tenants/${user.tenant_id}/credentials`,
+      icon: <ApiOutlined />,
+      label: 'Credenziali',
+    },
     isSuperAdmin && {
       key: '/tenants',
       icon: <TeamOutlined />,
