@@ -3,6 +3,7 @@ Ascolta - Email Service
 Sends PDF reports via email after interview completion
 """
 
+import asyncio
 import logging
 import smtplib
 from email.mime.application import MIMEApplication
@@ -170,17 +171,26 @@ class EmailService:
         )
         msg.attach(pdf_part)
 
-        # Send via SMTP
+        # Send via SMTP - offloaded to a thread (18/08 fix): smtplib is a
+        # blocking, synchronous library (real network I/O - TLS handshake,
+        # auth, the send itself), and this method is async but was calling
+        # it inline with no executor - blocking the whole process's event
+        # loop, including any live voice call being served concurrently,
+        # for the entire SMTP conversation. Same bug class fixed the same
+        # day in post_processor.py's OpenAI call.
         try:
-            with smtplib.SMTP(self.settings.smtp_host, self.settings.smtp_port) as server:
-                server.starttls()
-                if self.settings.smtp_user and self.settings.smtp_password:
-                    server.login(self.settings.smtp_user, self.settings.smtp_password)
-                server.send_message(msg)
-                logger.debug(f"SMTP send complete to {to_email}")
+            await asyncio.to_thread(self._send_via_smtp, msg, to_email)
         except smtplib.SMTPException as e:
             logger.error(f"SMTP error: {e}")
             raise
+
+    def _send_via_smtp(self, msg: MIMEMultipart, to_email: str) -> None:
+        with smtplib.SMTP(self.settings.smtp_host, self.settings.smtp_port) as server:
+            server.starttls()
+            if self.settings.smtp_user and self.settings.smtp_password:
+                server.login(self.settings.smtp_user, self.settings.smtp_password)
+            server.send_message(msg)
+            logger.debug(f"SMTP send complete to {to_email}")
 
 
 def get_email_service() -> EmailService:

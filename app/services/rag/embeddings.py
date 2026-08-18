@@ -26,7 +26,7 @@ EMBEDDING_MODEL = "text-embedding-3-small"
 EMBEDDING_DIMENSIONS = 1536
 
 
-async def resolve_embedding_api_key(tenant_id: UUID) -> Optional[str]:
+async def resolve_openai_api_key(tenant_id: UUID) -> Optional[str]:
     if not tenant_id:
         return None
     from app.services.credentials.manager import CredentialsManager
@@ -48,7 +48,7 @@ async def embed_texts(tenant_id: UUID, texts: List[str]) -> List[List[float]]:
     if not texts:
         return []
 
-    api_key = await resolve_embedding_api_key(tenant_id)
+    api_key = await resolve_openai_api_key(tenant_id)
     if not api_key:
         raise ValueError(
             f"No llm/openai credential stored for tenant {tenant_id} - cannot generate "

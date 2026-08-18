@@ -3,6 +3,7 @@ Ascolta - PDF Generator
 Converts JSON data to beautifully formatted PDF candidate profiles
 """
 
+import asyncio
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -70,18 +71,26 @@ class PDFGenerator:
                 call_metadata.get("project_id")
             )
 
-            # 3. Generate PDF bytes
-            pdf_bytes = self.generate_pdf(
+            # 3. Generate PDF bytes - offloaded to a thread (18/08 fix):
+            # weasyprint's rendering is synchronous, CPU-bound work (can
+            # take real time for a multi-page report), called inline here
+            # would block the whole process's event loop - including any
+            # live voice call being served concurrently. Same bug class as
+            # post_processor.py's OpenAI call and email_service.py's SMTP
+            # send, fixed the same day.
+            pdf_bytes = await asyncio.to_thread(
+                self.generate_pdf,
                 data=json_data,
                 call_metadata=call_metadata,
-                template_name=template_name
+                template_name=template_name,
             )
 
-            # 4. Upload to S3
-            s3_key = self.s3_client.upload_pdf(
+            # 4. Upload to S3 - boto3 is sync, real network I/O, same fix.
+            s3_key = await asyncio.to_thread(
+                self.s3_client.upload_pdf,
                 file_content=pdf_bytes,
                 call_id=call_id,
-                project_slug=project_slug
+                project_slug=project_slug,
             )
 
             # 5. Update record with PDF info
@@ -284,9 +293,9 @@ class PDFGenerator:
         if not record or not record["pdf_key"]:
             raise PDFGeneratorError(f"No PDF found for call {call_id}")
 
-        # Download from S3
+        # Download from S3 (boto3 sync, offloaded - see generate_and_upload_pdf)
         try:
-            pdf_bytes = self.s3_client.download_pdf(record["pdf_key"])
+            pdf_bytes = await asyncio.to_thread(self.s3_client.download_pdf, record["pdf_key"])
             return pdf_bytes
         except Exception as e:
             raise PDFGeneratorError(f"Failed to download PDF: {e}") from e
@@ -319,10 +328,10 @@ class PDFGenerator:
         if not record:
             raise PDFGeneratorError(f"No record found for call {call_id}")
 
-        # Delete old PDF if exists
+        # Delete old PDF if exists (boto3 sync, offloaded - see generate_and_upload_pdf)
         if record["pdf_key"]:
             try:
-                self.s3_client.delete_pdf(record["pdf_key"])
+                await asyncio.to_thread(self.s3_client.delete_pdf, record["pdf_key"])
                 logger.info(f"Deleted old PDF: {record['pdf_key']}")
             except Exception as e:
                 logger.warning(f"Failed to delete old PDF: {e}")

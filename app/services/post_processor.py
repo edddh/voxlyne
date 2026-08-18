@@ -29,7 +29,17 @@ class PostProcessor:
 
     def __init__(self):
         self.settings = get_settings()
-        self.client = openai.OpenAI(api_key=self.settings.openai_api_key)
+        # No client built here anymore - see _extract_json (18/08 fix):
+        # this used to be openai.OpenAI(api_key=self.settings.openai_api_key),
+        # a SYNC client used from async code with no await on the actual
+        # API call (blocks the whole event loop - including any live voice
+        # call in progress - for the duration of the OpenAI request), AND
+        # a single global key from .env (currently "sk-test-dummy" in this
+        # deployment - post-processing could never have succeeded for any
+        # tenant). Now resolved per-tenant (service_type="llm",
+        # provider="openai" - same credential RAG embeddings use, see
+        # app/services/rag/embeddings.py), no env fallback, same rule as
+        # every other provider integration in this codebase.
 
     async def process_call(
         self,
@@ -87,6 +97,16 @@ class PostProcessor:
                 )
 
             prompt_b = project["prompt_b"]
+            tenant_id = project.get("tenant_id")
+
+            from app.services.rag.embeddings import resolve_openai_api_key
+            api_key = await resolve_openai_api_key(tenant_id) if tenant_id else None
+            if not api_key:
+                raise PostProcessingError(
+                    f"No llm/openai credential stored for tenant {tenant_id} - cannot "
+                    f"post-process this call. Add one under Credenziali tenant (servizio "
+                    f"'llm', provider 'openai')."
+                )
 
             # 3. Build transcript
             transcript_text = await self._build_transcript(call_id)
@@ -104,6 +124,7 @@ class PostProcessor:
                 transcript_text=transcript_text,
                 prompt_b=prompt_b,
                 phone_number=call.get("phone_number"),
+                api_key=api_key,
             )
 
             # 5. Store in records table
@@ -171,7 +192,7 @@ class PostProcessor:
             if project_id:
                 project = await db.fetch_one(
                     """
-                    SELECT id, slug, prompt_b, output_config
+                    SELECT id, tenant_id, slug, prompt_b, output_config
                     FROM projects
                     WHERE id = :id AND is_active = TRUE
                     """,
@@ -181,7 +202,7 @@ class PostProcessor:
                 # Fetch default project
                 project = await db.fetch_one(
                     """
-                    SELECT p.id, p.slug, p.prompt_b, p.output_config
+                    SELECT p.id, p.tenant_id, p.slug, p.prompt_b, p.output_config
                     FROM projects p
                     INNER JOIN settings s ON s.key = 'default_project_slug'
                     WHERE p.slug = s.value AND p.is_active = TRUE
@@ -223,6 +244,7 @@ class PostProcessor:
         self,
         transcript_text: str,
         prompt_b: str,
+        api_key: str,
         phone_number: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
@@ -231,6 +253,8 @@ class PostProcessor:
         Args:
             transcript_text: Full conversation transcript
             prompt_b: Data extraction prompt from project
+            api_key: Tenant's own llm/openai credential (resolved by the
+                caller, process_call() - no global/env key, see __init__)
             phone_number: Caller's phone number (injected into context)
 
         Returns:
@@ -248,10 +272,18 @@ METADATI:
 - Numero telefono: {phone_number or 'Non disponibile'}
 """
 
-            # Call GPT-4 with Prompt B
+            # Call GPT-4 with Prompt B. AsyncOpenAI + await - was
+            # openai.OpenAI (sync client) called with no await from this
+            # async method, which blocks the whole process's event loop
+            # for the duration of the request (including any live voice
+            # call being served concurrently) - fixed 18/08 together with
+            # the global-key issue (see __init__).
             logger.debug(f"Calling GPT-4 for JSON extraction")
 
-            response = self.client.chat.completions.create(
+            from openai import AsyncOpenAI
+
+            client = AsyncOpenAI(api_key=api_key)
+            response = await client.chat.completions.create(
                 model="gpt-4o",  # Use GPT-4 Turbo for best JSON extraction
                 messages=[
                     {"role": "system", "content": prompt_b},
