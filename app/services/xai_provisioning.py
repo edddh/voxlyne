@@ -81,3 +81,33 @@ async def register_byo_trunk_number(
     result = resp.json()
     logger.info(f"Registered {phone_number} with xAI byo_trunk -> {webhook_url}")
     return result
+
+
+async def deregister_byo_trunk_number(tenant_id: UUID, phone_number_id: str) -> None:
+    """
+    DELETE https://api.x.ai/v2/phone-numbers/{phoneNumberId} - undocumented
+    beyond POST, verified empirically live (18/08, see FEATURE_MATRIX.md):
+    returns 204 No Content on success. phone_number_id is xAI's own id
+    (like "phone_..."), NOT the E.164 phone number - the caller (telephony
+    provisioning router) is responsible for resolving it from whatever it
+    stored at registration time (see connect_number's credential_key
+    "number:{phone_number}").
+    """
+    api_key = await resolve_provider_api_key(tenant_id, "xai")
+    if not api_key:
+        raise ValueError(f"No voice/xai credential stored for tenant {tenant_id} - cannot deregister.")
+
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await client.delete(
+            f"{XAI_PHONE_NUMBERS_URL}/{phone_number_id}",
+            headers={"Authorization": f"Bearer {api_key}"},
+        )
+
+    if resp.status_code not in (200, 204, 404):
+        # 404 is treated as success - "already not registered" is the
+        # same end state as "successfully deregistered", not an error the
+        # admin needs to see.
+        logger.error(f"xAI phone number deregistration failed: {resp.status_code} {resp.text}")
+        raise RuntimeError(f"xAI deregistration failed: {resp.status_code} {resp.text}")
+
+    logger.info(f"Deregistered xAI phone number {phone_number_id}")

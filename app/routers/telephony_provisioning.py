@@ -161,3 +161,62 @@ async def connect_number(
         "zadarma": {"status": zadarma_status, **zadarma_detail},
         "inbound_endpoint": "active",
     }
+
+
+class DisconnectNumberRequest(BaseModel):
+    project_id: UUID
+    phone_number: str = Field(..., description="E.164, must match how it was registered by connect-number")
+
+
+@router.post("/telephony/disconnect-number")
+async def disconnect_number(
+    body: DisconnectNumberRequest,
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin"])),
+) -> Dict[str, Any]:
+    """
+    Reverses connect_number(): deregisters the number from xAI (so it
+    stops routing calls there) and deactivates its inbound_endpoints row
+    (calls immediately stop resolving to this project even if xAI's own
+    deregistration is slow to propagate). Does NOT touch the Zadarma-side
+    SIP redirect - undoing that safely needs to know what to point the
+    number back AT (its previous SIP account, another gateway...), which
+    connect_number() never captured; leaving it pointed at xAI's now-dead
+    registration just means the number stops working until an admin
+    redirects it again, the same failure mode as forgetting to reconnect
+    a phone line - visible and safe, not a silent misroute.
+    """
+    db = get_database()
+    project = await db.fetch_one(
+        "SELECT id, tenant_id FROM projects WHERE id = :id", {"id": str(body.project_id)},
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    tenant_id = UUID(str(project["tenant_id"])) if project["tenant_id"] else None
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="Project has no owning tenant")
+    if not check_tenant_access(current_user, tenant_id):
+        raise HTTPException(status_code=403, detail="Access denied to this project")
+
+    manager = CredentialsManager()
+    creds = await manager._fetch_db_credentials(
+        entity_type="tenant", entity_id=tenant_id, service_type="telephony", provider="xai",
+        credential_key=f"number:{body.phone_number}",
+    )
+    phone_number_id = creds.get("phone_number_id") if creds else None
+
+    xai_status = "not_registered_via_ascolta"
+    if phone_number_id:
+        try:
+            await xai_provisioning.deregister_byo_trunk_number(tenant_id, phone_number_id)
+            xai_status = "deregistered"
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except RuntimeError as e:
+            raise HTTPException(status_code=502, detail=f"xAI deregistration failed: {e}")
+
+    result = await db.execute(
+        "UPDATE inbound_endpoints SET is_active = FALSE WHERE identifier = :id AND project_id = :project_id",
+        {"id": body.phone_number, "project_id": str(body.project_id)},
+    )
+
+    return {"phone_number": body.phone_number, "xai": xai_status, "inbound_endpoint": "deactivated"}

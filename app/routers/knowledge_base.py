@@ -60,6 +60,7 @@ class AddUrlSourceRequest(BaseModel):
 
 class UpdateScheduleRequest(BaseModel):
     recrawl_interval_hours: Optional[int] = Field(default=None, ge=1)
+    max_pages: Optional[int] = Field(default=None, ge=1, le=3000)
 
 
 @router.post("/projects/{project_id}/kb/sources/url", status_code=status.HTTP_201_CREATED)
@@ -105,13 +106,20 @@ async def update_schedule(
     db = get_database()
     row = await db.fetch_one(
         """
-        UPDATE kb_sources SET recrawl_interval_hours = :interval,
+        UPDATE kb_sources SET
+            recrawl_interval_hours = :interval,
+            crawl_max_pages = COALESCE(:max_pages, crawl_max_pages),
             next_crawl_at = CASE WHEN :interval IS NOT NULL AND indexed_at IS NOT NULL
                 THEN indexed_at + (:interval || ' hours')::interval ELSE NULL END
         WHERE id = :id AND project_id = :project_id AND source_type = 'url'
-        RETURNING id, recrawl_interval_hours, next_crawl_at
+        RETURNING id, recrawl_interval_hours, crawl_max_pages, next_crawl_at
         """,
-        {"interval": body.recrawl_interval_hours, "id": str(source_id), "project_id": str(project_id)},
+        {
+            "interval": body.recrawl_interval_hours,
+            "max_pages": body.max_pages,
+            "id": str(source_id),
+            "project_id": str(project_id),
+        },
     )
     if not row:
         raise HTTPException(status_code=404, detail="Source not found or not a URL source")

@@ -4,7 +4,7 @@ import {
   Popconfirm, Alert, Typography, List,
 } from 'antd'
 import {
-  PlusOutlined, UploadOutlined, DeleteOutlined, SyncOutlined, SearchOutlined, LinkOutlined, FileOutlined,
+  PlusOutlined, UploadOutlined, DeleteOutlined, SyncOutlined, SearchOutlined, LinkOutlined, FileOutlined, EditOutlined,
 } from '@ant-design/icons'
 import * as kb from '../api/knowledgeBase'
 
@@ -32,6 +32,9 @@ function KnowledgeBaseTab({ projectId }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState(null)
   const [searching, setSearching] = useState(false)
+  const [scheduleModalSource, setScheduleModalSource] = useState(null)
+  const [scheduleForm] = Form.useForm()
+  const [savingSchedule, setSavingSchedule] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -101,6 +104,28 @@ function KnowledgeBaseTab({ projectId }) {
     }
   }
 
+  const openScheduleModal = (source) => {
+    setScheduleModalSource(source)
+    scheduleForm.setFieldsValue({
+      max_pages: source.crawl_max_pages,
+      recrawl_interval_hours: source.recrawl_interval_hours || undefined,
+    })
+  }
+
+  const handleSaveSchedule = async (values) => {
+    setSavingSchedule(true)
+    try {
+      await kb.updateSchedule(projectId, scheduleModalSource.id, values)
+      message.success('Pianificazione aggiornata')
+      setScheduleModalSource(null)
+      load()
+    } catch (error) {
+      message.error(error.response?.data?.detail || 'Errore nel salvataggio della pianificazione')
+    } finally {
+      setSavingSchedule(false)
+    }
+  }
+
   const handleSearch = async () => {
     if (!searchQuery.trim()) return
     setSearching(true)
@@ -150,9 +175,14 @@ function KnowledgeBaseTab({ projectId }) {
       render: (_, r) => (
         <Space>
           {r.source_type === 'url' && (
-            <Button size="small" icon={<SyncOutlined />} onClick={() => handleReindex(r.id)}>
-              Reindicizza
-            </Button>
+            <>
+              <Button size="small" icon={<SyncOutlined />} onClick={() => handleReindex(r.id)}>
+                Reindicizza
+              </Button>
+              <Button size="small" icon={<EditOutlined />} onClick={() => openScheduleModal(r)}>
+                Pianificazione
+              </Button>
+            </>
           )}
           <Popconfirm title="Eliminare questa fonte e i suoi chunk?" onConfirm={() => handleDelete(r.id)}>
             <Button size="small" danger icon={<DeleteOutlined />} />
@@ -210,6 +240,27 @@ function KnowledgeBaseTab({ projectId }) {
             name="recrawl_interval_hours"
             label="Ricrawl automatico ogni (ore)"
             tooltip="Lascia vuoto per un'indicizzazione una tantum - potrai comunque rilanciarla a mano con 'Reindicizza'"
+          >
+            <InputNumber min={1} style={{ width: '100%' }} placeholder="es. 24 = una volta al giorno" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title="Modifica pianificazione crawl"
+        open={!!scheduleModalSource}
+        onCancel={() => setScheduleModalSource(null)}
+        onOk={() => scheduleForm.submit()}
+        confirmLoading={savingSchedule}
+      >
+        <Form form={scheduleForm} layout="vertical" onFinish={handleSaveSchedule}>
+          <Form.Item name="max_pages" label="Numero massimo di pagine per crawl">
+            <InputNumber min={1} max={3000} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item
+            name="recrawl_interval_hours"
+            label="Ricrawl automatico ogni (ore)"
+            tooltip="Lascia vuoto per disattivare il ricrawl automatico"
           >
             <InputNumber min={1} style={{ width: '100%' }} placeholder="es. 24 = una volta al giorno" />
           </Form.Item>

@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import { Form, Input, Button, Alert, Typography, Space, Descriptions, Tag, Divider, message } from 'antd'
-import { PhoneOutlined } from '@ant-design/icons'
-import { connectNumber } from '../api/telephony'
+import { useState, useEffect, useCallback } from 'react'
+import { Form, Input, Button, Alert, Typography, Space, Descriptions, Tag, Divider, message, Table, Popconfirm } from 'antd'
+import { PhoneOutlined, DisconnectOutlined } from '@ant-design/icons'
+import { connectNumber, disconnectNumber, listConnectedNumbers } from '../api/telephony'
 
 const { Text, Paragraph } = Typography
 
@@ -12,13 +12,28 @@ const { Text, Paragraph } = Typography
  * servizio "telephony", provider "zadarma") at xAI's SIP endpoint. One
  * click, one backend call (POST /api/telephony/connect-number) - the
  * whole reason this exists (maintainer, 18/08): "questa procedura dovra'
- * essere eseguibile tramite interfaccia ascolta, insieme con le istruzioni
+ * essere eseguibile tramite interfaccia ascolta, insieme alle istruzioni
  * per reindirizzare da zadarma o equivalente".
  */
 function TelephonyTab({ projectId }) {
   const [form] = Form.useForm()
   const [connecting, setConnecting] = useState(false)
   const [result, setResult] = useState(null)
+  const [numbers, setNumbers] = useState([])
+  const [loadingNumbers, setLoadingNumbers] = useState(true)
+
+  const loadNumbers = useCallback(async () => {
+    try {
+      const data = await listConnectedNumbers(projectId)
+      setNumbers(data.filter((n) => n.is_active))
+    } catch (error) {
+      message.error('Errore nel caricamento dei numeri collegati')
+    } finally {
+      setLoadingNumbers(false)
+    }
+  }, [projectId])
+
+  useEffect(() => { loadNumbers() }, [loadNumbers])
 
   const handleConnect = async (values) => {
     setConnecting(true)
@@ -27,6 +42,8 @@ function TelephonyTab({ projectId }) {
       const data = await connectNumber(projectId, values)
       setResult(data)
       message.success(`Numero ${values.phone_number} collegato a questo progetto`)
+      form.resetFields()
+      loadNumbers()
     } catch (error) {
       message.error(error.response?.data?.detail || 'Errore durante il collegamento del numero')
     } finally {
@@ -34,12 +51,54 @@ function TelephonyTab({ projectId }) {
     }
   }
 
+  const handleDisconnect = async (phoneNumber) => {
+    try {
+      await disconnectNumber(projectId, phoneNumber)
+      message.success(`Numero ${phoneNumber} scollegato (deregistrato da xAI)`)
+      loadNumbers()
+    } catch (error) {
+      message.error(error.response?.data?.detail || 'Errore durante lo scollegamento')
+    }
+  }
+
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
+      <div>
+        <Text strong>Numeri collegati a questo progetto</Text>
+        <Table
+          style={{ marginTop: 8 }}
+          rowKey="id"
+          size="small"
+          loading={loadingNumbers}
+          dataSource={numbers}
+          pagination={false}
+          locale={{ emptyText: 'Nessun numero collegato' }}
+          columns={[
+            { title: 'Numero', dataIndex: 'identifier' },
+            { title: 'Tipo', dataIndex: 'identifier_type' },
+            {
+              title: 'Azioni',
+              key: 'actions',
+              render: (_, r) => (
+                <Popconfirm
+                  title={`Scollegare ${r.identifier}?`}
+                  description="Deregistra il numero da xAI - il numero smettera' di rispondere finche' non lo ricolleghi."
+                  onConfirm={() => handleDisconnect(r.identifier)}
+                >
+                  <Button size="small" danger icon={<DisconnectOutlined />}>Scollega</Button>
+                </Popconfirm>
+              ),
+            },
+          ]}
+        />
+      </div>
+
+      <Divider />
+
       <Alert
         type="info"
         showIcon
-        message="Collega un numero reale a questo progetto"
+        message="Collega un nuovo numero reale a questo progetto"
         description="Registra il numero presso xAI (Grok voice) e configura l'instradamento SIP lato Zadarma (se le credenziali API sono configurate per questo tenant), oppure mostra le istruzioni manuali per farlo a mano."
       />
 

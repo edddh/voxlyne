@@ -35,9 +35,9 @@ export const reindexSource = async (projectId, sourceId) => {
   return response.data
 }
 
-export const updateSchedule = async (projectId, sourceId, recrawl_interval_hours) => {
+export const updateSchedule = async (projectId, sourceId, { recrawl_interval_hours, max_pages }) => {
   const response = await client.patch(`/api/projects/${projectId}/kb/sources/${sourceId}/schedule`, {
-    recrawl_interval_hours,
+    recrawl_interval_hours, max_pages,
   })
   return response.data
 }
