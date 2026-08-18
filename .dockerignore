@@ -34,8 +34,12 @@ docker-compose.yml
 *.md
 docs/
 
-# Frontend (non serve nel container backend!)
-admin-ui/
+# Frontend: il sorgente serve (viene buildato in uno stage Node dedicato,
+# vedi Dockerfile - app/main.py:226 monta admin-ui/dist e la serve dallo
+# stesso container backend, non è un servizio separato). Escludiamo solo
+# gli artefatti locali che lo stage li rigenera comunque da zero.
+admin-ui/node_modules/
+admin-ui/dist/
 node_modules/
 
 # Logs

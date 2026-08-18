@@ -1,5 +1,18 @@
 # Ascolta - Dockerfile
-# Milestone 1: Voice Communication MVP
+# Multi-stage: admin-ui (Node) buildata prima, poi copiata nell'immagine
+# Python che la serve (app/main.py monta admin-ui/dist come StaticFiles -
+# senza questo stage l'immagine parte ma l'admin UI risponde 404).
+
+FROM node:20-slim AS admin-ui-builder
+
+WORKDIR /build/admin-ui
+
+COPY admin-ui/package.json admin-ui/package-lock.json ./
+RUN npm ci
+
+COPY admin-ui/ ./
+RUN npm run build
+
 
 FROM python:3.11-slim
 
@@ -31,6 +44,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
+
+# admin-ui/ è escluso dal contesto (vedi .dockerignore): la dist buildata
+# nello stage precedente arriva qui esplicitamente.
+COPY --from=admin-ui-builder /build/admin-ui/dist ./admin-ui/dist
 
 # Create directories for data persistence
 RUN mkdir -p /app/data /app/logs
