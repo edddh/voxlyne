@@ -59,11 +59,13 @@ import httpx
 import websockets
 from openai import AsyncOpenAI
 
+from app.database.db import get_database
 from app.integrations.common.config import active_services, load_config, load_realtime_config, load_scenario_config, resolve_scenario
 from app.integrations.common.tools import build_tools
 from app.integrations.voice_core.scenario import resolve_voice_bundle
 from app.integrations.voice_core.state import VoiceCallState, VoiceStateStore
 from app.integrations.voice_core.xai_session import build_xai_session_update
+from app.models.schemas import CallStatus
 from app.services.agent_versions import resolve_inbound, resolve_provider_api_key
 
 SERVICE_DIR = Path(__file__).resolve().parent
@@ -904,6 +906,104 @@ class LegacyController:
             return await self.run_nc_api("files", "get", "--path", arguments["path"])
         raise ValueError(f"Unknown tool: {name}")
 
+    async def _create_call_record(
+        self, xai_call_id: str, caller_number: str, resolved: dict[str, Any],
+    ) -> "uuid.UUID":
+        """
+        Ascolta's own `calls` row for this xAI call - see the 18/08 fix note
+        above its call site. Mirrors app/routers/webhook.py's
+        handle_call_started() INSERT for the OpenAI path: Ascolta's own
+        internal id (not xAI's call_id string, which goes in the new
+        xai_call_id column - same pattern as vapi_call_id/twilio_call_sid).
+        No RLS bypass needed here despite running outside a request
+        context: `calls` has no RLS policy at all (deliberately, see
+        FEATURE_MATRIX.md - the inbound path historically never populated
+        tenant_id; this fix populates it, but the RLS decision for `calls`
+        itself is unchanged/out of scope here).
+        """
+        import uuid
+
+        internal_call_id = uuid.uuid4()
+        db = get_database()
+        await db.execute(
+            """
+            INSERT INTO calls (
+                id, phone_number, status, xai_call_id, started_at,
+                project_id, tenant_id, agent_version_id, voice_engine, direction
+            ) VALUES (
+                :id, :phone_number, :status, :xai_call_id, :started_at,
+                :project_id, :tenant_id, :agent_version_id, 'xai_sip_direct', 'inbound'
+            )
+            """,
+            {
+                "id": str(internal_call_id),
+                "phone_number": caller_number or "unknown",
+                "status": CallStatus.IN_PROGRESS.value,
+                "xai_call_id": xai_call_id,
+                "started_at": datetime.now(timezone.utc),
+                "project_id": str(resolved["project_id"]),
+                "tenant_id": str(resolved["tenant_id"]),
+                "agent_version_id": str(resolved["agent_version_id"]) if resolved.get("agent_version_id") else None,
+            },
+        )
+        return internal_call_id
+
+    async def _persist_transcript(self, internal_call_id: str, role: str, text: str) -> None:
+        """Same schema/pattern as app/services/realtime_session.py's _persist_transcript (OpenAI path)."""
+        if not text:
+            return
+        db = get_database()
+        try:
+            await db.execute(
+                """
+                INSERT INTO transcripts (call_id, role, content, timestamp)
+                VALUES (:call_id, :role, :content, :timestamp)
+                """,
+                {
+                    "call_id": internal_call_id,
+                    "role": role,
+                    "content": text,
+                    "timestamp": datetime.now(timezone.utc),
+                },
+            )
+        except Exception:
+            logging.exception("Failed to persist transcript for call %s", internal_call_id)
+
+    async def _finalize_call_record(self, state: "VoiceCallState") -> None:
+        """
+        Marks the call completed and triggers post-processing (JSON
+        extraction, PDF/email if enabled, CRM sync) - same
+        call_manager.CallManager the OpenAI path uses, reused as-is rather
+        than reimplemented here.
+        """
+        internal_call_id = state.metadata.get("internal_call_id")
+        if not internal_call_id:
+            return
+
+        db = get_database()
+        try:
+            await db.execute(
+                """
+                UPDATE calls SET ended_at = COALESCE(ended_at, :ended_at), status = :status WHERE id = :id
+                """,
+                {
+                    "id": internal_call_id,
+                    "ended_at": datetime.now(timezone.utc),
+                    "status": CallStatus.COMPLETED.value,
+                },
+            )
+        except Exception:
+            logging.exception("Failed to finalize call record for %s", internal_call_id)
+            return
+
+        from app.services.call_manager import CallManager
+        from uuid import UUID as _UUID
+
+        # Same pattern as app/routers/webhook.py (which also instantiates
+        # its own CallManager() rather than importing a shared singleton -
+        # there isn't one).
+        await CallManager()._handle_interview_complete(_UUID(internal_call_id))
+
     async def handle_webhook(self, payload: bytes, headers: dict[str, str]) -> dict[str, Any]:
         text = payload.decode()
         if self.webhook_secret:
@@ -957,6 +1057,19 @@ class LegacyController:
             voice = resolved.get("voice_name") or self.voice
             language = resolved.get("language") or self.response_language or "it"
 
+            # Ascolta's own call record - was entirely missing before 18/08
+            # (maintainer: "ma la trascrizione delle telefonate e gli analytics
+            # sono a posto?" - they weren't, for this path: this worker only
+            # ever ran the live audio session, no `calls` row, no
+            # transcript, no post-processing trigger - a real call left no
+            # trace in the DB at all). Mirrors app/routers/webhook.py's
+            # handle_call_started() for the OpenAI path.
+            internal_call_id = await self._create_call_record(
+                xai_call_id=call_id,
+                caller_number=caller_number,
+                resolved=resolved,
+            )
+
             self.call_context.put(
                 VoiceCallState(
                     call_id=call_id,
@@ -969,7 +1082,7 @@ class LegacyController:
                     model=str(self.model or "grok-voice-fast-1.0"),
                     voice=str(voice),
                     api_key=api_key,
-                    metadata={"tenant_id": str(resolved["tenant_id"])},
+                    metadata={"tenant_id": str(resolved["tenant_id"]), "internal_call_id": str(internal_call_id)},
                 )
             )
             logging.info(
@@ -984,8 +1097,11 @@ class LegacyController:
             if call_id and call_id in self.active_calls:
                 task = self.active_calls.pop(call_id)
                 task.cancel()
+            state = self.call_context.get(call_id) if call_id else None
             if call_id:
                 self.call_context.pop(call_id, None)
+            if state:
+                await self._finalize_call_record(state)
             return {"status": "ended", "call_id": call_id}
 
         return {"status": "ignored", "event_type": event_type}
@@ -1063,9 +1179,17 @@ class LegacyController:
                 if etype == "session.created":
                     logging.info("Session created for call %s", call_id)
                 elif etype == "conversation.item.input_audio_transcription.completed":
-                    logging.info("User transcript [%s]: %s", call_id, event.get("transcript", ""))
+                    transcript_text = event.get("transcript", "")
+                    logging.info("User transcript [%s]: %s", call_id, transcript_text)
+                    internal_call_id = call_state.metadata.get("internal_call_id")
+                    if internal_call_id:
+                        await self._persist_transcript(internal_call_id, "user", transcript_text)
                 elif etype == "response.output_audio_transcript.done":
-                    logging.info("Assistant transcript [%s]: %s", call_id, event.get("transcript", ""))
+                    transcript_text = event.get("transcript", "")
+                    logging.info("Assistant transcript [%s]: %s", call_id, transcript_text)
+                    internal_call_id = call_state.metadata.get("internal_call_id")
+                    if internal_call_id:
+                        await self._persist_transcript(internal_call_id, "assistant", transcript_text)
                 elif etype == "response.function_call_arguments.done":
                     await self.handle_function_call(conn, SimpleNamespace(**event), call_id)
                 elif etype == "error":
