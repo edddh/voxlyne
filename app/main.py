@@ -21,7 +21,7 @@ from app.database.db import (
     run_migrations,
 )
 from app.models.schemas import ErrorResponse, HealthResponse
-from app.routers import agent_versions, analytics, api, auth, calendar, calls, credentials, crm, health, outbound, project_config, prompt_blocks, prompts, templates, tenants, users, webhook, webhook_vapi, webhook_xai
+from app.routers import agent_versions, analytics, api, auth, calendar, calls, credentials, crm, health, outbound, project_config, prompt_blocks, prompts, telephony_provisioning, templates, tenants, users, webhook, webhook_vapi, webhook_xai
 from app.services.session_cleanup import SessionCleanup
 
 # ===========================================
@@ -221,6 +221,9 @@ app.include_router(webhook_xai.router, prefix="/api", tags=["Webhook xAI"])
 
 # Credentials router (M5.5: Service credentials management)
 app.include_router(credentials.router, prefix="/api", tags=["Credentials"])
+
+# Telephony provisioning router (connect a real number to a project: xAI + Zadarma, 18/08)
+app.include_router(telephony_provisioning.router, prefix="/api", tags=["Telephony Provisioning"])
 
 
 # ===========================================
