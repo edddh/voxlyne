@@ -389,14 +389,26 @@ class AuthService:
         """
         db = get_database()
 
-        user = await db.fetch_one(
-            """
-            SELECT id, tenant_id, email, password_hash, full_name, role, is_active
-            FROM users
-            WHERE email = :email
-            """,
-            {"email": email.lower()},
-        )
+        # Login runs before any JWT exists, so no request-scoped GUC has
+        # been set (see auth_middleware.get_current_user_rls_scoped) - the
+        # RLS policy added 18/08 on `users` would otherwise deny this
+        # lookup for everyone, since there's no tenant context yet. This
+        # is exactly what breaking this bypass looks like: login stops
+        # working for every user, found live right after that migration.
+        # The bypass is scoped to this one SELECT via a transaction-local
+        # GUC (set_config(..., true) = SET LOCAL), not a blanket RLS
+        # disable - finding a user by the email they themselves typed in
+        # is the one thing this function is supposed to be able to do.
+        async with db.transaction():
+            await db.execute("SELECT set_config('app.is_super_admin', 'true', true)")
+            user = await db.fetch_one(
+                """
+                SELECT id, tenant_id, email, password_hash, full_name, role, is_active
+                FROM users
+                WHERE email = :email
+                """,
+                {"email": email.lower()},
+            )
 
         if not user:
             logger.debug(f"User not found: {email}")
@@ -438,18 +450,25 @@ class AuthService:
         """
         db = get_database()
 
-        user = await db.fetch_one(
-            """
-            SELECT u.id, u.tenant_id, u.email, u.full_name, u.role,
-                   u.is_active, u.email_verified, u.avatar_url,
-                   u.last_login_at, u.created_at,
-                   t.name as tenant_name, t.slug as tenant_slug
-            FROM users u
-            LEFT JOIN tenants t ON u.tenant_id = t.id
-            WHERE u.id = :id
-            """,
-            {"id": str(user_id)},
-        )
+        # Same reasoning as authenticate_user() above: called from the
+        # /refresh and /me-style routes to hydrate a user's own profile
+        # from a user_id already proven by a valid JWT/refresh token, not
+        # from anything the caller controls beyond that. Needs the same
+        # transaction-scoped bypass, for the same reason.
+        async with db.transaction():
+            await db.execute("SELECT set_config('app.is_super_admin', 'true', true)")
+            user = await db.fetch_one(
+                """
+                SELECT u.id, u.tenant_id, u.email, u.full_name, u.role,
+                       u.is_active, u.email_verified, u.avatar_url,
+                       u.last_login_at, u.created_at,
+                       t.name as tenant_name, t.slug as tenant_slug
+                FROM users u
+                LEFT JOIN tenants t ON u.tenant_id = t.id
+                WHERE u.id = :id
+                """,
+                {"id": str(user_id)},
+            )
 
         if not user:
             return None

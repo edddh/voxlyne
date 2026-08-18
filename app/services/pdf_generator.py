@@ -209,23 +209,29 @@ class PDFGenerator:
         """
         db = get_database()
 
-        if project_id:
-            project = await db.fetch_one(
-                "SELECT slug FROM projects WHERE id = :id",
-                {"id": str(project_id)}
-            )
-        else:
-            # Fetch default project slug from settings
-            setting = await db.fetch_one(
-                "SELECT value FROM settings WHERE key = 'default_project_slug'"
-            )
-            if setting:
+        # Same reasoning as PostProcessor._fetch_project: runs from the
+        # automatic post-call pipeline, no request-scoped GUC set, RLS on
+        # `projects` would otherwise deny it. project_id comes from the
+        # call record, not from caller input.
+        async with db.transaction():
+            await db.execute("SELECT set_config('app.is_super_admin', 'true', true)")
+            if project_id:
                 project = await db.fetch_one(
-                    "SELECT slug FROM projects WHERE slug = :slug",
-                    {"slug": setting["value"]}
+                    "SELECT slug FROM projects WHERE id = :id",
+                    {"id": str(project_id)}
                 )
             else:
-                project = None
+                # Fetch default project slug from settings
+                setting = await db.fetch_one(
+                    "SELECT value FROM settings WHERE key = 'default_project_slug'"
+                )
+                if setting:
+                    project = await db.fetch_one(
+                        "SELECT slug FROM projects WHERE slug = :slug",
+                        {"slug": setting["value"]}
+                    )
+                else:
+                    project = None
 
         if not project:
             # Fallback to generic slug

@@ -158,26 +158,36 @@ class PostProcessor:
         """
         db = get_database()
 
-        if project_id:
-            project = await db.fetch_one(
-                """
-                SELECT id, slug, prompt_b, output_config
-                FROM projects
-                WHERE id = :id AND is_active = TRUE
-                """,
-                {"id": str(project_id)}
-            )
-        else:
-            # Fetch default project
-            project = await db.fetch_one(
-                """
-                SELECT p.id, p.slug, p.prompt_b, p.output_config
-                FROM projects p
-                INNER JOIN settings s ON s.key = 'default_project_slug'
-                WHERE p.slug = s.value AND p.is_active = TRUE
-                LIMIT 1
-                """
-            )
+        # Runs from the automatic post-call pipeline (webhook.py ->
+        # call_manager -> here), triggered by the provider webhook with no
+        # user request and no JWT - no request-scoped GUC has been set (see
+        # auth_middleware.get_current_user_rls_scoped), so the RLS policy
+        # added 18/08 on `projects` would otherwise deny this lookup for
+        # every call. project_id comes from the call record itself, not
+        # from anything a caller controls, so bypassing tenant filtering
+        # for this one internal lookup is safe.
+        async with db.transaction():
+            await db.execute("SELECT set_config('app.is_super_admin', 'true', true)")
+            if project_id:
+                project = await db.fetch_one(
+                    """
+                    SELECT id, slug, prompt_b, output_config
+                    FROM projects
+                    WHERE id = :id AND is_active = TRUE
+                    """,
+                    {"id": str(project_id)}
+                )
+            else:
+                # Fetch default project
+                project = await db.fetch_one(
+                    """
+                    SELECT p.id, p.slug, p.prompt_b, p.output_config
+                    FROM projects p
+                    INNER JOIN settings s ON s.key = 'default_project_slug'
+                    WHERE p.slug = s.value AND p.is_active = TRUE
+                    LIMIT 1
+                    """
+                )
 
         return dict(project) if project else None
 
