@@ -4,6 +4,7 @@ Converts JSON data to beautifully formatted PDF candidate profiles
 """
 
 import asyncio
+import json
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +23,33 @@ logger = logging.getLogger(__name__)
 class PDFGeneratorError(Exception):
     """Raised when PDF generation fails."""
     pass
+
+
+# Named templates a project can pick via output_config['pdf']['template'] -
+# an explicit allowlist, not an arbitrary filename, so this can never be
+# used to read a file outside app/templates/pdf/. "default"/"candidate"
+# both map to the original recruiting-shaped template (backward
+# compatible with every project created before this option existed -
+# ProjectCreate's default_factory used "default" as the value);
+# "generic" is the new schema-agnostic one (18/08).
+PDF_TEMPLATE_MAP = {
+    "default": "candidate.html",
+    "candidate": "candidate.html",
+    "generic": "generic.html",
+}
+DEFAULT_PDF_TEMPLATE = "candidate.html"
+
+
+def pdf_is_enabled(output_config: Optional[Dict[str, Any]]) -> bool:
+    """
+    True unless output_config['pdf']['enabled'] is explicitly False -
+    matches ProjectCreate's default_factory (pdf enabled by default),
+    so every project created before this option existed keeps generating
+    PDFs exactly as before. A project like Exampleville's URP line sets this
+    False (18/08: "il progetto Exampleville non richiede generazione del pdf").
+    """
+    pdf_cfg = (output_config or {}).get("pdf") or {}
+    return pdf_cfg.get("enabled", True)
 
 
 class PDFGenerator:
@@ -44,7 +72,7 @@ class PDFGenerator:
         self,
         call_id: UUID,
         json_data: Dict[str, Any],
-        template_name: str = "candidate.html"
+        template_name: Optional[str] = None,
     ) -> str:
         """
         Generate PDF from JSON data and upload to S3.
@@ -52,7 +80,12 @@ class PDFGenerator:
         Args:
             call_id: UUID of the call
             json_data: Structured data extracted from transcript
-            template_name: Jinja2 template filename
+            template_name: Jinja2 template filename - pass explicitly to
+                override, or leave None to resolve from the project's own
+                output_config['pdf']['template'] (18/08, see
+                PDF_TEMPLATE_MAP). Callers that already gate on
+                output_config['pdf']['enabled'] (call_manager.py,
+                webhook_vapi.py) don't need to pass this at all.
 
         Returns:
             S3 object key (path) of uploaded PDF
@@ -65,6 +98,11 @@ class PDFGenerator:
 
             # 1. Fetch call metadata
             call_metadata = await self._fetch_call_metadata(call_id)
+
+            if template_name is None:
+                output_config = await self.fetch_output_config(call_metadata.get("project_id"))
+                pdf_cfg = (output_config or {}).get("pdf") or {}
+                template_name = PDF_TEMPLATE_MAP.get(pdf_cfg.get("template"), DEFAULT_PDF_TEMPLATE)
 
             # 2. Fetch project slug
             project_slug = await self._fetch_project_slug(
@@ -248,6 +286,33 @@ class PDFGenerator:
 
         return project["slug"]
 
+    async def fetch_output_config(self, project_id: Optional[UUID]) -> Dict[str, Any]:
+        """
+        Fetch and parse the project's output_config JSONB - the config
+        surface maintainer asked for (18/08: "il template dipende dal
+        progetto... tutto deve essere attivabile e configurabile"), already
+        shaped for this in ProjectCreate's default_factory
+        (app/models/schemas.py: output_config['pdf'] = {enabled, template}),
+        it just wasn't being read anywhere until now.
+        """
+        db = get_database()
+        async with db.transaction():
+            await db.execute("SELECT set_config('app.is_super_admin', 'true', true)")
+            if not project_id:
+                return {}
+            project = await db.fetch_one(
+                "SELECT output_config FROM projects WHERE id = :id", {"id": str(project_id)},
+            )
+        if not project or not project["output_config"]:
+            return {}
+        raw = project["output_config"]
+        if isinstance(raw, str):
+            try:
+                return json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                return {}
+        return dict(raw)
+
     async def _update_record_pdf_info(
         self,
         call_id: UUID,
@@ -337,7 +402,6 @@ class PDFGenerator:
                 logger.warning(f"Failed to delete old PDF: {e}")
 
         # Generate new PDF
-        import json
         json_data = json.loads(record["json_data"]) if isinstance(record["json_data"], str) else record["json_data"]
 
         s3_key = await self.generate_and_upload_pdf(

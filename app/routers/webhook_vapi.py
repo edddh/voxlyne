@@ -293,32 +293,42 @@ async def _post_process_call(call_id: UUID) -> None:
         json_data = await post_processor.process_call(call_id)
         logger.info(f"JSON extraction completed for outbound call {call_id}")
 
-        # 2. Generate PDF
-        from app.services.pdf_generator import PDFGenerator
+        # 2. Generate PDF - gated on the project's own
+        # output_config['pdf']['enabled'] (18/08, same reasoning/fix as
+        # call_manager.py's inbound pipeline - see pdf_is_enabled()).
+        from app.services.pdf_generator import PDFGenerator, pdf_is_enabled
         pdf_generator = PDFGenerator()
-        await pdf_generator.generate_and_upload_pdf(call_id, json_data)
-        logger.info(f"PDF generated for outbound call {call_id}")
-
-        # 3. Send email (if enabled)
-        from app.services.email_service import EmailService
-        email_service = EmailService()
 
         call_metadata = await db.fetch_one(
-            "SELECT id, started_at, duration_seconds, phone_number FROM calls WHERE id = :id",
+            "SELECT id, project_id, started_at, duration_seconds, phone_number FROM calls WHERE id = :id",
             {"id": str(call_id)},
         )
+        call_metadata = dict(call_metadata) if call_metadata else None
+        output_config = await pdf_generator.fetch_output_config(
+            call_metadata.get("project_id") if call_metadata else None
+        )
 
-        if email_service.is_enabled():
-            try:
-                pdf_bytes = await pdf_generator.download_pdf(call_id)
-                await email_service.send_candidate_report(
-                    pdf_bytes=pdf_bytes,
-                    json_data=json_data,
-                    call_metadata=dict(call_metadata) if call_metadata else None,
-                )
-                logger.info(f"Email sent for outbound call {call_id}")
-            except Exception as e:
-                logger.error(f"Failed to send email for outbound call {call_id}: {e}")
+        if pdf_is_enabled(output_config):
+            await pdf_generator.generate_and_upload_pdf(call_id, json_data)
+            logger.info(f"PDF generated for outbound call {call_id}")
+
+            # 3. Send email (if enabled)
+            from app.services.email_service import EmailService
+            email_service = EmailService()
+
+            if email_service.is_enabled():
+                try:
+                    pdf_bytes = await pdf_generator.download_pdf(call_id)
+                    await email_service.send_candidate_report(
+                        pdf_bytes=pdf_bytes,
+                        json_data=json_data,
+                        call_metadata=call_metadata,
+                    )
+                    logger.info(f"Email sent for outbound call {call_id}")
+                except Exception as e:
+                    logger.error(f"Failed to send email for outbound call {call_id}: {e}")
+        else:
+            logger.info(f"PDF disabled for this project, skipping PDF+email for outbound call {call_id}")
 
         # 4. CRM sync (if enabled)
         try:

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Esito chiamata{% if data.phone_number %} - {{ data.phone_number }}{% endif %}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 20mm;
+            @bottom-right {
+                content: "Pagina " counter(page) " di " counter(pages);
+                font-size: 9pt;
+                color: #999;
+            }
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            font-size: 11pt;
+            line-height: 1.6;
+            color: #333;
+        }
+        .header {
+            border-bottom: 3px solid #F47A1F;
+            padding-bottom: 15px;
+            margin-bottom: 25px;
+        }
+        .header h1 { font-size: 22pt; color: #F47A1F; margin-bottom: 5px; }
+        .header .subtitle { font-size: 11pt; color: #666; }
+        .metadata {
+            background-color: #f8f9fa;
+            padding: 12px;
+            border-left: 4px solid #F47A1F;
+            margin-bottom: 25px;
+            font-size: 10pt;
+        }
+        .metadata table { width: 100%; border-collapse: collapse; }
+        .metadata td { padding: 2px 8px 2px 0; }
+        .metadata td:first-child { color: #666; width: 30%; }
+        .field {
+            margin-bottom: 14px;
+            page-break-inside: avoid;
+        }
+        .field .label {
+            font-size: 9pt;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #999;
+            margin-bottom: 3px;
+        }
+        .field .value { font-size: 11pt; }
+        .field .value ul { margin: 4px 0 0 18px; }
+        .field .value table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+        .field .value table td, .field .value table th {
+            border: 1px solid #e0e0e0;
+            padding: 4px 8px;
+            font-size: 10pt;
+            text-align: left;
+        }
+        .footer {
+            margin-top: 30px;
+            padding-top: 10px;
+            border-top: 1px solid #e0e0e0;
+            font-size: 8pt;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Esito chiamata</h1>
+        <div class="subtitle">Generato automaticamente da Ascolta</div>
+    </div>
+
+    <div class="metadata">
+        <table>
+            <tr><td>Data chiamata</td><td>{{ call_date }}</td></tr>
+            <tr><td>Durata</td><td>{{ call_duration }}</td></tr>
+            {% if data.phone_number %}<tr><td>Numero</td><td>{{ data.phone_number }}</td></tr>{% endif %}
+        </table>
+    </div>
+
+    {# Generic dump of whatever prompt_b extracted - no assumption about
+       field names (unlike candidate.html, which is shaped for the
+       recruiting use case). Works for any project's output schema. #}
+    {% macro render_value(value) %}
+        {% if value is mapping %}
+            <table>
+                {% for k, v in value.items() %}
+                <tr><td><strong>{{ k | replace('_', ' ') | capitalize }}</strong></td><td>{{ v if v is not mapping and v is not sequence or v is string else render_value(v) }}</td></tr>
+                {% endfor %}
+            </table>
+        {% elif value is sequence and value is not string %}
+            {% if value | length > 0 %}
+                <ul>{% for item in value %}<li>{{ item if item is not mapping else render_value(item) }}</li>{% endfor %}</ul>
+            {% else %}
+                <span style="color:#999">—</span>
+            {% endif %}
+        {% elif value in [None, ''] %}
+            <span style="color:#999">—</span>
+        {% else %}
+            {{ value }}
+        {% endif %}
+    {% endmacro %}
+
+    {% for key, value in data.items() if key != 'phone_number' %}
+    <div class="field">
+        <div class="label">{{ key | replace('_', ' ') | capitalize }}</div>
+        <div class="value">{{ render_value(value) }}</div>
+    </div>
+    {% endfor %}
+
+    <div class="footer">Documento generato il {{ generation_date }}</div>
+</body>
+</html>
