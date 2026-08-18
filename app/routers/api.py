@@ -32,6 +32,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["api"])
 
 
+async def _assert_call_access(call_id: UUID, current_user: CurrentUser) -> None:
+    """Same contract as the identical helper in calendar.py/crm.py: 404 on
+    both "not found" and "not yours". A call with tenant_id = NULL (every
+    inbound call today, pending the Fase 2 resolver) is super_admin-only."""
+    db = get_database()
+    call = await db.fetch_one(
+        "SELECT tenant_id FROM calls WHERE id = :call_id",
+        {"call_id": str(call_id)},
+    )
+    if not call or not check_tenant_access(current_user, call["tenant_id"]):
+        raise HTTPException(status_code=404, detail="Call not found")
+
+
 def _serialize_project(project_row) -> dict:
     """Normalize project row for API output."""
     item = dict(project_row)
@@ -76,10 +89,11 @@ async def list_assigned_templates(
 
 @router.get("/projects", response_model=List[Project])
 async def list_projects(
-    active_only: bool = Query(True, description="Only return active projects")
+    active_only: bool = Query(True, description="Only return active projects"),
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator", "power_user", "user"])),
 ):
     """
-    List all projects.
+    List projects visible to the current user's tenant (all tenants for super_admin).
 
     Args:
         active_only: Filter to active projects only (default: True)
@@ -89,12 +103,20 @@ async def list_projects(
     """
     db = get_database()
 
-    query = "SELECT * FROM projects"
-    if active_only:
-        query += " WHERE is_active = TRUE"
-    query += " ORDER BY created_at DESC"
+    conditions = []
+    params: dict = {}
 
-    projects = await db.fetch_all(query)
+    if active_only:
+        conditions.append("is_active = TRUE")
+
+    if not current_user.is_super_admin:
+        conditions.append("tenant_id = :tenant_id")
+        params["tenant_id"] = str(current_user.tenant_id)
+
+    where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+    query = f"SELECT * FROM projects {where_clause} ORDER BY created_at DESC"
+
+    projects = await db.fetch_all(query, params)
 
     return [_serialize_project(p) for p in projects]
 
@@ -189,7 +211,10 @@ async def create_project_from_template(
 
 
 @router.get("/projects/{project_identifier}", response_model=Project)
-async def get_project(project_identifier: str):
+async def get_project(
+    project_identifier: str,
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator", "power_user", "user"])),
+):
     """
     Get project by ID (UUID) or slug.
 
@@ -200,7 +225,7 @@ async def get_project(project_identifier: str):
         Project details
 
     Raises:
-        404: Project not found
+        404: Project not found (also returned if it belongs to another tenant)
     """
     db = get_database()
 
@@ -219,7 +244,7 @@ async def get_project(project_identifier: str):
             {"slug": project_identifier}
         )
 
-    if not project:
+    if not project or not check_tenant_access(current_user, project["tenant_id"]):
         raise HTTPException(status_code=404, detail=f"Project not found: {project_identifier}")
 
     return _serialize_project(project)
@@ -432,7 +457,8 @@ async def list_project_calls(
     slug: str,
     status: Optional[str] = Query(None, description="Filter by status"),
     limit: int = Query(50, ge=1, le=500, description="Max results"),
-    offset: int = Query(0, ge=0, description="Pagination offset")
+    offset: int = Query(0, ge=0, description="Pagination offset"),
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator", "power_user"])),
 ):
     """
     List calls for a specific project.
@@ -450,11 +476,11 @@ async def list_project_calls(
 
     # Get project ID
     project = await db.fetch_one(
-        "SELECT id FROM projects WHERE slug = :slug",
+        "SELECT id, tenant_id FROM projects WHERE slug = :slug",
         {"slug": slug}
     )
 
-    if not project:
+    if not project or not check_tenant_access(current_user, project["tenant_id"]):
         raise HTTPException(status_code=404, detail=f"Project not found: {slug}")
 
     # Build query
@@ -480,10 +506,12 @@ async def list_project_calls(
 async def list_all_calls(
     status: Optional[str] = Query(None, description="Filter by status"),
     limit: int = Query(50, ge=1, le=500, description="Max results"),
-    offset: int = Query(0, ge=0, description="Pagination offset")
+    offset: int = Query(0, ge=0, description="Pagination offset"),
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator", "power_user"])),
 ):
     """
-    List all calls (across all projects).
+    List calls (across all projects in the current user's tenant; every
+    tenant for super_admin).
 
     Args:
         status: Optional status filter
@@ -495,14 +523,19 @@ async def list_all_calls(
     """
     db = get_database()
 
-    query = "SELECT * FROM calls"
+    conditions = []
     params = {"limit": limit, "offset": offset}
 
     if status:
-        query += " WHERE status = :status"
+        conditions.append("status = :status")
         params["status"] = status
 
-    query += " ORDER BY started_at DESC LIMIT :limit OFFSET :offset"
+    if not current_user.is_super_admin:
+        conditions.append("tenant_id = :tenant_id")
+        params["tenant_id"] = str(current_user.tenant_id)
+
+    where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+    query = f"SELECT * FROM calls {where_clause} ORDER BY started_at DESC LIMIT :limit OFFSET :offset"
 
     calls = await db.fetch_all(query, params)
 
@@ -510,7 +543,10 @@ async def list_all_calls(
 
 
 @router.get("/calls/{call_id}", response_model=CallComplete)
-async def get_call(call_id: UUID):
+async def get_call(
+    call_id: UUID,
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator", "power_user"])),
+):
     """
     Get detailed call information.
 
@@ -527,7 +563,7 @@ async def get_call(call_id: UUID):
         Complete call details
 
     Raises:
-        404: Call not found
+        404: Call not found (also returned if it belongs to another tenant)
     """
     db = get_database()
 
@@ -537,7 +573,7 @@ async def get_call(call_id: UUID):
         {"id": str(call_id)}
     )
 
-    if not call:
+    if not call or not check_tenant_access(current_user, call["tenant_id"]):
         raise HTTPException(status_code=404, detail="Call not found")
 
     call_dict = dict(call)
@@ -584,7 +620,10 @@ async def get_call(call_id: UUID):
 # ===========================================
 
 @router.get("/calls/{call_id}/record", response_model=Record)
-async def get_call_record(call_id: UUID):
+async def get_call_record(
+    call_id: UUID,
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator", "power_user"])),
+):
     """
     Get extracted JSON record for a call.
 
@@ -597,6 +636,7 @@ async def get_call_record(call_id: UUID):
     Raises:
         404: Record not found
     """
+    await _assert_call_access(call_id, current_user)
     db = get_database()
 
     record = await db.fetch_one(
@@ -614,7 +654,10 @@ async def get_call_record(call_id: UUID):
 
 
 @router.get("/calls/{call_id}/pdf")
-async def download_pdf(call_id: UUID):
+async def download_pdf(
+    call_id: UUID,
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator", "power_user"])),
+):
     """
     Download PDF report for a call.
 
@@ -628,6 +671,7 @@ async def download_pdf(call_id: UUID):
         404: PDF not found
         500: Download failed
     """
+    await _assert_call_access(call_id, current_user)
     pdf_generator = PDFGenerator()
 
     try:
@@ -649,7 +693,10 @@ async def download_pdf(call_id: UUID):
 
 
 @router.post("/calls/{call_id}/reprocess")
-async def reprocess_call(call_id: UUID):
+async def reprocess_call(
+    call_id: UUID,
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator"])),
+):
     """
     Regenerate JSON extraction and PDF for a call.
 
@@ -668,7 +715,8 @@ async def reprocess_call(call_id: UUID):
         404: Call not found
         500: Processing failed
     """
-    logger.info(f"Manual reprocess requested for call {call_id}")
+    await _assert_call_access(call_id, current_user)
+    logger.info(f"Manual reprocess requested for call {call_id} by {current_user.email}")
 
     try:
         # 1. Reprocess JSON
@@ -702,52 +750,69 @@ async def reprocess_call(call_id: UUID):
 # ===========================================
 
 @router.get("/stats")
-async def get_stats():
+async def get_stats(
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator", "power_user"])),
+):
     """
-    Get system-wide statistics.
+    Get statistics for the current user's tenant (system-wide for super_admin).
 
     Returns:
         Stats including call counts, status breakdown, etc.
     """
     db = get_database()
 
+    if current_user.is_super_admin:
+        tenant_where = ""
+        params: dict = {}
+    else:
+        tenant_where = "WHERE tenant_id = :tenant_id"
+        params = {"tenant_id": str(current_user.tenant_id)}
+
     # Total calls
-    total = await db.fetch_one("SELECT COUNT(*) as count FROM calls")
+    total = await db.fetch_one(f"SELECT COUNT(*) as count FROM calls {tenant_where}", params)
 
     # By status
     by_status = await db.fetch_all(
-        """
+        f"""
         SELECT status, COUNT(*) as count
         FROM calls
+        {tenant_where}
         GROUP BY status
         ORDER BY count DESC
-        """
+        """,
+        params,
     )
 
     # By project
     by_project = await db.fetch_all(
-        """
+        f"""
         SELECT
             COALESCE(p.name, 'Unassigned') as project_name,
             COUNT(c.id) as call_count
         FROM calls c
         LEFT JOIN projects p ON c.project_id = p.id
+        {tenant_where.replace("tenant_id", "c.tenant_id")}
         GROUP BY p.name
         ORDER BY call_count DESC
-        """
+        """,
+        params,
     )
 
     # Recent activity (last 7 days)
+    recent_where = "started_at >= NOW() - INTERVAL '7 days'"
+    if not current_user.is_super_admin:
+        recent_where += " AND tenant_id = :tenant_id"
     recent = await db.fetch_all(
-        """
+        f"""
         SELECT
             DATE(started_at) as date,
             COUNT(*) as calls
         FROM calls
-        WHERE started_at >= NOW() - INTERVAL '7 days'
+        WHERE {recent_where}
         GROUP BY DATE(started_at)
         ORDER BY date DESC
-        """
+        """,
+        params,
     )
 
     return {
