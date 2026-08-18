@@ -593,6 +593,34 @@ class LegacyController:
         return SequenceMatcher(None, target, norm).ratio()
 
     async def call_tool(self, name: str, arguments: dict[str, Any], call_id: str | None = None) -> dict[str, Any]:
+        if name == "search_knowledge_base":
+            # project_id is stashed in scenario_name and tenant_id in
+            # metadata by the realtime.call.incoming resolver above (see
+            # handle_webhook) - not a real "scenario name", reused because
+            # VoiceCallState predates the kernel resolver and adding a
+            # first-class project_id field to it is a bigger change than
+            # this needs (same reuse the resolver itself already relies on).
+            state = self.call_context.get(call_id) if call_id else None
+            if not state or not state.scenario_name:
+                return {"status": "error", "message": "No project context for this call"}
+            from uuid import UUID as _UUID
+
+            from app.services.rag.search import search_knowledge_base
+
+            tenant_id = state.metadata.get("tenant_id")
+            try:
+                results = await search_knowledge_base(
+                    project_id=_UUID(state.scenario_name),
+                    tenant_id=_UUID(tenant_id) if tenant_id else None,
+                    query=arguments["query"],
+                    top_k=5,
+                )
+            except ValueError as e:
+                logging.warning("search_knowledge_base unavailable: %s", e)
+                return {"status": "unavailable", "message": "Knowledge base not configured for this project"}
+            if not results:
+                return {"status": "no_results"}
+            return {"status": "ok", "results": results}
         if name == "current_datetime":
             now = datetime.now(ZoneInfo("Europe/Rome"))
             return {
@@ -933,6 +961,7 @@ class LegacyController:
                     model=str(self.model or "grok-voice-fast-1.0"),
                     voice=str(voice),
                     api_key=api_key,
+                    metadata={"tenant_id": str(resolved["tenant_id"])},
                 )
             )
             logging.info(

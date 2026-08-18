@@ -59,6 +59,24 @@ def build_tools(scenario_config: dict | None = None) -> list[dict[str, Any]]:
             },
         },
         {
+            # RAG knowledge base (18/08, app/services/rag/) - not gated by
+            # _resolve_tool_flags like the others below: always offered,
+            # harmless if the answering project has no indexed kb_sources
+            # yet (search_knowledge_base() just returns no results, see
+            # call_tool() in runtime_workers/realtime_service.py).
+            "type": "function",
+            "name": "search_knowledge_base",
+            "description": "Search this organization's knowledge base (documents and crawled web pages configured by the admin) for information relevant to the caller's question - e.g. office hours, procedures, local regulations, services offered. Use this before saying you don't know something the organization may have documented.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "The question or topic to search for, in the caller's own words"},
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+        },
+        {
             "type": "function",
             "name": "calcom_get_availability",
             "description": "Check available booking slots from Cal.com for a time range. Use this first for standard visit availability.",

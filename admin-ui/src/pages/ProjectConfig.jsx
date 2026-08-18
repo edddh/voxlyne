@@ -6,6 +6,8 @@ import {
 import { SaveOutlined, CheckCircleOutlined, ArrowLeftOutlined, ApiOutlined, LinkOutlined } from '@ant-design/icons'
 import * as projectConfigApi from '../api/projectConfig'
 import * as projectsApi from '../api/projects'
+import TelephonyTab from '../components/TelephonyTab'
+import KnowledgeBaseTab from '../components/KnowledgeBaseTab'
 import dayjs from 'dayjs'
 
 const { Title, Text } = Typography
@@ -578,6 +580,16 @@ function ProjectConfig() {
           </Button>
         </Form>
       ),
+    },
+    {
+      key: 'telephony',
+      label: 'Telefonia',
+      children: <TelephonyTab projectId={projectId} />,
+    },
+    {
+      key: 'knowledge-base',
+      label: 'Knowledge Base',
+      children: <KnowledgeBaseTab projectId={projectId} />,
     },
   ]
 

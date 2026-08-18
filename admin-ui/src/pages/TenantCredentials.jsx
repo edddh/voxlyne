@@ -21,6 +21,7 @@ const PROVIDER_OPTIONS = {
   tts: ['elevenlabs', 'elevenlabs_agent'],
   crm: ['hubspot', 'generic_webhook'],
   calendar: ['google_calendar', 'ms_graph', 'calcom'],
+  llm: ['openai'], // per gli embedding della knowledge base RAG (app/services/rag/embeddings.py)
 }
 
 function TenantCredentials() {

@@ -21,7 +21,8 @@ from app.database.db import (
     run_migrations,
 )
 from app.models.schemas import ErrorResponse, HealthResponse
-from app.routers import agent_versions, analytics, api, auth, calendar, calls, credentials, crm, health, outbound, project_config, prompt_blocks, prompts, telephony_provisioning, templates, tenants, users, webhook, webhook_vapi, webhook_xai
+from app.routers import agent_versions, analytics, api, auth, calendar, calls, credentials, crm, health, knowledge_base, outbound, project_config, prompt_blocks, prompts, telephony_provisioning, templates, tenants, users, webhook, webhook_vapi, webhook_xai
+from app.services.rag.scheduler import RagRecrawlScheduler
 from app.services.session_cleanup import SessionCleanup
 
 # ===========================================
@@ -75,12 +76,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     cleanup_service = SessionCleanup()
     await cleanup_service.start()
 
+    # RAG recrawl scheduler (kb_sources.recrawl_interval_hours, 18/08)
+    rag_scheduler = RagRecrawlScheduler()
+    await rag_scheduler.start()
+
     logger.info("Application started successfully")
 
     yield  # Application runs here
 
     # Shutdown
     logger.info("Shutting down...")
+    await rag_scheduler.stop()
     await cleanup_service.stop()
     await disconnect_database()
     logger.info("Application stopped")
@@ -224,6 +230,9 @@ app.include_router(credentials.router, prefix="/api", tags=["Credentials"])
 
 # Telephony provisioning router (connect a real number to a project: xAI + Zadarma, 18/08)
 app.include_router(telephony_provisioning.router, prefix="/api", tags=["Telephony Provisioning"])
+
+# Knowledge base / RAG router (per-project, crawl + upload -> pgvector, 18/08)
+app.include_router(knowledge_base.router, prefix="/api", tags=["Knowledge Base"])
 
 
 # ===========================================
