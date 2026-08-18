@@ -11,7 +11,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.database.db import get_database
-from app.middleware.auth_middleware import CurrentUser, require_roles
+from app.middleware.auth_middleware import CurrentUser, check_tenant_access, require_roles
 from app.models.schemas import (
     CalendarEventResponse,
     CalendarProvider,
@@ -30,6 +30,27 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/calendar", tags=["Calendar"])
 
 
+async def _assert_call_access(call_id: UUID, current_user: CurrentUser) -> None:
+    """
+    Verify current_user can access the given call before touching its
+    calendar data. 404 (not 403) on both "not found" and "not yours", to
+    avoid confirming a call_id exists in another tenant.
+
+    Note: a call with tenant_id = NULL (today, every call created via the
+    inbound OpenAI path - see FEATURE_MATRIX.md) is accessible only to
+    super_admin, by design of check_tenant_access(). This is a known,
+    intentional consequence of the missing inbound resolver (Fase 2), not
+    a bug in this check.
+    """
+    db = get_database()
+    call = await db.fetch_one(
+        "SELECT tenant_id FROM calls WHERE id = :call_id",
+        {"call_id": str(call_id)},
+    )
+    if not call or not check_tenant_access(current_user, call["tenant_id"]):
+        raise HTTPException(status_code=404, detail="Call not found")
+
+
 @router.get("/calls/{call_id}/slots", response_model=CalendarSlotsResponse)
 async def get_available_slots(
     call_id: UUID,
@@ -42,6 +63,7 @@ async def get_available_slots(
     Returns up to `num_slots` available time slots based on
     the project's calendar configuration.
     """
+    await _assert_call_access(call_id, current_user)
     scheduler = CalendarScheduler()
 
     try:
@@ -88,7 +110,7 @@ async def schedule_appointment(
     # Get candidate data from record
     record = await db.fetch_one(
         """
-        SELECT r.json_data, c.phone_number
+        SELECT r.json_data, c.phone_number, c.tenant_id
         FROM records r
         JOIN calls c ON r.call_id = c.id
         WHERE r.call_id = :call_id
@@ -96,7 +118,7 @@ async def schedule_appointment(
         {"call_id": str(request.call_id)},
     )
 
-    if not record:
+    if not record or not check_tenant_access(current_user, record["tenant_id"]):
         raise HTTPException(
             status_code=404,
             detail="Record not found for this call"
@@ -149,6 +171,7 @@ async def cancel_appointment(
 
     Optionally notifies attendees of the cancellation.
     """
+    await _assert_call_access(call_id, current_user)
     scheduler = CalendarScheduler()
 
     result = await scheduler.cancel_appointment(
@@ -181,9 +204,10 @@ async def get_calendar_event(
 
     event = await db.fetch_one(
         """
-        SELECT ce.*
+        SELECT ce.*, c.tenant_id
         FROM calendar_events ce
         JOIN records r ON ce.record_id = r.id
+        JOIN calls c ON r.call_id = c.id
         WHERE r.call_id = :call_id
         ORDER BY ce.created_at DESC
         LIMIT 1
@@ -191,13 +215,13 @@ async def get_calendar_event(
         {"call_id": str(call_id)},
     )
 
-    if not event:
+    if not event or not check_tenant_access(current_user, event["tenant_id"]):
         raise HTTPException(
             status_code=404,
             detail="No calendar event found for this call"
         )
 
-    return CalendarEventResponse(**dict(event))
+    return CalendarEventResponse(**{k: v for k, v in dict(event).items() if k != "tenant_id"})
 
 
 @router.get("/events", response_model=List[CalendarEventResponse])
@@ -213,21 +237,31 @@ async def list_calendar_events(
     db = get_database()
 
     params = {"limit": limit, "offset": offset}
+    conditions = []
 
     if status:
-        query = """
-            SELECT * FROM calendar_events
-            WHERE status = :status
-            ORDER BY scheduled_at DESC
-            LIMIT :limit OFFSET :offset
-        """
+        conditions.append("ce.status = :status")
         params["status"] = status
+
+    # Tenant isolation: super_admin keeps seeing every event (including
+    # ones with no call_id, e.g. legacy/manual entries); everyone else only
+    # sees events joined to a call in their own tenant.
+    if current_user.is_super_admin:
+        join_clause = "LEFT JOIN calls c ON ce.call_id = c.id"
     else:
-        query = """
-            SELECT * FROM calendar_events
-            ORDER BY scheduled_at DESC
-            LIMIT :limit OFFSET :offset
-        """
+        join_clause = "JOIN calls c ON ce.call_id = c.id"
+        conditions.append("c.tenant_id = :tenant_id")
+        params["tenant_id"] = str(current_user.tenant_id)
+
+    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
+    query = f"""
+        SELECT ce.* FROM calendar_events ce
+        {join_clause}
+        {where_clause}
+        ORDER BY ce.scheduled_at DESC
+        LIMIT :limit OFFSET :offset
+    """
 
     events = await db.fetch_all(query, params)
     return [CalendarEventResponse(**dict(e)) for e in events]

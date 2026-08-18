@@ -12,7 +12,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from app.config import get_settings
 from app.database.db import get_database
-from app.middleware.auth_middleware import CurrentUser, require_roles
+from app.middleware.auth_middleware import CurrentUser, check_tenant_access, require_roles
 from app.models.schemas import (
     CallStatus,
     OutboundCallRequest,
@@ -53,7 +53,7 @@ async def create_outbound_call(
     # 2. Load project configuration
     project = await db.fetch_one(
         """
-        SELECT id, name, voice_engine, call_direction, prompt_a, language,
+        SELECT id, tenant_id, name, voice_engine, call_direction, prompt_a, language,
                voice_name, vapi_assistant_id, twilio_phone_number,
                vapi_phone_number_id, elevenlabs_voice_id, is_active
         FROM projects
@@ -63,6 +63,12 @@ async def create_outbound_call(
     )
 
     if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Without this check, any creator/admin could place an outbound call
+    # (and spend money, and use its credentials) against a project belonging
+    # to a different tenant, just by knowing/guessing its project_id.
+    if not check_tenant_access(current_user, project["tenant_id"]):
         raise HTTPException(status_code=404, detail="Project not found")
 
     if not project["is_active"]:
@@ -88,14 +94,15 @@ async def create_outbound_call(
     call_id = uuid4()
     await db.execute(
         """
-        INSERT INTO calls (id, phone_number, status, project_id, voice_engine, direction, started_at)
-        VALUES (:id, :phone_number, :status, :project_id, :voice_engine, :direction, :started_at)
+        INSERT INTO calls (id, phone_number, status, project_id, tenant_id, voice_engine, direction, started_at)
+        VALUES (:id, :phone_number, :status, :project_id, :tenant_id, :voice_engine, :direction, :started_at)
         """,
         {
             "id": str(call_id),
             "phone_number": phone,
             "status": CallStatus.PENDING_CONSENT.value,
             "project_id": str(request.project_id),
+            "tenant_id": str(project["tenant_id"]) if project["tenant_id"] else None,
             "voice_engine": voice_engine,
             "direction": "outbound",
             "started_at": datetime.utcnow(),
@@ -173,7 +180,7 @@ async def get_outbound_call_status(
 
     call = await db.fetch_one(
         """
-        SELECT id, phone_number, status, voice_engine, direction,
+        SELECT id, phone_number, status, voice_engine, direction, tenant_id,
                vapi_call_id, started_at, ended_at, duration_seconds
         FROM calls
         WHERE id = :id AND direction = 'outbound'
@@ -181,7 +188,7 @@ async def get_outbound_call_status(
         {"id": str(call_id)},
     )
 
-    if not call:
+    if not call or not check_tenant_access(current_user, call["tenant_id"]):
         raise HTTPException(status_code=404, detail="Outbound call not found")
 
     return OutboundCallStatusResponse(
@@ -207,14 +214,14 @@ async def hangup_outbound_call(
 
     call = await db.fetch_one(
         """
-        SELECT id, voice_engine, vapi_call_id, status
+        SELECT id, voice_engine, vapi_call_id, status, tenant_id
         FROM calls
         WHERE id = :id AND direction = 'outbound'
         """,
         {"id": str(call_id)},
     )
 
-    if not call:
+    if not call or not check_tenant_access(current_user, call["tenant_id"]):
         raise HTTPException(status_code=404, detail="Outbound call not found")
 
     if call["status"] in (CallStatus.COMPLETED.value, CallStatus.PROCESSED.value, CallStatus.DECLINED.value):

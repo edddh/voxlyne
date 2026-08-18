@@ -11,7 +11,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.database.db import get_database
-from app.middleware.auth_middleware import CurrentUser, require_roles
+from app.middleware.auth_middleware import CurrentUser, check_tenant_access, require_roles
 from app.models.schemas import (
     CRMProvider,
     CRMStatsResponse,
@@ -29,6 +29,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/crm", tags=["CRM"])
 
 
+async def _assert_call_access(call_id: UUID, current_user: CurrentUser) -> None:
+    """Same contract as the identical helper in calendar.py - see there for
+    why a NULL-tenant call (every inbound call today) is super_admin-only."""
+    db = get_database()
+    call = await db.fetch_one(
+        "SELECT tenant_id FROM calls WHERE id = :call_id",
+        {"call_id": str(call_id)},
+    )
+    if not call or not check_tenant_access(current_user, call["tenant_id"]):
+        raise HTTPException(status_code=404, detail="Call not found")
+
+
 @router.get("/calls/{call_id}/status", response_model=CRMStatusResponse)
 async def get_crm_status(
     call_id: UUID,
@@ -39,6 +51,7 @@ async def get_crm_status(
 
     Returns sync status, external ID, and sync log history.
     """
+    await _assert_call_access(call_id, current_user)
     db = get_database()
 
     # Get record CRM status
@@ -104,7 +117,7 @@ async def retry_crm_sync(
     # Verify call and record exist
     record = await db.fetch_one(
         """
-        SELECT r.id, r.json_data, c.started_at, c.duration_seconds, c.phone_number
+        SELECT r.id, r.json_data, c.started_at, c.duration_seconds, c.phone_number, c.tenant_id
         FROM records r
         JOIN calls c ON r.call_id = c.id
         WHERE r.call_id = :call_id
@@ -112,7 +125,7 @@ async def retry_crm_sync(
         {"call_id": str(call_id)},
     )
 
-    if not record:
+    if not record or not check_tenant_access(current_user, record["tenant_id"]):
         raise HTTPException(
             status_code=404,
             detail="Record not found for this call"
@@ -149,22 +162,33 @@ async def list_sync_logs(
     params = {"limit": limit, "offset": offset}
 
     if status:
-        conditions.append("status = :status")
+        conditions.append("l.status = :status")
         params["status"] = status
 
     if provider:
-        conditions.append("provider = :provider")
+        conditions.append("l.provider = :provider")
         params["provider"] = provider
+
+    # Tenant isolation: same pattern as calendar.py's list_calendar_events -
+    # super_admin sees every log (incl. logs with no call_id), everyone
+    # else only sees logs joined to a call in their own tenant.
+    if current_user.is_super_admin:
+        join_clause = "LEFT JOIN calls c ON l.call_id = c.id"
+    else:
+        join_clause = "JOIN calls c ON l.call_id = c.id"
+        conditions.append("c.tenant_id = :tenant_id")
+        params["tenant_id"] = str(current_user.tenant_id)
 
     where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
 
     query = f"""
-        SELECT id, call_id, record_id, provider, operation, status,
-               external_id, response_code, error_message, attempt_count,
-               max_attempts, next_retry_at, created_at, completed_at
-        FROM crm_sync_log
+        SELECT l.id, l.call_id, l.record_id, l.provider, l.operation, l.status,
+               l.external_id, l.response_code, l.error_message, l.attempt_count,
+               l.max_attempts, l.next_retry_at, l.created_at, l.completed_at
+        FROM crm_sync_log l
+        {join_clause}
         {where_clause}
-        ORDER BY created_at DESC
+        ORDER BY l.created_at DESC
         LIMIT :limit OFFSET :offset
     """
 
@@ -183,40 +207,60 @@ async def get_crm_stats(
     """
     db = get_database()
 
+    # Tenant isolation: super_admin gets true global stats (incl. logs with
+    # no call_id); everyone else gets stats scoped to calls in their tenant
+    # only. Without this, any authenticated creator/power_user could read
+    # aggregate CRM sync volumes across every tenant on the platform.
+    if current_user.is_super_admin:
+        scope_join = "LEFT JOIN calls c ON l.call_id = c.id"
+        scope_where = ""
+        scope_params: dict = {}
+    else:
+        scope_join = "JOIN calls c ON l.call_id = c.id"
+        scope_where = "AND c.tenant_id = :tenant_id"
+        scope_params = {"tenant_id": str(current_user.tenant_id)}
+
     # Total counts by status
     status_counts = await db.fetch_all(
-        """
-        SELECT status, COUNT(*) as count
-        FROM crm_sync_log
-        GROUP BY status
-        """
+        f"""
+        SELECT l.status, COUNT(*) as count
+        FROM crm_sync_log l
+        {scope_join}
+        WHERE 1=1 {scope_where}
+        GROUP BY l.status
+        """,
+        scope_params,
     )
 
     status_map = {row["status"]: row["count"] for row in status_counts}
 
     # Counts by provider (successful only)
     provider_counts = await db.fetch_all(
-        """
-        SELECT provider, COUNT(*) as count
-        FROM crm_sync_log
-        WHERE status = 'success'
-        GROUP BY provider
-        """
+        f"""
+        SELECT l.provider, COUNT(*) as count
+        FROM crm_sync_log l
+        {scope_join}
+        WHERE l.status = 'success' {scope_where}
+        GROUP BY l.provider
+        """,
+        scope_params,
     )
 
     by_provider = {row["provider"]: row["count"] for row in provider_counts}
 
     # Recent failures
     failures = await db.fetch_all(
-        """
-        SELECT id, call_id, record_id, provider, operation, status,
-               external_id, response_code, error_message, attempt_count,
-               max_attempts, next_retry_at, created_at, completed_at
-        FROM crm_sync_log
-        WHERE status = 'failed'
-        ORDER BY created_at DESC
+        f"""
+        SELECT l.id, l.call_id, l.record_id, l.provider, l.operation, l.status,
+               l.external_id, l.response_code, l.error_message, l.attempt_count,
+               l.max_attempts, l.next_retry_at, l.created_at, l.completed_at
+        FROM crm_sync_log l
+        {scope_join}
+        WHERE l.status = 'failed' {scope_where}
+        ORDER BY l.created_at DESC
         LIMIT 10
-        """
+        """,
+        scope_params,
     )
 
     return CRMStatsResponse(
