@@ -123,3 +123,14 @@ export const testTenantCredential = async (tenantId, credentialId) => {
   const response = await client.post(`/api/tenants/${tenantId}/credentials/${credentialId}/test`)
   return response.data
 }
+
+/**
+ * Generate a standalone runtime instance (config + env + start script +
+ * systemd unit) for a project's voice engine, using stored credentials.
+ * @param {string} projectId - Project UUID
+ * @returns {Promise<object>} Instance details incl. systemd_unit text and install_commands
+ */
+export const provisionProjectRuntime = async (projectId) => {
+  const response = await client.post(`/api/projects/${projectId}/runtime/provision`)
+  return response.data
+}

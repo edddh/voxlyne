@@ -50,7 +50,7 @@ WRITE_TOOL_NAMES = {
 
 @lru_cache(maxsize=1)
 def _load_legacy_controller() -> Any:
-    module_path = ROOT / "runtime" / "realtime_service.py"
+    module_path = ROOT / "runtime_workers" / "realtime_service.py"
     spec = importlib.util.spec_from_file_location("ascolta_realtime_service", module_path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Unable to load legacy controller from {module_path}")

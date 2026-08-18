@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import {
   Table, Button, Space, Input, Modal, Form, Select, message, Tag, Popconfirm, Typography, Tooltip, Switch, Card, Row, Col, Divider, Spin, Alert
 } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, HistoryOutlined, SettingOutlined, ApiOutlined, CheckOutlined, InfoCircleOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, HistoryOutlined, SettingOutlined, ApiOutlined, CheckOutlined, InfoCircleOutlined, ThunderboltOutlined, CopyOutlined } from '@ant-design/icons'
 import * as projectsApi from '../api/projects'
 import * as credentialsApi from '../api/credentials'
 
-const { Title, Text } = Typography
+const { Title, Text, Paragraph } = Typography
 const { TextArea } = Input
 
 const NEW_VOICE_ENGINES = ['livekit_xai', 'livekit_openai', 'xai_sip_direct', 'openai_sip_direct', 'elevenlabs_agent']
@@ -32,6 +32,9 @@ function Projects() {
   const [selectedServiceType, setSelectedServiceType] = useState(null)
   const [selectedProvider, setSelectedProvider] = useState(null)
   const [testingCredential, setTestingCredential] = useState(null)
+  const [provisioningId, setProvisioningId] = useState(null)
+  const [provisionResult, setProvisionResult] = useState(null)
+  const [provisionModalOpen, setProvisionModalOpen] = useState(false)
   const noAutofillProps = {
     autoComplete: 'new-password',
     'data-lpignore': 'true',
@@ -404,6 +407,20 @@ function Projects() {
     }
   }
 
+  const handleProvisionRuntime = async (project) => {
+    setProvisioningId(project.id)
+    try {
+      const result = await credentialsApi.provisionProjectRuntime(project.id)
+      setProvisionResult(result)
+      setProvisionModalOpen(true)
+      message.success('Istanza runtime generata')
+    } catch (error) {
+      message.error(error.response?.data?.detail || 'Errore nella generazione del runtime')
+    } finally {
+      setProvisioningId(null)
+    }
+  }
+
   const columns = [
     {
       title: 'Nome',
@@ -447,10 +464,28 @@ function Projects() {
       render: (_, record) => {
         const engine = record.voice_engine || 'openai_realtime'
         const direction = record.call_direction || 'inbound'
+        const ENGINE_LABELS = {
+          openai_realtime: 'OpenAI RT',
+          vapi: 'Vapi',
+          livekit_xai: 'LiveKit + xAI',
+          livekit_openai: 'LiveKit + OpenAI',
+          xai_sip_direct: 'SIP diretto + xAI',
+          openai_sip_direct: 'SIP diretto + OpenAI',
+          elevenlabs_agent: 'ElevenLabs Agent',
+        }
+        const ENGINE_COLORS = {
+          openai_realtime: 'geekblue',
+          vapi: 'cyan',
+          livekit_xai: 'volcano',
+          livekit_openai: 'volcano',
+          xai_sip_direct: 'gold',
+          openai_sip_direct: 'gold',
+          elevenlabs_agent: 'magenta',
+        }
         return (
           <Space direction="vertical" size={0}>
-            <Tag color={engine === 'vapi' ? 'cyan' : 'geekblue'}>
-              {engine === 'vapi' ? 'Vapi' : 'OpenAI RT'}
+            <Tag color={ENGINE_COLORS[engine] || 'default'}>
+              {ENGINE_LABELS[engine] || engine}
             </Tag>
             <Tag color={direction === 'outbound' ? 'orange' : direction === 'both' ? 'purple' : 'default'} style={{ fontSize: 10 }}>
               {direction === 'outbound' ? 'Outbound' : direction === 'both' ? 'In+Out' : 'Inbound'}
@@ -526,6 +561,16 @@ function Projects() {
               onClick={() => navigate(`/projects/${record.id}/config`)}
             />
           </Tooltip>
+          {NEW_VOICE_ENGINES.includes(record.voice_engine) && (
+            <Tooltip title="Genera servizio runtime (config + systemd, come earlier-prototype)">
+              <Button
+                icon={<ThunderboltOutlined />}
+                size="small"
+                loading={provisioningId === record.id}
+                onClick={() => handleProvisionRuntime(record)}
+              />
+            </Tooltip>
+          )}
           {record.slug !== 'default' && (
             <Popconfirm
               title="Disattivare questo progetto?"
@@ -549,7 +594,7 @@ function Projects() {
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <Title level={3} style={{ margin: 0 }}>Progetti</Title>
         <Space>
-          <Button type="default" onClick={() => message.info('Template selection coming soon')}>
+          <Button type="default" onClick={() => navigate('/templates')}>
             Crea da Template
           </Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>
@@ -735,7 +780,10 @@ function Projects() {
               </Space>
             </Divider>
             <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 16 }}>
-              Configura chiavi API specifiche per questo progetto. Se non configurate, verranno usate le chiavi globali da .env
+              Solo per eccezioni: queste credenziali valgono solo per questo progetto e hanno la precedenza
+              su tutto il resto. Normalmente non serve configurare nulla qui — il progetto eredita
+              automaticamente le chiavi API del tenant (Tenant → Credenziali); solo se il tenant non ne ha,
+              si usa il fallback globale da .env.
             </Text>
 
             {credentialsLoading ? (
@@ -893,6 +941,55 @@ function Projects() {
             </Form.Item>
           )}
         </Form>
+      </Modal>
+
+      <Modal
+        title="Servizio runtime generato"
+        open={provisionModalOpen}
+        onCancel={() => setProvisionModalOpen(false)}
+        footer={[
+          <Button key="close" onClick={() => setProvisionModalOpen(false)}>
+            Chiudi
+          </Button>,
+        ]}
+        width={720}
+      >
+        {provisionResult && (
+          <>
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+              message={`Progetto "${provisionResult.project_slug}" - motore ${provisionResult.engine_type} - porta ${provisionResult.port}`}
+              description="Config, credenziali (dal Credentials Manager del tenant/progetto) e systemd unit sono stati scritti su disco. L'app non ha i permessi di root: esegui questi comandi sul server per attivare il servizio."
+            />
+            <Paragraph>
+              <Text strong>File generati:</Text>
+              <br />
+              <Text code>{provisionResult.config_path}</Text>
+              <br />
+              <Text code>{provisionResult.env_path}</Text>
+              <br />
+              <Text code>{provisionResult.start_script_path}</Text>
+            </Paragraph>
+            <Paragraph>
+              <Text strong>Comandi da eseguire (sudo):</Text>
+              <pre style={{ background: '#f5f5f5', padding: 12, borderRadius: 4, overflowX: 'auto' }}>
+                {provisionResult.install_commands.join('\n')}
+              </pre>
+              <Button
+                size="small"
+                icon={<CopyOutlined />}
+                onClick={() => {
+                  navigator.clipboard.writeText(provisionResult.install_commands.join('\n'))
+                  message.success('Copiato negli appunti')
+                }}
+              >
+                Copia comandi
+              </Button>
+            </Paragraph>
+          </>
+        )}
       </Modal>
     </div>
   )

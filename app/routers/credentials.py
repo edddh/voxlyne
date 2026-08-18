@@ -466,3 +466,43 @@ async def test_tenant_credential(
     )
 
     return CredentialTestResponse(**result)
+
+
+@router.post("/projects/{project_id}/runtime/provision")
+async def provision_project_runtime(
+    project_id: UUID,
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin"])),
+):
+    """
+    Generate a standalone runtime instance (config + env + start script +
+    systemd unit) for this project's voice engine, sourcing credentials from
+    the project/tenant's CredentialsManager. Mirrors earlier-prototype's one-process-
+    per-scenario model - does not install the systemd unit (no root from the
+    app process); returns the exact commands to run.
+    """
+    await _check_project_access(project_id, current_user)
+
+    db = get_database()
+    project = await db.fetch_one(
+        """
+        SELECT id, tenant_id, slug, voice_engine, prompt_a, consent_message,
+               voice_name, language, output_config
+        FROM projects
+        WHERE id = :id
+        """,
+        {"id": str(project_id)},
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    from app.services.runtime_provisioning import (
+        RuntimeProvisioningError,
+        provision_project_runtime as do_provision,
+    )
+
+    try:
+        result = await do_provision(dict(project))
+    except RuntimeProvisioningError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return result

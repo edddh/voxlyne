@@ -3,8 +3,10 @@ import { Navigate } from 'react-router-dom'
 import { Form, Input, Button, Card, Typography, message, Space } from 'antd'
 import { UserOutlined, LockOutlined } from '@ant-design/icons'
 import { useAuth } from '../hooks/useAuth'
+import { BRAND } from '../main'
+import logo from '../assets/ascolta-logo.png'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
 function Login() {
   const [loading, setLoading] = useState(false)
@@ -34,14 +36,23 @@ function Login() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'linear-gradient(135deg, #1890ff 0%, #001529 100%)',
+        background: BRAND.bg,
       }}
     >
-      <Card style={{ width: 400, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+      <Card
+        style={{
+          width: 400,
+          background: BRAND.bgContainer,
+          border: `1px solid ${BRAND.border}`,
+          boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
+        }}
+      >
         <Space direction="vertical" size="large" style={{ width: '100%' }}>
           <div style={{ textAlign: 'center' }}>
-            <Title level={2} style={{ margin: 0 }}>Ascolta</Title>
-            <Text type="secondary">Admin Panel</Text>
+            <img src={logo} alt="Ascolta" style={{ maxWidth: 220, height: 'auto' }} />
+            <div style={{ marginTop: 8 }}>
+              <Text style={{ color: BRAND.textDim }}>Admin Panel</Text>
+            </div>
           </div>
 
           <Form

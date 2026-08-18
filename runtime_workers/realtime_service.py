@@ -1195,7 +1195,7 @@ def main() -> None:
     import threading
 
     threading.Thread(target=loop.run_forever, daemon=True).start()
-    logging.info("LegacyPrototype realtime service listening on http://%s:%s", host, port)
+    logging.info("Ascolta realtime service listening on http://%s:%s", host, port)
     server.serve_forever()
 
 

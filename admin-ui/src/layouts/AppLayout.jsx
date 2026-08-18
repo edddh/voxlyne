@@ -13,8 +13,11 @@ import {
   MenuUnfoldOutlined,
   ApiOutlined,
   CalendarOutlined,
+  ProfileOutlined,
 } from '@ant-design/icons'
 import { useAuth } from '../hooks/useAuth'
+import { BRAND } from '../main'
+import logo from '../assets/ascolta-logo.png'
 
 const { Header, Sider, Content } = Layout
 
@@ -49,6 +52,11 @@ function AppLayout() {
       key: '/tenants',
       icon: <TeamOutlined />,
       label: 'Tenant',
+    },
+    isSuperAdmin && {
+      key: '/templates',
+      icon: <ProfileOutlined />,
+      label: 'Template',
     },
     {
       key: 'integrations',
@@ -111,7 +119,7 @@ function AppLayout() {
         collapsible
         collapsed={collapsed}
         theme="dark"
-        style={{ background: '#001529' }}
+        style={{ background: BRAND.bg, borderRight: `1px solid ${BRAND.border}` }}
       >
         <div
           style={{
@@ -119,13 +127,16 @@ function AppLayout() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: 'white',
-            fontSize: collapsed ? 16 : 18,
-            fontWeight: 'bold',
-            borderBottom: '1px solid rgba(255,255,255,0.1)',
+            padding: collapsed ? 0 : '0 16px',
+            borderBottom: `1px solid ${BRAND.border}`,
+            overflow: 'hidden',
           }}
         >
-          {collapsed ? 'XC' : 'Ascolta'}
+          {collapsed ? (
+            <span style={{ color: BRAND.orange, fontSize: 20, fontWeight: 700 }}>AT</span>
+          ) : (
+            <img src={logo} alt="Ascolta" style={{ maxWidth: '100%', height: 32, objectFit: 'contain' }} />
+          )}
         </div>
         <Menu
           theme="dark"
@@ -143,28 +154,28 @@ function AppLayout() {
         <Header
           style={{
             padding: '0 24px',
-            background: '#fff',
+            background: BRAND.bgElevated,
+            borderBottom: `1px solid ${BRAND.border}`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
           }}
         >
           <Button
             type="text"
             icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
             onClick={() => setCollapsed(!collapsed)}
-            style={{ fontSize: 16 }}
+            style={{ fontSize: 16, color: BRAND.white }}
           />
           <Space>
             <Dropdown menu={userMenu} placement="bottomRight">
               <Space style={{ cursor: 'pointer' }}>
-                <Avatar style={{ backgroundColor: '#1890ff' }}>
+                <Avatar style={{ backgroundColor: BRAND.orange, color: BRAND.bg, fontWeight: 700 }}>
                   {user?.full_name?.charAt(0) || user?.email?.charAt(0)?.toUpperCase()}
                 </Avatar>
                 <div style={{ lineHeight: 1.2 }}>
-                  <div style={{ fontWeight: 500 }}>{user?.full_name || user?.email}</div>
-                  <div style={{ fontSize: 12, color: '#888' }}>{roleLabels[user?.role]}</div>
+                  <div style={{ fontWeight: 500, color: BRAND.white }}>{user?.full_name || user?.email}</div>
+                  <div style={{ fontSize: 12, color: BRAND.textDim }}>{roleLabels[user?.role]}</div>
                 </div>
               </Space>
             </Dropdown>
@@ -174,7 +185,8 @@ function AppLayout() {
           style={{
             margin: 24,
             padding: 24,
-            background: '#fff',
+            background: BRAND.bgContainer,
+            border: `1px solid ${BRAND.border}`,
             borderRadius: 8,
             minHeight: 280,
           }}
