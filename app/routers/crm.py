@@ -8,9 +8,10 @@ import logging
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.database.db import get_database
+from app.middleware.auth_middleware import CurrentUser, require_roles
 from app.models.schemas import (
     CRMProvider,
     CRMStatsResponse,
@@ -29,7 +30,10 @@ router = APIRouter(prefix="/api/crm", tags=["CRM"])
 
 
 @router.get("/calls/{call_id}/status", response_model=CRMStatusResponse)
-async def get_crm_status(call_id: UUID):
+async def get_crm_status(
+    call_id: UUID,
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator", "power_user"])),
+):
     """
     Get CRM sync status for a specific call.
 
@@ -85,7 +89,10 @@ async def get_crm_status(call_id: UUID):
 
 
 @router.post("/calls/{call_id}/retry", response_model=CRMRetryResponse)
-async def retry_crm_sync(call_id: UUID):
+async def retry_crm_sync(
+    call_id: UUID,
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator"])),
+):
     """
     Manually retry CRM sync for a call.
 
@@ -128,6 +135,7 @@ async def list_sync_logs(
     provider: Optional[str] = Query(None, description="Filter by provider"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator", "power_user"])),
 ):
     """
     List CRM sync log entries.
@@ -165,7 +173,9 @@ async def list_sync_logs(
 
 
 @router.get("/stats", response_model=CRMStatsResponse)
-async def get_crm_stats():
+async def get_crm_stats(
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator", "power_user"])),
+):
     """
     Get CRM synchronization statistics.
 
@@ -220,7 +230,10 @@ async def get_crm_stats():
 
 
 @router.post("/test-connection", response_model=CRMTestConnectionResponse)
-async def test_crm_connection(request: CRMTestConnectionRequest):
+async def test_crm_connection(
+    request: CRMTestConnectionRequest,
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator", "power_user"])),
+):
     """
     Test CRM connection with provided credentials.
 
@@ -259,7 +272,9 @@ async def test_crm_connection(request: CRMTestConnectionRequest):
 
 
 @router.get("/providers", response_model=List[dict])
-async def list_providers():
+async def list_providers(
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator", "power_user", "user"])),
+):
     """
     List available CRM providers with their configuration requirements.
     """

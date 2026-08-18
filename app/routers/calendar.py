@@ -8,9 +8,10 @@ import logging
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.database.db import get_database
+from app.middleware.auth_middleware import CurrentUser, require_roles
 from app.models.schemas import (
     CalendarEventResponse,
     CalendarProvider,
@@ -33,6 +34,7 @@ router = APIRouter(prefix="/api/calendar", tags=["Calendar"])
 async def get_available_slots(
     call_id: UUID,
     num_slots: int = 3,
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator", "power_user"])),
 ):
     """
     Get available appointment slots for a call.
@@ -70,7 +72,10 @@ async def get_available_slots(
 
 
 @router.post("/schedule", response_model=ScheduleAppointmentResponse)
-async def schedule_appointment(request: ScheduleAppointmentRequest):
+async def schedule_appointment(
+    request: ScheduleAppointmentRequest,
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator"])),
+):
     """
     Schedule an appointment for a call.
 
@@ -137,6 +142,7 @@ async def schedule_appointment(request: ScheduleAppointmentRequest):
 async def cancel_appointment(
     call_id: UUID,
     notify_attendees: bool = True,
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator"])),
 ):
     """
     Cancel a scheduled appointment.
@@ -164,7 +170,10 @@ async def cancel_appointment(
 
 
 @router.get("/calls/{call_id}/event", response_model=CalendarEventResponse)
-async def get_calendar_event(call_id: UUID):
+async def get_calendar_event(
+    call_id: UUID,
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator", "power_user"])),
+):
     """
     Get calendar event details for a call.
     """
@@ -196,6 +205,7 @@ async def list_calendar_events(
     status: str = None,
     limit: int = 50,
     offset: int = 0,
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator", "power_user"])),
 ):
     """
     List calendar events with optional status filter.
@@ -224,7 +234,10 @@ async def list_calendar_events(
 
 
 @router.post("/test-connection", response_model=CalendarTestConnectionResponse)
-async def test_calendar_connection(request: CalendarTestConnectionRequest):
+async def test_calendar_connection(
+    request: CalendarTestConnectionRequest,
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator", "power_user"])),
+):
     """
     Test calendar connection with provided token.
 
@@ -255,7 +268,9 @@ async def test_calendar_connection(request: CalendarTestConnectionRequest):
 
 
 @router.get("/providers")
-async def list_calendar_providers():
+async def list_calendar_providers(
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator", "power_user", "user"])),
+):
     """
     List available calendar providers with their OAuth requirements.
     """

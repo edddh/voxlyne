@@ -8,10 +8,11 @@ from datetime import datetime
 from typing import Any, Dict
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from app.config import get_settings
 from app.database.db import get_database
+from app.middleware.auth_middleware import CurrentUser, require_roles
 from app.models.schemas import (
     CallStatus,
     OutboundCallRequest,
@@ -30,6 +31,7 @@ router = APIRouter(prefix="/api/outbound")
 async def create_outbound_call(
     request: OutboundCallRequest,
     background_tasks: BackgroundTasks,
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator"])),
 ) -> OutboundCallResponse:
     """
     Initiate a new outbound call.
@@ -162,7 +164,10 @@ async def create_outbound_call(
 
 
 @router.get("/call/{call_id}/status", response_model=OutboundCallStatusResponse)
-async def get_outbound_call_status(call_id: UUID) -> OutboundCallStatusResponse:
+async def get_outbound_call_status(
+    call_id: UUID,
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator", "power_user"])),
+) -> OutboundCallStatusResponse:
     """Get the status of an outbound call."""
     db = get_database()
 
@@ -193,7 +198,10 @@ async def get_outbound_call_status(call_id: UUID) -> OutboundCallStatusResponse:
 
 
 @router.post("/call/{call_id}/hangup")
-async def hangup_outbound_call(call_id: UUID) -> Dict[str, Any]:
+async def hangup_outbound_call(
+    call_id: UUID,
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator"])),
+) -> Dict[str, Any]:
     """Terminate an active outbound call."""
     db = get_database()
 
