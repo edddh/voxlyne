@@ -5,7 +5,7 @@ import {
 } from 'antd'
 import {
   SearchOutlined, PhoneOutlined, FileTextOutlined, FilePdfOutlined, EyeOutlined,
-  CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, PhoneFilled
+  CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, PhoneFilled, UserOutlined
 } from '@ant-design/icons'
 import * as callsApi from '../api/calls'
 import * as projectsApi from '../api/projects'
@@ -33,7 +33,7 @@ function Calls() {
   // cagata e', io voglio sapere piuttosto quante effettuate oggi, quante
   // in totale" - prima "Completate" contava solo tra le righe visibili
   // in quel momento, cambiava a seconda della pagina).
-  const [stats, setStats] = useState({ total: 0, today: 0, completed: 0, processing: 0 })
+  const [stats, setStats] = useState({ total: 0, today: 0, completed: 0, in_progress: 0 })
 
   // Outbound call modal
   const [outboundModalOpen, setOutboundModalOpen] = useState(false)
@@ -157,6 +157,7 @@ function Calls() {
       processing: { color: 'orange', icon: <ClockCircleOutlined />, label: 'In elaborazione' },
       processed: { color: 'success', icon: <CheckCircleOutlined />, label: 'Elaborata' },
       declined: { color: 'red', icon: <CloseCircleOutlined />, label: 'Rifiutata' },
+      escalated: { color: 'purple', icon: <UserOutlined />, label: 'Inoltrata a operatore' },
       cancelled: { color: 'default', icon: <CloseCircleOutlined />, label: 'Annullata' },
     }
     return configs[status] || { color: 'default', label: status }
@@ -342,9 +343,9 @@ function Calls() {
         <Col xs={12} sm={6}>
           <Card>
             <Statistic
-              title="In Elaborazione"
-              value={stats.processing}
-              prefix={<ClockCircleOutlined />}
+              title="In Corso"
+              value={stats.in_progress}
+              prefix={<PhoneOutlined />}
               valueStyle={{ color: '#faad14' }}
             />
           </Card>
@@ -377,6 +378,7 @@ function Calls() {
                 { value: 'processing', label: 'In elaborazione' },
                 { value: 'processed', label: 'Elaborata' },
                 { value: 'declined', label: 'Rifiutata' },
+                { value: 'escalated', label: 'Inoltrata a operatore' },
                 { value: 'cancelled', label: 'Annullata' },
               ]}
             />

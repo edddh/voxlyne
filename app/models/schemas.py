@@ -24,6 +24,7 @@ class CallStatus(str, Enum):
     PROCESSING = "processing"
     PROCESSED = "processed"
     DECLINED = "declined"
+    ESCALATED = "escalated"  # Caller explicitly asked for a human operator
     CANCELLED = "cancelled"
 
 

@@ -5,7 +5,7 @@ import {
 } from 'antd'
 import {
   ArrowLeftOutlined, PhoneOutlined, FilePdfOutlined, FileTextOutlined, DownloadOutlined,
-  CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined
+  CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, UserOutlined
 } from '@ant-design/icons'
 import * as callsApi from '../api/calls'
 import { BRAND } from '../main'
@@ -65,6 +65,7 @@ function CallDetail() {
       processing: { color: 'orange', icon: <ClockCircleOutlined />, label: 'In elaborazione' },
       processed: { color: 'success', icon: <CheckCircleOutlined />, label: 'Elaborata' },
       declined: { color: 'red', icon: <CloseCircleOutlined />, label: 'Rifiutata' },
+      escalated: { color: 'purple', icon: <UserOutlined />, label: 'Inoltrata a operatore' },
       cancelled: { color: 'default', icon: <CloseCircleOutlined />, label: 'Annullata' },
     }
     return configs[status] || { color: 'default', label: status }

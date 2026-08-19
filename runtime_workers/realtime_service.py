@@ -1009,15 +1009,17 @@ class LegacyController:
         # 20/08 (maintainer): "Rifiutata" per xai_sip_direct deve scattare
         # solo se il chiamante riattacca senza dire nulla, o chiede
         # esplicitamente un operatore umano - non e' piu' un mislabel del
-        # cleanup (vedi session_cleanup.py, corretto separatamente). La
-        # seconda condizione arriva dal tool request_human_operator
-        # (app/integrations/common/tools.py) che imposta questo flag
-        # quando il modello lo chiama; la prima si verifica qui: se non
-        # e' mai stato persistito un turno "user", il chiamante non ha
-        # mai parlato.
+        # cleanup (vedi session_cleanup.py, corretto separatamente).
+        # Seconda correzione, stesso giorno: "se uno ha chiesto
+        # l'operatore umano forse bisognerebbe dire qualcosa tipo
+        # 'Inoltro'" - giusto, non e' lo stesso esito di un riattacco
+        # silenzioso. Status dedicato ESCALATED (db_migrations/versions/
+        # a3905808ab22_*) per quel caso; DECLINED resta solo "nessun
+        # coinvolgimento": se non e' mai stato persistito un turno
+        # "user", il chiamante non ha mai parlato.
         final_status = CallStatus.COMPLETED.value
         if state.metadata.get("declined_reason") == "human_requested":
-            final_status = CallStatus.DECLINED.value
+            final_status = CallStatus.ESCALATED.value
         else:
             try:
                 user_turns = await db.fetch_val(

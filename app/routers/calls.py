@@ -191,6 +191,16 @@ async def get_calls_stats(
         where += " AND tenant_id = :tenant_id"
         params["tenant_id"] = str(current_user.tenant_id)
 
+    # 20/08 (maintainer): "in_progress" (chiamata dal vivo adesso) e
+    # "processing" (post-elaborazione automatica di pochi secondi dopo
+    # che la chiamata e' gia' finita: estrazione dati, PDF, email, CRM)
+    # erano sommati in un unico numero "In Elaborazione" - due momenti
+    # diversi del ciclo di vita. Alla domanda "in elaborazione che vuol
+    # dire? secondo me non ha senso" - non ne ha, come card fissa: dura
+    # pochi secondi, quasi sempre 0, nessuna informazione utile a colpo
+    # d'occhio. Tolto (era "La tolgo" nella risposta) - resta solo
+    # in_progress, che invece ha un senso chiaro ("c'e' qualcuno al
+    # telefono adesso").
     row = await db.fetch_one(
         f"""
         SELECT
@@ -199,7 +209,7 @@ async def get_calls_stats(
                 WHERE (created_at AT TIME ZONE 'Europe/Rome')::date = (now() AT TIME ZONE 'Europe/Rome')::date
             ) AS today,
             COUNT(*) FILTER (WHERE status IN ('completed', 'processed')) AS completed,
-            COUNT(*) FILTER (WHERE status IN ('processing', 'in_progress')) AS processing,
+            COUNT(*) FILTER (WHERE status = 'in_progress') AS in_progress,
             AVG(duration_seconds) FILTER (WHERE duration_seconds IS NOT NULL) AS avg_duration_seconds
         FROM calls
         {where}
@@ -210,7 +220,7 @@ async def get_calls_stats(
         "total": row["total"],
         "today": row["today"],
         "completed": row["completed"],
-        "processing": row["processing"],
+        "in_progress": row["in_progress"],
         "avg_duration_seconds": float(row["avg_duration_seconds"]) if row["avg_duration_seconds"] is not None else None,
     }
 
