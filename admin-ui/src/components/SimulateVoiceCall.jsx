@@ -18,6 +18,10 @@ function buildWsUrl(path) {
 }
 
 const SAMPLE_RATE = 24000
+// Stesso limite imposto lato server (app/routers/simulate_voice.py::
+// SIMULATION_MAX_SECONDS) - qui solo per mostrare il conto alla rovescia,
+// il taglio effettivo lo fa il backend.
+const MAX_CALL_SECONDS = 30
 
 function floatTo16BitPCM(float32) {
   const int16 = new Int16Array(float32.length)
@@ -59,12 +63,15 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage }
   const [status, setStatus] = useState('idle') // idle | connecting | live | error | ended
   const [error, setError] = useState(null)
   const [transcript, setTranscript] = useState([])
+  const [timedOut, setTimedOut] = useState(false)
+  const [remainingSeconds, setRemainingSeconds] = useState(MAX_CALL_SECONDS)
   const wsRef = useRef(null)
   const audioContextRef = useRef(null)
   const streamRef = useRef(null)
   const processorRef = useRef(null)
   const playheadRef = useRef(0)
   const transcriptEndRef = useRef(null)
+  const countdownRef = useRef(null)
 
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
@@ -97,6 +104,10 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage }
     }
     wsRef.current = null
     playheadRef.current = 0
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current)
+      countdownRef.current = null
+    }
   }, [])
 
   const playChunk = useCallback((base64Audio) => {
@@ -122,6 +133,8 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage }
     setStatus('connecting')
     setError(null)
     setTranscript([])
+    setTimedOut(false)
+    setRemainingSeconds(MAX_CALL_SECONDS)
     playheadRef.current = 0
 
     try {
@@ -143,6 +156,12 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage }
         const msg = JSON.parse(event.data)
         if (msg.type === 'ascolta.ready') {
           setStatus('live')
+          // Conto alla rovescia visibile per il limite lato server
+          // (maintainer, 19/08: "metti un timeout per la simulazione vocale,
+          // ad esempio 30s").
+          countdownRef.current = setInterval(() => {
+            setRemainingSeconds((s) => Math.max(0, s - 1))
+          }, 1000)
           // Avvia la cattura microfono solo ora che la sessione e' pronta.
           const source = audioContext.createMediaStreamSource(stream)
           const processor = audioContext.createScriptProcessor(4096, 1, 1)
@@ -178,6 +197,13 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage }
           // risposta" - visibile in trascrizione, non solo eseguita in
           // silenzio dal backend.
           setTranscript((prev) => [...prev, { role: 'tool', name: msg.name, arguments: msg.arguments, result: msg.result }])
+          return
+        }
+        if (msg.type === 'ascolta.timeout') {
+          // Il backend chiude la sessione subito dopo questo messaggio -
+          // segna il motivo cosi' onclose mostra "limite raggiunto"
+          // invece del generico "chiamata terminata".
+          setTimedOut(true)
         }
       }
 
@@ -221,7 +247,7 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage }
         type="info"
         showIcon
         message="Modello vocale reale (grok-voice-latest), non un sostituto testuale"
-        description="Usa il microfono del browser e il prompt attuale nell'editor (anche non salvato), con accesso alla knowledge base del progetto. Non ha accesso agli altri strumenti (Cal.com, ecc.)."
+        description={`Usa il microfono del browser e il prompt attuale nell'editor (anche non salvato), con accesso alla knowledge base del progetto. Non ha accesso agli altri strumenti (Cal.com, ecc.). Ogni prova dura al massimo ${MAX_CALL_SECONDS} secondi.`}
         style={{ marginBottom: 16 }}
       />
 
@@ -235,12 +261,13 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage }
         {status === 'live' && (
           <Space direction="vertical" align="center">
             <Tag icon={<AudioOutlined />} color="green">In chiamata - parla pure</Tag>
+            <Text type="secondary">Tempo rimasto: {remainingSeconds}s</Text>
             <Button danger icon={<StopOutlined />} onClick={stop}>Termina</Button>
           </Space>
         )}
         {status === 'ended' && (
           <Space direction="vertical" align="center">
-            <Tag>Chiamata terminata</Tag>
+            <Tag>{timedOut ? `Chiamata terminata - limite di ${MAX_CALL_SECONDS}s raggiunto` : 'Chiamata terminata'}</Tag>
             <Button icon={<PhoneOutlined />} onClick={start}>Richiama</Button>
           </Space>
         )}

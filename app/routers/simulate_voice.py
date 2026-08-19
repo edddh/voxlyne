@@ -47,6 +47,13 @@ router = APIRouter()
 
 XAI_REALTIME_URL = "wss://api.x.ai/v1/realtime"
 
+# maintainer, 19/08: "metti un timeout per la simulazione vocale, ad esempio
+# 30s" - e' una prova, non una chiamata vera: senza un limite duro
+# qualcuno potrebbe lasciarla aperta e consumare inutilmente il credito
+# xAI del tenant. Applicato lato server (non solo in UI) cosi' vale anche
+# se il browser si blocca o la tab resta in background.
+SIMULATION_MAX_SECONDS = 30
+
 # Stessa definizione di app/integrations/common/tools.py - copiata qui
 # invece di importata per non dipendere dal sistema di flag di quel
 # modulo (pensato per gli scenari da file statico, non per questa
@@ -252,13 +259,29 @@ async def simulate_voice(websocket: WebSocket, project_id: UUID, token: str = Qu
                         continue  # meccanica interna, non serve al browser
                     await websocket.send_text(raw)
 
+            timeout_task = asyncio.create_task(asyncio.sleep(SIMULATION_MAX_SECONDS))
+            browser_task = asyncio.create_task(browser_to_xai())
+            xai_task = asyncio.create_task(xai_to_browser())
+
             done, pending = await asyncio.wait(
-                [asyncio.create_task(browser_to_xai()), asyncio.create_task(xai_to_browser())],
+                [browser_task, xai_task, timeout_task],
                 return_when=asyncio.FIRST_COMPLETED,
             )
             for task in pending:
                 task.cancel()
+
+            if timeout_task in done:
+                try:
+                    await websocket.send_text(json.dumps({
+                        "type": "ascolta.timeout",
+                        "seconds": SIMULATION_MAX_SECONDS,
+                    }))
+                except Exception:
+                    pass  # il browser potrebbe aver gia' chiuso
+
             for task in done:
+                if task is timeout_task:
+                    continue
                 exc = task.exception()
                 if exc and not isinstance(exc, (WebSocketDisconnect, websockets.exceptions.ConnectionClosed)):
                     logger.exception("simulate_voice relay task failed", exc_info=exc)
