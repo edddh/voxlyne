@@ -30,10 +30,20 @@ function ProtectedRoute({ children, allowedRoles, fallback = '/' }) {
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return <Navigate to={fallback} replace />
+    const to = typeof fallback === 'function' ? fallback(user) : fallback
+    return <Navigate to={to} replace />
   }
 
   return children
+}
+
+// Atterraggio di default per chi non vede la Dashboard (vedi sotto):
+// creator lavora su contenuti/progetti, user e' sola lettura sulle
+// chiamate - stessa pagina "/calls" per entrambi sarebbe stata comoda
+// da scrivere ma sbagliata per creator, che su /calls non ha nulla da
+// fare di suo.
+function landingFor(user) {
+  return user.role === 'creator' ? '/projects' : '/calls'
 }
 
 function App() {
@@ -57,7 +67,7 @@ function App() {
             // chiunque, quindi creator/user ci finivano comunque anche
             // senza passare dal menu, con un 403 inghiottito in silenzio
             // che si vedeva come una dashboard sempre a zero.
-            <ProtectedRoute allowedRoles={['admin', 'super_admin', 'power_user']} fallback="/calls">
+            <ProtectedRoute allowedRoles={['admin', 'super_admin', 'power_user']} fallback={landingFor}>
               <Dashboard />
             </ProtectedRoute>
           }
