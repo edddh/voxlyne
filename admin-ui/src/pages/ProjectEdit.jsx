@@ -3,13 +3,14 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   Card, Button, Space, Input, message, Typography, Tabs, Row, Col, Spin, Alert, Tag, Divider, Switch, List, Popconfirm,
 } from 'antd'
-import { SaveOutlined, ArrowLeftOutlined, RocketOutlined, MessageOutlined, PhoneOutlined, UndoOutlined } from '@ant-design/icons'
+import { SaveOutlined, ArrowLeftOutlined, RocketOutlined, MessageOutlined, PhoneOutlined, UndoOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons'
 import * as projectsApi from '../api/projects'
 import * as agentVersionsApi from '../api/agentVersions'
 import PromptDiff, { normalizeNewlines } from '../components/PromptDiff'
 import SimulateChat from '../components/SimulateChat'
 import SimulateVoiceCall from '../components/SimulateVoiceCall'
 import { substituteCustomVariables, extractCustomTags } from '../utils/promptVariables'
+import { BRAND } from '../main'
 
 const { Title, Text, Paragraph } = Typography
 const { TextArea } = Input
@@ -59,6 +60,7 @@ function ProjectEdit() {
   // dovrebbe avere dei campi custom... che possono poi essere modificati
   // successivamente".
   const [customVariablesSchema, setCustomVariablesSchema] = useState([])
+  const [savedCustomVariablesSchema, setSavedCustomVariablesSchema] = useState([])
   const [customVariables, setCustomVariables] = useState({})
   const [savedCustomVariables, setSavedCustomVariables] = useState({})
   const [savingVariables, setSavingVariables] = useState(false)
@@ -107,6 +109,7 @@ function ProjectEdit() {
       setConsentMessage(data.consent_message || '')
       setSavedConsentMessage(data.consent_message || '')
       setCustomVariablesSchema(data.custom_variables_schema || [])
+      setSavedCustomVariablesSchema(data.custom_variables_schema || [])
       setCustomVariables(data.custom_variables || {})
       setSavedCustomVariables(data.custom_variables || {})
 
@@ -205,20 +208,50 @@ function ProjectEdit() {
     }
   }
 
-  const hasChangesVariables = JSON.stringify(customVariables) !== JSON.stringify(savedCustomVariables)
+  const hasChangesVariables =
+    JSON.stringify(customVariables) !== JSON.stringify(savedCustomVariables) ||
+    JSON.stringify(customVariablesSchema) !== JSON.stringify(savedCustomVariablesSchema)
   const schemaKeys = customVariablesSchema.map((f) => f.key)
   // {{tag}} presenti nel prompt ma senza una voce nella tabella
   // "Variabili del progetto" sopra - a pubblicazione resterebbero
   // {{cosi'}} nel testo, letteralmente visibili a chi chiama.
   const undefinedTagsIn = (text) => extractCustomTags(text).filter((key) => !schemaKeys.includes(key))
 
+  // maintainer, 20/08: "come ne definisco di nuovi quando edito il
+  // prompt... il meglio sarebbe poter mettere direttamente {{key}} e
+  // poi tutto il resto va di conseguenza" - niente di automatico senza
+  // conferma (scelto apposta, per non registrare per sbaglio un
+  // {{...}} che non era un vero tag): un click sull'avviso lo aggiunge
+  // come variabile del progetto, poi si edita qui sotto come le altre.
+  const addTagAsVariable = (tagKey) => {
+    setCustomVariablesSchema((prev) => [...prev, { key: tagKey, label: tagKey, description: '', default: '' }])
+    setCustomVariables((prev) => ({ ...prev, [tagKey]: '' }))
+  }
+
+  const removeVariable = (tagKey) => {
+    setCustomVariablesSchema((prev) => prev.filter((f) => f.key !== tagKey))
+    setCustomVariables((prev) => {
+      const next = { ...prev }
+      delete next[tagKey]
+      return next
+    })
+  }
+
+  const updateVariableField = (tagKey, field, value) => {
+    setCustomVariablesSchema((prev) => prev.map((f) => (f.key === tagKey ? { ...f, [field]: value } : f)))
+  }
+
   const saveCustomVariables = async () => {
     setSavingVariables(true)
     try {
-      await projectsApi.updateProject(id, { custom_variables: customVariables })
+      await projectsApi.updateProject(id, {
+        custom_variables: customVariables,
+        custom_variables_schema: customVariablesSchema,
+      })
       message.success('Variabili salvate - pubblica per renderle attive nelle chiamate')
       setSavedCustomVariables(customVariables)
-      setProject((prev) => ({ ...prev, custom_variables: customVariables }))
+      setSavedCustomVariablesSchema(customVariablesSchema)
+      setProject((prev) => ({ ...prev, custom_variables: customVariables, custom_variables_schema: customVariablesSchema }))
     } catch (error) {
       message.error(error.response?.data?.detail || 'Errore salvataggio')
     } finally {
@@ -334,7 +367,21 @@ function ProjectEdit() {
               type="warning"
               showIcon
               message="Tag senza un valore"
-              description={`Questi {{tag}} compaiono nel prompt ma non hanno una variabile definita: ${undefinedTagsIn(promptA).map((t) => `{{${t}}}`).join(', ')}. Restano cosi', visibili letteralmente a chi chiama, finche' non gli dai un valore (Variabili del progetto sopra) o li togli dal prompt.`}
+              description={
+                <Space direction="vertical" size={8}>
+                  <Text>
+                    Questi {'{{tag}}'} compaiono nel prompt ma non hanno una variabile definita - restano cosi',
+                    visibili letteralmente a chi chiama, finche' non li aggiungi (o li togli dal prompt).
+                  </Text>
+                  <Space wrap size={4}>
+                    {undefinedTagsIn(promptA).map((t) => (
+                      <Button key={t} size="small" icon={<PlusOutlined />} onClick={() => addTagAsVariable(t)}>
+                        {`Aggiungi {{${t}}} come variabile`}
+                      </Button>
+                    ))}
+                  </Space>
+                </Space>
+              }
             />
           )}
           {publishedVersion && normalizeNewlines(promptA) !== normalizeNewlines(publishedVersion.prompt_a) && (
@@ -417,7 +464,18 @@ function ProjectEdit() {
               type="warning"
               showIcon
               message="Tag senza un valore"
-              description={`Questi {{tag}} compaiono nel prompt ma non hanno una variabile definita: ${undefinedTagsIn(promptB).map((t) => `{{${t}}}`).join(', ')}.`}
+              description={
+                <Space direction="vertical" size={8}>
+                  <Text>Questi {'{{tag}}'} compaiono nel prompt ma non hanno una variabile definita.</Text>
+                  <Space wrap size={4}>
+                    {undefinedTagsIn(promptB).map((t) => (
+                      <Button key={t} size="small" icon={<PlusOutlined />} onClick={() => addTagAsVariable(t)}>
+                        {`Aggiungi {{${t}}} come variabile`}
+                      </Button>
+                    ))}
+                  </Space>
+                </Space>
+              }
             />
           )}
           {publishedVersion && normalizeNewlines(promptB) !== normalizeNewlines(publishedVersion.prompt_b) && (
@@ -571,28 +629,48 @@ function ProjectEdit() {
             >
               <Alert
                 message="Valori per i tag {{...}} usati nel prompt"
-                description="Definiti dal template da cui e' nato questo progetto. Cambiare un valore qui non modifica il testo del prompt - conta al momento della pubblicazione."
+                description="Alcuni arrivano dal template da cui e' nato questo progetto, altri li aggiungi tu (avviso sotto l'editor quando scrivi un {{tag}} nuovo). Cambiare un valore qui non modifica il testo del prompt - conta al momento della pubblicazione."
                 type="info"
                 showIcon
                 style={{ marginBottom: 16 }}
               />
-              <Row gutter={[16, 16]}>
-                {customVariablesSchema.map((field) => (
-                  <Col xs={24} sm={12} key={field.key}>
-                    <Text strong style={{ display: 'block', marginBottom: 4 }}>
-                      {field.label || field.key}
+              {customVariablesSchema.map((field) => (
+                <Card
+                  key={field.key}
+                  size="small"
+                  style={{ marginBottom: 12, background: BRAND.bgElevated, borderColor: BRAND.border }}
+                  title={
+                    <Text style={{ fontFamily: 'monospace', color: BRAND.orange, fontWeight: 'bold' }}>
+                      {`{{${field.key}}}`}
                     </Text>
-                    <Input
-                      value={customVariables[field.key] || ''}
-                      onChange={(e) => setCustomVariables((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                      placeholder={field.default || `{{${field.key}}}`}
-                    />
-                    {field.description && (
-                      <Text type="secondary" style={{ fontSize: 12 }}>{field.description}</Text>
-                    )}
-                  </Col>
-                ))}
-              </Row>
+                  }
+                  extra={
+                    <DeleteOutlined onClick={() => removeVariable(field.key)} style={{ color: '#ff4d4f' }} />
+                  }
+                >
+                  <Row gutter={[16, 8]}>
+                    <Col xs={24} sm={12}>
+                      <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>Etichetta</Text>
+                      <Input
+                        value={field.label || ''}
+                        onChange={(e) => updateVariableField(field.key, 'label', e.target.value)}
+                        placeholder="es. Nome del Comune"
+                      />
+                    </Col>
+                    <Col xs={24} sm={12}>
+                      <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>Valore</Text>
+                      <Input
+                        value={customVariables[field.key] || ''}
+                        onChange={(e) => setCustomVariables((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                        placeholder={field.default || `{{${field.key}}}`}
+                      />
+                    </Col>
+                  </Row>
+                  {field.description && (
+                    <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 8 }}>{field.description}</Text>
+                  )}
+                </Card>
+              ))}
               <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
                 <Button
                   type="primary"
