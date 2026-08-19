@@ -975,10 +975,24 @@ class LegacyController:
         extraction, PDF/email if enabled, CRM sync) - same
         call_manager.CallManager the OpenAI path uses, reused as-is rather
         than reimplemented here.
+
+        Idempotency guard (20/08): now called from two places - the
+        'call.ended'/'realtime.call.ended' webhook (the original, only
+        path) and run_call()'s own finally block (added because when
+        xAI's realtime WebSocket just drops - "no close frame received or
+        sent", no webhook ever follows - neither ran, and the call sat
+        'in_progress' with no ended_at until session_cleanup.py swept it
+        up ~20 minutes later and mislabeled it 'declined'; real incident,
+        see calls id=414a2c41... on 19/08, 24 real transcript turns but
+        never finalized). If both end up firing for the same call, this
+        must not run _handle_interview_complete (PDF/email/CRM) twice.
         """
         internal_call_id = state.metadata.get("internal_call_id")
         if not internal_call_id:
             return
+        if state.metadata.get("_finalized"):
+            return
+        state.metadata["_finalized"] = True
 
         db = get_database()
         try:
@@ -1142,61 +1156,74 @@ class LegacyController:
             raise RuntimeError(f"Call {call_id} has no api_key in its resolved state - this should be unreachable (handle_webhook declines before reaching here)")
         headers = {"Authorization": f"Bearer {call_state.api_key}"}
 
-        async with websockets.connect(ws_url, additional_headers=headers) as conn:
-            await conn.send(
-                json.dumps(
-                    {
-                        "type": "session.update",
-                        "session": build_xai_session_update(
-                            voice=call_state.voice,
-                            language=call_state.response_language,
-                            instructions=instructions,
-                            tools=self.tools,
-                        ),
-                    },
-                    ensure_ascii=True,
-                )
-            )
-            await conn.send(
-                json.dumps(
-                    {
-                        "type": "response.create",
-                        "response": {
-                            "instructions": (
-                                "Pronuncia subito e integralmente il seguente messaggio iniziale, "
-                                "senza riassumerlo, senza cambiare lingua o ordine, e senza aggiungere altro prima: "
-                                f"{first_message}"
+        # try/finally (20/08): before this, finalization only happened
+        # via the 'call.ended' webhook handler - if the connection to xAI
+        # just dies (ConnectionClosedError, network drop, etc.) instead
+        # of a clean hangup that produces that webhook, nothing ever
+        # finalized the call. It would sit 'in_progress' until
+        # session_cleanup.py's 20-minute stale-session sweep force-closed
+        # it as 'declined' - a misleading label for what was really an
+        # abandoned/uncaught disconnect, not a consent refusal. Now the
+        # call gets finalized (status, duration, post-processing trigger)
+        # the moment the session loop ends, for any reason.
+        try:
+            async with websockets.connect(ws_url, additional_headers=headers) as conn:
+                await conn.send(
+                    json.dumps(
+                        {
+                            "type": "session.update",
+                            "session": build_xai_session_update(
+                                voice=call_state.voice,
+                                language=call_state.response_language,
+                                instructions=instructions,
+                                tools=self.tools,
                             ),
                         },
-                    },
-                    ensure_ascii=True,
+                        ensure_ascii=True,
+                    )
                 )
-            )
+                await conn.send(
+                    json.dumps(
+                        {
+                            "type": "response.create",
+                            "response": {
+                                "instructions": (
+                                    "Pronuncia subito e integralmente il seguente messaggio iniziale, "
+                                    "senza riassumerlo, senza cambiare lingua o ordine, e senza aggiungere altro prima: "
+                                    f"{first_message}"
+                                ),
+                            },
+                        },
+                        ensure_ascii=True,
+                    )
+                )
 
-            async for raw_event in conn:
-                event = json.loads(raw_event)
-                etype = event.get("type", "")
-                if etype == "session.created":
-                    logging.info("Session created for call %s", call_id)
-                elif etype == "conversation.item.input_audio_transcription.completed":
-                    transcript_text = event.get("transcript", "")
-                    logging.info("User transcript [%s]: %s", call_id, transcript_text)
-                    internal_call_id = call_state.metadata.get("internal_call_id")
-                    if internal_call_id:
-                        await self._persist_transcript(internal_call_id, "user", transcript_text)
-                elif etype == "response.output_audio_transcript.done":
-                    transcript_text = event.get("transcript", "")
-                    logging.info("Assistant transcript [%s]: %s", call_id, transcript_text)
-                    internal_call_id = call_state.metadata.get("internal_call_id")
-                    if internal_call_id:
-                        await self._persist_transcript(internal_call_id, "assistant", transcript_text)
-                elif etype == "response.function_call_arguments.done":
-                    await self.handle_function_call(conn, SimpleNamespace(**event), call_id)
-                elif etype == "error":
-                    logging.error("Realtime error [%s]: %s", call_id, event)
-                elif etype == "response.done":
-                    status = (event.get("response") or {}).get("status")
-                    logging.info("Response done [%s]: %s", call_id, status)
+                async for raw_event in conn:
+                    event = json.loads(raw_event)
+                    etype = event.get("type", "")
+                    if etype == "session.created":
+                        logging.info("Session created for call %s", call_id)
+                    elif etype == "conversation.item.input_audio_transcription.completed":
+                        transcript_text = event.get("transcript", "")
+                        logging.info("User transcript [%s]: %s", call_id, transcript_text)
+                        internal_call_id = call_state.metadata.get("internal_call_id")
+                        if internal_call_id:
+                            await self._persist_transcript(internal_call_id, "user", transcript_text)
+                    elif etype == "response.output_audio_transcript.done":
+                        transcript_text = event.get("transcript", "")
+                        logging.info("Assistant transcript [%s]: %s", call_id, transcript_text)
+                        internal_call_id = call_state.metadata.get("internal_call_id")
+                        if internal_call_id:
+                            await self._persist_transcript(internal_call_id, "assistant", transcript_text)
+                    elif etype == "response.function_call_arguments.done":
+                        await self.handle_function_call(conn, SimpleNamespace(**event), call_id)
+                    elif etype == "error":
+                        logging.error("Realtime error [%s]: %s", call_id, event)
+                    elif etype == "response.done":
+                        status = (event.get("response") or {}).get("status")
+                        logging.info("Response done [%s]: %s", call_id, status)
+        finally:
+            await self._finalize_call_record(call_state)
 
     async def handle_function_call(self, conn: Any, event: Any, call_id: str | None = None) -> None:
         name = event.name

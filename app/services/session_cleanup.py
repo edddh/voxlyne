@@ -104,12 +104,23 @@ class SessionCleanup:
                         f"started {elapsed}s ago, status={call['status']}"
                     )
 
+                    # 20/08: era 'declined' - sbagliato semanticamente (implica
+                    # un consenso rifiutato da chi chiama) e fuorviante per
+                    # una sessione persa per un motivo tecnico (es. la
+                    # connessione WebSocket con il provider voce e' caduta
+                    # senza mai generare l'evento/webhook di fine chiamata -
+                    # vedi runtime_workers/realtime_service.py::run_call(),
+                    # ora con un try/finally che dovrebbe evitare che questo
+                    # cleanup debba mai piu' intervenire per quel motivo).
+                    # 'cancelled' e' gia' un CallStatus valido e riflette
+                    # meglio "sessione interrotta, non finalizzata".
+                    #
                     # Set ended_at; duration_seconds will be auto-calculated by database
                     await db.execute(
                         """
                         UPDATE calls
                         SET ended_at = :ended_at,
-                            status = 'declined'
+                            status = 'cancelled'
                         WHERE id = :id
                         """,
                         {

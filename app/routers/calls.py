@@ -36,6 +36,26 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v2/calls", tags=["Calls V2"])
 
 
+def _extract_json_field(json_data, key: str):
+    """
+    Pull one field out of a record's extracted JSON (Prompt B output) -
+    shared by list_calls (candidate_name) and get_call_detail
+    (candidate_name + email), which each read it independently before this
+    helper existed. json_data can arrive already parsed (dict) or as a raw
+    string depending on the driver/column, so both are handled.
+    """
+    if not json_data:
+        return None
+    if isinstance(json_data, str):
+        try:
+            json_data = json.loads(json_data)
+        except json.JSONDecodeError:
+            return None
+    if isinstance(json_data, dict):
+        return json_data.get(key)
+    return None
+
+
 @router.get("")
 async def list_calls(
     page: int = Query(1, ge=1),
@@ -120,20 +140,6 @@ async def list_calls(
     total_result = await db.fetch_one(count_query, count_params)
     total = total_result[0] if total_result else 0
 
-    def _extract_candidate_name(json_data):
-        if not json_data:
-            return None
-        if isinstance(json_data, dict):
-            return json_data.get("candidate_name")
-        if isinstance(json_data, str):
-            try:
-                parsed = json.loads(json_data)
-            except json.JSONDecodeError:
-                return None
-            if isinstance(parsed, dict):
-                return parsed.get("candidate_name")
-        return None
-
     return {
         "calls": [
             {
@@ -149,7 +155,7 @@ async def list_calls(
                 "project_slug": c["project_slug"],
                 "has_record": c["record_id"] is not None,
                 "has_pdf": c["pdf_key"] is not None,
-                "candidate_name": _extract_candidate_name(c["json_data"]),
+                "candidate_name": _extract_json_field(c["json_data"], "candidate_name"),
                 "created_at": c["created_at"],
             }
             for c in calls
@@ -251,6 +257,13 @@ async def get_call_detail(
             "openai_session_id": call["openai_session_id"],
             "created_at": call["created_at"],
             "updated_at": call["updated_at"],
+            # Stessa estrazione di list_calls (_extract_json_field) - non
+            # era mai stata portata qui, quindi la scheda dettaglio
+            # mostrava sempre "-" anche quando il record estratto aveva
+            # queste informazioni.
+            "candidate_name": _extract_json_field(record["json_data"], "candidate_name") if record else None,
+            "candidate_email": _extract_json_field(record["json_data"], "email") if record else None,
+            "has_pdf": record["pdf_key"] is not None if record else False,
         },
         "transcript": [
             {

@@ -8,6 +8,7 @@ import {
   CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined
 } from '@ant-design/icons'
 import * as callsApi from '../api/calls'
+import { BRAND } from '../main'
 
 const { Title, Text, Paragraph } = Typography
 
@@ -24,8 +25,15 @@ function CallDetail() {
   const loadCall = async () => {
     setLoading(true)
     try {
+      // GET /api/v2/calls/{id} (app/routers/calls.py::get_call_detail)
+      // restituisce un involucro {call, transcript, record, crm_sync,
+      // calendar_event} - non un oggetto piatto. Il resto della pagina
+      // legge sempre `call.xxx` come se fosse la chiamata stessa, quindi
+      // ogni campo in "Informazioni Generali" era undefined (mostrava
+      // sempre "-"/vuoto), mentre la trascrizione risultava visibile per
+      // puro caso: `data.transcript` esiste anche a livello root.
       const data = await callsApi.getCall(id)
-      setCall(data)
+      setCall({ ...data.call, transcript: data.transcript, record: data.record })
     } catch (error) {
       message.error('Errore caricamento chiamata')
       navigate('/calls')
@@ -88,9 +96,17 @@ function CallDetail() {
               </Text>
             ),
             children: (
+              // Prima erano sfondi chiari fissi (#e6f7ff/#f6ffed) pensati
+              // per il tema chiaro di default di AntD - questa app usa
+              // pero' SEMPRE darkAlgorithm (main.jsx), quindi il testo
+              // ereditava il colore chiaro del tema scuro su uno sfondo
+              // chiaro: bianco su bianco, illeggibile (maintainer: "ci sono
+              // scritte in bianco su sfondo chiaro"). BRAND.bgElevated/
+              // bgContainer sono gia' gli sfondi scuri usati nel resto
+              // dell'app.
               <Card size="small" style={{
-                backgroundColor: isAssistant ? '#e6f7ff' : '#f6ffed',
-                borderColor: isAssistant ? '#91d5ff' : '#b7eb8f'
+                backgroundColor: isAssistant ? BRAND.bgElevated : BRAND.bgContainer,
+                borderColor: BRAND.border,
               }}>
                 <Space direction="vertical" size={0} style={{ width: '100%' }}>
                   <Text strong style={{ color: isAssistant ? '#1890ff' : '#52c41a' }}>
@@ -115,7 +131,9 @@ function CallDetail() {
 
     return (
       <pre style={{
-        backgroundColor: '#f5f5f5',
+        backgroundColor: BRAND.bgContainer,
+        color: BRAND.white,
+        border: `1px solid ${BRAND.border}`,
         padding: 16,
         borderRadius: 8,
         overflow: 'auto',
@@ -157,7 +175,7 @@ function CallDetail() {
           <FileTextOutlined /> Record JSON
         </span>
       ),
-      children: renderRecord(call.record),
+      children: renderRecord(call.record?.json_data),
     },
   ]
 
@@ -226,19 +244,19 @@ function CallDetail() {
               <Descriptions.Item label="Ultima Modifica">
                 {new Date(call.updated_at).toLocaleString('it-IT')}
               </Descriptions.Item>
-              {call.consent_given_at && (
+              {call.consent_timestamp && (
                 <Descriptions.Item label="Consenso Dato">
-                  {new Date(call.consent_given_at).toLocaleString('it-IT')}
+                  {new Date(call.consent_timestamp).toLocaleString('it-IT')}
                 </Descriptions.Item>
               )}
-              {call.call_started_at && (
+              {call.started_at && (
                 <Descriptions.Item label="Chiamata Iniziata">
-                  {new Date(call.call_started_at).toLocaleString('it-IT')}
+                  {new Date(call.started_at).toLocaleString('it-IT')}
                 </Descriptions.Item>
               )}
-              {call.call_ended_at && (
+              {call.ended_at && (
                 <Descriptions.Item label="Chiamata Terminata">
-                  {new Date(call.call_ended_at).toLocaleString('it-IT')}
+                  {new Date(call.ended_at).toLocaleString('it-IT')}
                 </Descriptions.Item>
               )}
             </Descriptions>
@@ -249,7 +267,9 @@ function CallDetail() {
           <Col span={24}>
             <Card title="Metadata">
               <pre style={{
-                backgroundColor: '#f5f5f5',
+                backgroundColor: BRAND.bgContainer,
+                color: BRAND.white,
+                border: `1px solid ${BRAND.border}`,
                 padding: 16,
                 borderRadius: 8,
                 overflow: 'auto',
