@@ -133,27 +133,28 @@ function ProjectEdit() {
   // Input.TextArea di antd inoltra il ref al textarea nativo (versioni
   // recenti) o a .resizableTextArea.textArea (versioni piu' vecchie) -
   // gestiti entrambi.
-  const insertTag = (type, tagKey) => {
+  const insertAtCursor = (type, text) => {
     const ref = type === 'A' ? promptARef : promptBRef
     const el = ref.current?.resizableTextArea?.textArea || ref.current
     const current = type === 'A' ? promptA : promptB
-    const tag = `{{${tagKey}}}`
     if (!el || typeof el.selectionStart !== 'number') {
       // Fallback senza cursore noto: in coda.
-      handlePromptChange(type, current + tag)
+      handlePromptChange(type, current + text)
       return
     }
     const start = el.selectionStart
     const end = el.selectionEnd
-    const next = current.slice(0, start) + tag + current.slice(end)
+    const next = current.slice(0, start) + text + current.slice(end)
     handlePromptChange(type, next)
-    // Il cursore dopo il tag appena inserito, dopo che React ha
+    // Il cursore dopo il testo appena inserito, dopo che React ha
     // ri-renderizzato con il nuovo value.
     requestAnimationFrame(() => {
       el.focus()
-      el.setSelectionRange(start + tag.length, start + tag.length)
+      el.setSelectionRange(start + text.length, start + text.length)
     })
   }
+
+  const insertTag = (type, tagKey) => insertAtCursor(type, `{{${tagKey}}}`)
 
   const handlePromptChange = (type, value) => {
     if (type === 'A') {
@@ -331,27 +332,77 @@ function ProjectEdit() {
             showIcon
             style={{ marginBottom: 16 }}
           />
-          <div style={{ marginBottom: 8 }}>
+          <div style={{ marginBottom: 12 }}>
             <Text type="secondary" style={{ fontSize: 12, marginRight: 8 }}>Inserisci variabile:</Text>
-            <Space wrap size={4}>
-              {customVariablesSchema.map((field) => (
-                <Tag
-                  key={field.key}
-                  style={{ cursor: 'pointer', fontFamily: 'monospace' }}
-                  onClick={() => insertTag('A', field.key)}
-                >
-                  {`{{${field.key}}}`}
-                </Tag>
-              ))}
-              <Tag
-                color="blue"
-                style={{ cursor: 'pointer', fontFamily: 'monospace' }}
-                onClick={() => insertTag('A', 'system__caller_id')}
-                title="Risolto dal provider voce alla chiamata - non e' una variabile custom, mai sostituito da Ascolta"
-              >
-                {'{{system__caller_id}}'}
-              </Tag>
-            </Space>
+            {customVariablesSchema.length === 0 ? (
+              <Text type="secondary" style={{ fontSize: 12, fontStyle: 'italic' }}>
+                nessuna ancora - scrivi {'{{nome}}'} nel prompt e sotto compare "Aggiungi come variabile"
+              </Text>
+            ) : (
+              <Space wrap size={4}>
+                {customVariablesSchema.map((field) => (
+                  <Tag
+                    key={field.key}
+                    style={{ cursor: 'pointer', fontFamily: 'monospace' }}
+                    onClick={() => insertTag('A', field.key)}
+                    title={field.label}
+                  >
+                    {`{{${field.key}}}`}
+                  </Tag>
+                ))}
+              </Space>
+            )}
+
+            {/* maintainer, 20/08: "l'altro tag che contiene data e ora...
+                dovrebbero essere quelli predefiniti ma l'utente non sa a
+                cosa servono, servirebbe una descrizione minima sotto
+                quelli custom" - due meccanismi diversi, non solo un altro
+                {{tag}}: current_datetime e' uno STRUMENTO che il modello
+                chiama da solo (basta nominarlo nel prompt, non va tra
+                parentesi graffe - inserirlo come {{current_datetime}}
+                sarebbe scorretto, Ascolta non lo sostituisce), mentre
+                system__caller_id resta un vero tag {{...}}, risolto dal
+                provider voce. Spiegati qui invece di lasciarli intuire. */}
+            <div style={{ marginTop: 8 }}>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                Gia' disponibili, non serve configurarli:
+              </Text>
+              <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <Space size={6} align="start">
+                  <Tag
+                    color="blue"
+                    style={{ cursor: 'pointer', fontFamily: 'monospace', margin: 0 }}
+                    onClick={() => insertTag('A', 'system__caller_id')}
+                  >
+                    {'{{system__caller_id}}'}
+                  </Tag>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    il numero di chi sta chiamando - lo passa il provider vocale, Ascolta non lo tocca
+                  </Text>
+                </Space>
+                <Space size={6} align="start">
+                  <Tag
+                    color="blue"
+                    style={{ cursor: 'pointer', margin: 0 }}
+                    // Non e' un {{tag}} - inseriamo la frase pronta
+                    // all'uso cosi' com'e' nel prompt Comune/URP gia'
+                    // verificato con una simulazione di test, non solo la
+                    // parola nuda.
+                    onClick={() =>
+                      insertAtCursor(
+                        'A',
+                        "Usa current_datetime come unica fonte di verita' per data, ora e giorno della settimana correnti a Roma."
+                      )
+                    }
+                  >
+                    current_datetime
+                  </Tag>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    strumento che il modello chiama da solo per sapere data/ora correnti - basta nominarlo nel prompt in una frase, non va scritto tra {'{{ }}'}
+                  </Text>
+                </Space>
+              </div>
+            </div>
           </div>
           <TextArea
             ref={promptARef}
