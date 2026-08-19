@@ -9,6 +9,7 @@ import * as projectsApi from '../api/projects'
 import TelephonyTab from '../components/TelephonyTab'
 import KnowledgeBaseTab from '../components/KnowledgeBaseTab'
 import PdfEmailTab from '../components/PdfEmailTab'
+import CalcomTab from '../components/CalcomTab'
 import dayjs from 'dayjs'
 
 const { Title, Text } = Typography
@@ -603,6 +604,11 @@ function ProjectConfig() {
       key: 'pdf-email',
       label: 'PDF & Email',
       children: <PdfEmailTab projectId={projectId} />,
+    },
+    {
+      key: 'calcom',
+      label: 'Cal.com',
+      children: <CalcomTab projectId={projectId} />,
     },
   ]
 

@@ -169,10 +169,24 @@ async def provision_project_runtime(project: Dict[str, Any]) -> Dict[str, Any]:
             except json.JSONDecodeError:
                 output_config = {}
         calendar_cfg = output_config.get("calendar") or {}
+        # 20/08 (maintainer, sull'integrazione Cal.com dello scenario Appointment Demo
+        # importato da earlier-prototype): "dovrai generalizzarla e renderla
+        # ottenibile tramite configurazioni come tutto il resto" - questo
+        # pezzo (risoluzione API key per-tenant) era gia' cosi', non un
+        # fallback globale: il buco reale era qui, solo event_type_id (il
+        # default) veniva passato alla config generata, non i due usati
+        # dal tool quando il prompt distingue visita standard/sportiva
+        # (vedi runtime_workers/realtime_service.py::resolve_event_type_id,
+        # gia' pronto a leggerli - mancava solo chi li passasse). Nuova UI
+        # per impostarli: admin-ui/src/components/CalcomTab.jsx.
         calcom_cfg = {
             "base_url": "https://api.cal.com/v2",
             "event_type_id": str(calendar_cfg.get("event_type_id") or ""),
+            "standard_event_type_id": str(calendar_cfg.get("standard_event_type_id") or ""),
+            "sport_event_type_id": str(calendar_cfg.get("sport_event_type_id") or ""),
         }
+        if calendar_cfg.get("username"):
+            calcom_cfg["username"] = str(calendar_cfg["username"])
 
     language = project.get("language") or "it"
     first_message = project.get("consent_message") or _default_first_message(language)
