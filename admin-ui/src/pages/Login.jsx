@@ -28,14 +28,6 @@ function Login() {
       // spazio finale quando si accetta un suggerimento.
       const emailToSend = values.email.trim().toLowerCase()
       const passwordToSend = values.password.trim()
-      // TEMP DIAGNOSTIC - rimuovere una volta diagnosticato. Mostra
-      // esattamente cosa sta per essere inviato (email intera,
-      // lunghezza password + primo/ultimo carattere, non la password
-      // intera) prima della chiamata.
-      window.alert(
-        `[DEBUG] Invio email="${emailToSend}" (len ${emailToSend.length}), ` +
-        `password len=${passwordToSend.length} primo="${passwordToSend[0]}" ultimo="${passwordToSend[passwordToSend.length - 1]}"`
-      )
       await login(emailToSend, passwordToSend)
       message.success('Login effettuato')
     } catch (error) {

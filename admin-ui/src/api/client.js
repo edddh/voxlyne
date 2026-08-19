@@ -59,11 +59,6 @@ client.interceptors.response.use(
       const refreshToken = localStorage.getItem('refreshToken')
 
       if (!refreshToken) {
-        // TEMP DIAGNOSTIC (18/08, iPhone login bug - "flash e torna al
-        // login"): alert() works on any device with no dev tools needed,
-        // to see WHICH request 401'd and why refreshToken was missing.
-        // Remove once diagnosed.
-        window.alert(`[DEBUG] No refreshToken. Failing request: ${originalRequest.method} ${originalRequest.url}`)
         localStorage.clear()
         window.location.href = '/login'
         return Promise.reject(error)
@@ -82,12 +77,6 @@ client.interceptors.response.use(
 
         return client(originalRequest)
       } catch (refreshError) {
-        // TEMP DIAGNOSTIC - see note above. Remove once diagnosed.
-        window.alert(
-          `[DEBUG] Refresh failed. Original request: ${originalRequest.method} ${originalRequest.url} ` +
-          `status=${error.response?.status}. Refresh error: ${refreshError.response?.status} ` +
-          `${JSON.stringify(refreshError.response?.data || refreshError.message)}`
-        )
         processQueue(refreshError, null)
         localStorage.clear()
         window.location.href = '/login'
