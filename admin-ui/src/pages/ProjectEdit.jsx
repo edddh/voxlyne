@@ -604,6 +604,12 @@ function ProjectEdit() {
                   okText="Ripristina"
                   cancelText="Annulla"
                   disabled={!editorDiffersFromPublished}
+                  // maintainer: "è più largo della larghezza del cellulare,
+                  // mi costringe a scrollare" - il popup non aveva un
+                  // limite di larghezza, di default si allarga quanto
+                  // serve al testo su una riga sola invece di andare a
+                  // capo, sfondando lo schermo su mobile.
+                  overlayStyle={{ maxWidth: 'min(320px, 92vw)' }}
                 >
                   <Button
                     icon={<UndoOutlined />}
