@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Table, Button, Space, Input, Modal, Form, message, Tag, Popconfirm, Typography, Tooltip
+  Table, Button, Space, Input, InputNumber, Modal, Form, message, Tag, Popconfirm, Typography, Tooltip
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, KeyOutlined } from '@ant-design/icons'
 import * as tenantsApi from '../api/tenants'
@@ -47,6 +47,7 @@ function Tenants() {
         name: tenant.name,
         slug: tenant.slug,
         is_active: tenant.is_active,
+        included_minutes: tenant.settings?.included_minutes ?? null,
       })
     }
     setModalOpen(true)
@@ -54,11 +55,23 @@ function Tenants() {
 
   const handleSubmit = async (values) => {
     try {
+      // maintainer, 20/08: "gli utenti del tenant devono vedere quanto del
+      // pacchetto hanno utilizzato" - il pacchetto (minuti inclusi) si
+      // configura qui. tenants.settings e' un JSONB sostituito per
+      // intero dal backend (non un merge, vedi app/routers/tenants.py::
+      // update_tenant), quindi bisogna rimandare indietro TUTTO
+      // l'oggetto esistente con solo included_minutes cambiato, non solo
+      // il campo nuovo - altrimenti si perdono max_users/max_projects
+      // gia' salvati.
+      const { included_minutes, ...rest } = values
+      const settings = { ...(editingTenant?.settings || {}), included_minutes: included_minutes ?? null }
+      const payload = { ...rest, settings }
+
       if (editingTenant) {
-        await tenantsApi.updateTenant(editingTenant.id, values)
+        await tenantsApi.updateTenant(editingTenant.id, payload)
         message.success('Tenant aggiornato')
       } else {
-        await tenantsApi.createTenant(values)
+        await tenantsApi.createTenant(payload)
         message.success('Tenant creato')
       }
       setModalOpen(false)
@@ -110,6 +123,16 @@ function Tenants() {
       dataIndex: 'project_count',
       key: 'projects',
       align: 'center',
+    },
+    {
+      title: 'Pacchetto',
+      key: 'included_minutes',
+      align: 'center',
+      render: (_, record) => (
+        record.settings?.included_minutes
+          ? `${record.settings.included_minutes} min`
+          : <Tag>Non configurato</Tag>
+      ),
     },
     {
       title: 'Creato',
@@ -219,6 +242,13 @@ function Tenants() {
               </select>
             </Form.Item>
           )}
+          <Form.Item
+            name="included_minutes"
+            label="Minuti inclusi nel pacchetto"
+            tooltip="Quanti minuti di chiamata sono inclusi per questo tenant - gli utenti del tenant vedono quanto ne hanno usato in percentuale (pagina Chiamate). Lascia vuoto per nessun limite configurato."
+          >
+            <InputNumber min={0} style={{ width: '100%' }} placeholder="Es. 500 (vuoto = nessun limite configurato)" />
+          </Form.Item>
           <Form.Item>
             <Space>
               <Button type="primary" htmlType="submit">
