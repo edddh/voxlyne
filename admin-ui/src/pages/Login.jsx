@@ -19,7 +19,14 @@ function Login() {
   const onFinish = async (values) => {
     setLoading(true)
     try {
-      await login(values.email, values.password)
+      // Rete di sicurezza oltre al fix della tastiera (autoCapitalize
+      // sull'Input sopra): normalizza comunque prima di inviare, cosi'
+      // il login funziona anche se qualcos'altro (autofill, un browser
+      // diverso) reintroduce maiuscole/spazi indesiderati. Solo trim
+      // sulla password (mai lowercase - e' case-sensitive per design):
+      // le tastiere/barra suggerimenti mobile a volte aggiungono uno
+      // spazio finale quando si accetta un suggerimento.
+      await login(values.email.trim().toLowerCase(), values.password.trim())
       message.success('Login effettuato')
     } catch (error) {
       const errorMessage = error.response?.data?.detail || 'Credenziali non valide'
@@ -71,7 +78,11 @@ function Login() {
               <Input
                 prefix={<UserOutlined />}
                 placeholder="Email"
+                type="email"
                 autoComplete="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
               />
             </Form.Item>
 
