@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Card, Button, Space, Input, message, Typography, Tabs, Row, Col, Spin, Alert, Tag, Divider, Switch, List, Popconfirm,
@@ -62,6 +62,8 @@ function ProjectEdit() {
   const [customVariables, setCustomVariables] = useState({})
   const [savedCustomVariables, setSavedCustomVariables] = useState({})
   const [savingVariables, setSavingVariables] = useState(false)
+  const promptARef = useRef(null)
+  const promptBRef = useRef(null)
 
   useEffect(() => {
     loadProject()
@@ -120,6 +122,34 @@ function ProjectEdit() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // maintainer, 20/08: "quando si fa l'editing del prompt nel progetto non
+  // c'e' modo di inserire anche il contenuto dei tag configurabili?" -
+  // inserisce {{key}} nella posizione del cursore, non solo in coda.
+  // Input.TextArea di antd inoltra il ref al textarea nativo (versioni
+  // recenti) o a .resizableTextArea.textArea (versioni piu' vecchie) -
+  // gestiti entrambi.
+  const insertTag = (type, tagKey) => {
+    const ref = type === 'A' ? promptARef : promptBRef
+    const el = ref.current?.resizableTextArea?.textArea || ref.current
+    const current = type === 'A' ? promptA : promptB
+    const tag = `{{${tagKey}}}`
+    if (!el || typeof el.selectionStart !== 'number') {
+      // Fallback senza cursore noto: in coda.
+      handlePromptChange(type, current + tag)
+      return
+    }
+    const start = el.selectionStart
+    const end = el.selectionEnd
+    const next = current.slice(0, start) + tag + current.slice(end)
+    handlePromptChange(type, next)
+    // Il cursore dopo il tag appena inserito, dopo che React ha
+    // ri-renderizzato con il nuovo value.
+    requestAnimationFrame(() => {
+      el.focus()
+      el.setSelectionRange(start + tag.length, start + tag.length)
+    })
   }
 
   const handlePromptChange = (type, value) => {
@@ -268,7 +298,30 @@ function ProjectEdit() {
             showIcon
             style={{ marginBottom: 16 }}
           />
+          <div style={{ marginBottom: 8 }}>
+            <Text type="secondary" style={{ fontSize: 12, marginRight: 8 }}>Inserisci variabile:</Text>
+            <Space wrap size={4}>
+              {customVariablesSchema.map((field) => (
+                <Tag
+                  key={field.key}
+                  style={{ cursor: 'pointer', fontFamily: 'monospace' }}
+                  onClick={() => insertTag('A', field.key)}
+                >
+                  {`{{${field.key}}}`}
+                </Tag>
+              ))}
+              <Tag
+                color="blue"
+                style={{ cursor: 'pointer', fontFamily: 'monospace' }}
+                onClick={() => insertTag('A', 'system__caller_id')}
+                title="Risolto dal provider voce alla chiamata - non e' una variabile custom, mai sostituito da Ascolta"
+              >
+                {'{{system__caller_id}}'}
+              </Tag>
+            </Space>
+          </div>
           <TextArea
+            ref={promptARef}
             value={promptA}
             onChange={(e) => handlePromptChange('A', e.target.value)}
             rows={20}
@@ -334,7 +387,24 @@ function ProjectEdit() {
             showIcon
             style={{ marginBottom: 16 }}
           />
+          {customVariablesSchema.length > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              <Text type="secondary" style={{ fontSize: 12, marginRight: 8 }}>Inserisci variabile:</Text>
+              <Space wrap size={4}>
+                {customVariablesSchema.map((field) => (
+                  <Tag
+                    key={field.key}
+                    style={{ cursor: 'pointer', fontFamily: 'monospace' }}
+                    onClick={() => insertTag('B', field.key)}
+                  >
+                    {`{{${field.key}}}`}
+                  </Tag>
+                ))}
+              </Space>
+            </div>
+          )}
           <TextArea
+            ref={promptBRef}
             value={promptB}
             onChange={(e) => handlePromptChange('B', e.target.value)}
             rows={20}
