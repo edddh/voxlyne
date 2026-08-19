@@ -9,6 +9,11 @@ text model, using the DRAFT prompt_a straight from the editor (not what's
 saved/published) as the system message. Close enough to catch prompt
 issues (wrong tone, missing info, wrong language) before going live,
 without the complexity of a full audio round-trip.
+
+Has the search_knowledge_base tool wired in (maintainer, 19/08: "anche nella
+chat testuale" - same request already done for the voice simulation,
+app/routers/simulate_voice.py) - OpenAI-compatible chat completions tool
+calling, one round-trip if the model calls the tool.
 """
 
 import logging
@@ -39,10 +44,35 @@ SIMULATION_MODELS = {
     "openai": "gpt-4o",
 }
 
+# Formato OpenAI-compatible per chat.completions (diverso da quello usato
+# nell'API realtime, vedi app/routers/simulate_voice.py::SEARCH_KB_TOOL -
+# qui i campi vanno annidati sotto "function").
+SEARCH_KB_TOOL_CHAT = {
+    "type": "function",
+    "function": {
+        "name": "search_knowledge_base",
+        "description": "Search this organization's knowledge base (documents and crawled web pages configured by the admin) for information relevant to the caller's question - e.g. office hours, procedures, local regulations, services offered. Use this before saying you don't know something the organization may have documented.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "The question or topic to search for, in the caller's own words"},
+            },
+            "required": ["query"],
+            "additionalProperties": False,
+        },
+    },
+}
+
 
 class SimMessage(BaseModel):
     role: str = Field(..., pattern="^(user|assistant)$")
     content: str
+
+
+class SimulateToolCall(BaseModel):
+    name: str
+    arguments: Dict[str, Any]
+    result: Dict[str, Any]
 
 
 class SimulateRequest(BaseModel):
@@ -52,12 +82,23 @@ class SimulateRequest(BaseModel):
 
 class SimulateResponse(BaseModel):
     reply: str
+    tool_calls: List[SimulateToolCall] = Field(default_factory=list)
 
 
 def _provider_for_engine(voice_engine: Optional[str]) -> str:
     if voice_engine and "xai" in voice_engine:
         return "xai"
     return "openai"
+
+
+async def _run_search_knowledge_base(project_id: UUID, tenant_id: UUID, query: str) -> Dict[str, Any]:
+    from app.services.rag.search import search_knowledge_base
+
+    try:
+        results = await search_knowledge_base(project_id, tenant_id, query, top_k=5)
+        return {"status": "ok", "results": results} if results else {"status": "no_results"}
+    except ValueError as e:
+        return {"status": "unavailable", "message": str(e)}
 
 
 @router.post("/projects/{project_id}/simulate", response_model=SimulateResponse)
@@ -92,20 +133,18 @@ async def simulate_conversation(
     client = AsyncOpenAI(api_key=api_key, base_url="https://api.x.ai/v1" if provider == "xai" else None)
 
     # Molti prompt (es. il template Comune/URP) istruiscono l'agente a
-    # usare il tool "current_datetime" come unica fonte di verita' per
-    # data/ora - questa simulazione non ha alcun tool collegato (vedi
-    # docstring del modulo), quindi senza questo il modello a volte scrive
-    # letteralmente il nome del tool invece di rispondere (maintainer, 19/08:
-    # "mi ha risposto con **current_datetime**"). Inietta il fatto
-    # direttamente cosi' il modello ha gia' l'informazione e non ha
-    # bisogno di "chiamare" nulla.
+    # usare il tool "current_datetime" - non collegato qui (solo
+    # search_knowledge_base lo e', vedi sotto), quindi senza questo il
+    # modello a volte scrive letteralmente il nome del tool invece di
+    # rispondere (maintainer, 19/08: "mi ha risposto con **current_datetime**").
+    # Inietta il fatto direttamente cosi' il modello ha gia' l'informazione.
     now_rome = datetime.now(ZoneInfo("Europe/Rome"))
     datetime_fact = (
         f"[Informazione di sistema per questa simulazione: la data e ora corrente "
         f"a Europe/Rome sono {now_rome.strftime('%A %d %B %Y, %H:%M')}. Usala direttamente "
         f"se ti serve rispondere a domande su data/ora/giorno della settimana - non hai "
-        f"nessuno strumento da chiamare in questa conversazione di prova, tutte le "
-        f"informazioni che ti servono sono gia' qui o nelle istruzioni sopra.]"
+        f"un tool current_datetime da chiamare in questa conversazione di prova, solo "
+        f"search_knowledge_base per la knowledge base del progetto.]"
     )
     chat_messages: List[Dict[str, Any]] = [
         {"role": "system", "content": body.prompt_a},
@@ -113,16 +152,51 @@ async def simulate_conversation(
     ]
     chat_messages += [{"role": m.role, "content": m.content} for m in body.messages]
 
-    try:
-        response = await client.chat.completions.create(
+    async def _call_model(messages: List[Dict[str, Any]]):
+        return await client.chat.completions.create(
             model=SIMULATION_MODELS[provider],
-            messages=chat_messages,
+            messages=messages,
+            tools=[SEARCH_KB_TOOL_CHAT],
+            tool_choice="auto",
             max_tokens=400,
             temperature=0.7,
         )
+
+    tool_calls_log: List[SimulateToolCall] = []
+    try:
+        response = await _call_model(chat_messages)
+        message = response.choices[0].message
+
+        # Un solo giro di tool-calling e' sufficiente per una prova
+        # rapida (non un loop agentic completo) - se il modello chiede
+        # search_knowledge_base, lo eseguiamo e richiediamo la risposta
+        # finale una volta sola.
+        if message.tool_calls:
+            chat_messages.append({
+                "role": "assistant",
+                "content": message.content,
+                "tool_calls": [tc.model_dump() for tc in message.tool_calls],
+            })
+            for tool_call in message.tool_calls:
+                if tool_call.function.name != "search_knowledge_base":
+                    continue
+                import json as _json
+
+                try:
+                    args = _json.loads(tool_call.function.arguments or "{}")
+                except _json.JSONDecodeError:
+                    args = {}
+                result = await _run_search_knowledge_base(project_id, tenant_id, args.get("query", ""))
+                tool_calls_log.append(SimulateToolCall(name="search_knowledge_base", arguments=args, result=result))
+                chat_messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": _json.dumps(result, ensure_ascii=True),
+                })
+            response = await _call_model(chat_messages)
+            message = response.choices[0].message
     except Exception as e:
         logger.error(f"Simulation call failed for project {project_id}: {e}")
         raise HTTPException(status_code=502, detail=f"Errore chiamando il modello: {e}")
 
-    reply = response.choices[0].message.content or ""
-    return SimulateResponse(reply=reply)
+    return SimulateResponse(reply=message.content or "", tool_calls=tool_calls_log)

@@ -15,8 +15,10 @@ const { Text } = Typography
  * e' un'API WebSocket, non richiamabile da una chat testuale) - usa un
  * modello di testo comparabile con lo stesso prompt e la stessa
  * credenziale del tenant, per verificare tono/contenuto delle risposte.
- * Non ha accesso alla knowledge base ne' agli altri strumenti (Cal.com,
- * ecc.) - solo il ragionamento del prompt puro.
+ * Ha accesso alla knowledge base (search_knowledge_base, un solo giro di
+ * tool-calling per risposta - maintainer, 19/08: "anche nella chat testuale",
+ * stessa cosa gia' fatta per la simulazione vocale). Non ha accesso agli
+ * altri strumenti (Cal.com, ecc.).
  */
 function SimulateChat({ open, onClose, projectId, promptA, openingMessage }) {
   const [messages, setMessages] = useState([])
@@ -52,8 +54,13 @@ function SimulateChat({ open, onClose, projectId, promptA, openingMessage }) {
     setSending(true)
     setError(null)
     try {
-      const result = await simulateConversation(projectId, promptA, nextMessages)
-      setMessages([...nextMessages, { role: 'assistant', content: result.reply }])
+      // Il backend accetta solo role user/assistant nella history (vedi
+      // SimMessage in app/routers/simulation.py) - le voci 'tool' sono
+      // solo per la visualizzazione qui, non vanno rimandate indietro.
+      const apiHistory = nextMessages.filter((m) => m.role === 'user' || m.role === 'assistant')
+      const result = await simulateConversation(projectId, promptA, apiHistory)
+      const toolEntries = (result.tool_calls || []).map((tc) => ({ role: 'tool', ...tc }))
+      setMessages([...nextMessages, ...toolEntries, { role: 'assistant', content: result.reply }])
     } catch (err) {
       setError(err.response?.data?.detail || 'Errore nella simulazione')
     } finally {
@@ -93,25 +100,32 @@ function SimulateChat({ open, onClose, projectId, promptA, openingMessage }) {
           <Text type="secondary">Scrivi un messaggio come farebbe chi chiama, per vedere come risponde.</Text>
         )}
         <Space direction="vertical" style={{ width: '100%' }} size={12}>
-          {messages.map((m, i) => (
-            <div key={i} style={{ display: 'flex', gap: 8, flexDirection: m.role === 'user' ? 'row-reverse' : 'row' }}>
-              <Avatar
-                size="small"
-                icon={m.role === 'user' ? <UserOutlined /> : <RobotOutlined />}
-                style={{ background: m.role === 'user' ? BRAND.border : BRAND.orange, flexShrink: 0 }}
-              />
-              <div
-                style={{
-                  background: m.role === 'user' ? BRAND.bgElevated : BRAND.orangeSoft,
-                  padding: '8px 12px',
-                  borderRadius: 8,
-                  maxWidth: '75%',
-                }}
-              >
-                <Text>{m.content}</Text>
+          {messages.map((m, i) =>
+            m.role === 'tool' ? (
+              <Text key={i} type="secondary" style={{ fontFamily: 'monospace', fontSize: 12 }}>
+                🔧 {m.name}({JSON.stringify(m.arguments)}) → {m.result?.status}
+                {m.result?.results?.length ? ` (${m.result.results.length} risultati)` : ''}
+              </Text>
+            ) : (
+              <div key={i} style={{ display: 'flex', gap: 8, flexDirection: m.role === 'user' ? 'row-reverse' : 'row' }}>
+                <Avatar
+                  size="small"
+                  icon={m.role === 'user' ? <UserOutlined /> : <RobotOutlined />}
+                  style={{ background: m.role === 'user' ? BRAND.border : BRAND.orange, flexShrink: 0 }}
+                />
+                <div
+                  style={{
+                    background: m.role === 'user' ? BRAND.bgElevated : BRAND.orangeSoft,
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    maxWidth: '75%',
+                  }}
+                >
+                  <Text>{m.content}</Text>
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          )}
           {sending && <Spin size="small" />}
         </Space>
       </div>

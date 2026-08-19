@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { Modal, Button, Space, Typography, Alert, Tag, List } from 'antd'
 import { AudioOutlined, PhoneOutlined, StopOutlined } from '@ant-design/icons'
 import { BRAND } from '../main'
@@ -64,6 +64,24 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA }) {
   const streamRef = useRef(null)
   const processorRef = useRef(null)
   const playheadRef = useRef(0)
+  const transcriptEndRef = useRef(null)
+
+  useEffect(() => {
+    transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [transcript])
+
+  // xAI a volte manda lo stesso evento di trascrizione piu' volte per
+  // la stessa frase (interim + finale con contenuto identico) - maintainer,
+  // 19/08: "riporta due volte le mie frasi". Ignora una nuova riga
+  // identica, stesso ruolo, a quella appena aggiunta.
+  const appendTranscript = useCallback((role, content) => {
+    if (!content) return
+    setTranscript((prev) => {
+      const last = prev[prev.length - 1]
+      if (last && last.role === role && last.content === content) return prev
+      return [...prev, { role, content }]
+    })
+  }, [])
 
   const cleanup = useCallback(() => {
     processorRef.current?.disconnect()
@@ -148,11 +166,18 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA }) {
           return
         }
         if (msg.type === 'conversation.item.input_audio_transcription.completed') {
-          setTranscript((prev) => [...prev, { role: 'user', content: msg.transcript || '' }])
+          appendTranscript('user', msg.transcript || '')
           return
         }
         if (msg.type === 'response.output_audio_transcript.done') {
-          setTranscript((prev) => [...prev, { role: 'assistant', content: msg.transcript || '' }])
+          appendTranscript('assistant', msg.transcript || '')
+          return
+        }
+        if (msg.type === 'ascolta.tool_call') {
+          // maintainer, 19/08: "potresti riportare la chiamata al tool e la
+          // risposta" - visibile in trascrizione, non solo eseguita in
+          // silenzio dal backend.
+          setTranscript((prev) => [...prev, { role: 'tool', name: msg.name, arguments: msg.arguments, result: msg.result }])
         }
       }
 
@@ -177,7 +202,7 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA }) {
       setStatus('error')
       cleanup()
     }
-  }, [projectId, promptA, playChunk, cleanup, status])
+  }, [projectId, promptA, playChunk, cleanup, status, appendTranscript])
 
   const stop = useCallback(() => {
     cleanup()
@@ -196,7 +221,7 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA }) {
         type="info"
         showIcon
         message="Modello vocale reale (grok-voice-latest), non un sostituto testuale"
-        description="Usa il microfono del browser e il prompt attuale nell'editor (anche non salvato). Non ha accesso alla knowledge base ne' agli altri strumenti - solo il ragionamento vocale del prompt."
+        description="Usa il microfono del browser e il prompt attuale nell'editor (anche non salvato), con accesso alla knowledge base del progetto. Non ha accesso agli altri strumenti (Cal.com, ecc.)."
         style={{ marginBottom: 16 }}
       />
 
@@ -228,19 +253,30 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA }) {
       </div>
 
       {transcript.length > 0 && (
-        <List
-          size="small"
-          dataSource={transcript}
-          style={{ maxHeight: 240, overflowY: 'auto', border: `1px solid ${BRAND.border}`, borderRadius: 8, padding: 8 }}
-          renderItem={(t) => (
-            <List.Item style={{ border: 'none', padding: '4px 0' }}>
-              <Text type="secondary" strong style={{ marginRight: 6 }}>
-                {t.role === 'user' ? 'Tu:' : 'Agente:'}
-              </Text>
-              <Text>{t.content}</Text>
-            </List.Item>
-          )}
-        />
+        <div style={{ maxHeight: 240, overflowY: 'auto', border: `1px solid ${BRAND.border}`, borderRadius: 8, padding: 8 }}>
+          <List
+            size="small"
+            dataSource={transcript}
+            renderItem={(t) => (
+              <List.Item style={{ border: 'none', padding: '4px 0' }}>
+                {t.role === 'tool' ? (
+                  <Text type="secondary" style={{ fontFamily: 'monospace', fontSize: 12 }}>
+                    🔧 {t.name}({JSON.stringify(t.arguments)}) → {t.result?.status}
+                    {t.result?.results?.length ? ` (${t.result.results.length} risultati)` : ''}
+                  </Text>
+                ) : (
+                  <>
+                    <Text type="secondary" strong style={{ marginRight: 6 }}>
+                      {t.role === 'user' ? 'Tu:' : 'Agente:'}
+                    </Text>
+                    <Text>{t.content}</Text>
+                  </>
+                )}
+              </List.Item>
+            )}
+          />
+          <div ref={transcriptEndRef} />
+        </div>
       )}
     </Modal>
   )
