@@ -1031,15 +1031,24 @@ class LegacyController:
             except Exception:
                 logging.exception("Failed to check transcript activity for %s", internal_call_id)
 
+        from app.services.pricing import estimate_xai_call_cost_usd
+
+        billable_audio_seconds = state.metadata.get("billable_audio_seconds")
+        cost_usd = estimate_xai_call_cost_usd(billable_audio_seconds)
+
         try:
             await db.execute(
                 """
-                UPDATE calls SET ended_at = COALESCE(ended_at, :ended_at), status = :status WHERE id = :id
+                UPDATE calls SET ended_at = COALESCE(ended_at, :ended_at), status = :status,
+                       billable_audio_seconds = :billable_audio_seconds, cost_usd = :cost_usd
+                WHERE id = :id
                 """,
                 {
                     "id": internal_call_id,
                     "ended_at": datetime.now(timezone.utc),
                     "status": final_status,
+                    "billable_audio_seconds": billable_audio_seconds,
+                    "cost_usd": cost_usd,
                 },
             )
         except Exception:
@@ -1258,6 +1267,18 @@ class LegacyController:
                     elif etype == "response.done":
                         status = (event.get("response") or {}).get("status")
                         logging.info("Response done [%s]: %s", call_id, status)
+                        # 20/08: usage.billable_audio_seconds e' un
+                        # campo TOP-LEVEL sull'evento (non dentro
+                        # response.usage, che risulta vuoto {}) -
+                        # verificato con una chiamata di test diretta
+                        # contro l'API reale prima di scriverlo. Somma
+                        # su tutte le risposte della chiamata, letta poi
+                        # in _finalize_call_record per calcolare il costo.
+                        billable = (event.get("usage") or {}).get("billable_audio_seconds")
+                        if billable:
+                            call_state.metadata["billable_audio_seconds"] = (
+                                call_state.metadata.get("billable_audio_seconds", 0) + billable
+                            )
         finally:
             await self._finalize_call_record(call_state)
 

@@ -150,6 +150,14 @@ async def list_calls(
                 "started_at": c["started_at"],
                 "ended_at": c["ended_at"],
                 "duration_seconds": c["duration_seconds"],
+                # Costo reale in $ - solo super_admin (maintainer, 20/08:
+                # "i costi reali delle chiamate devono essere visibili
+                # solo dal superadmin"). Il resto degli utenti (sempre
+                # tenant-scoped) ha /stats con minutes_used/
+                # minutes_included invece.
+                "cost_usd": (
+                    float(c["cost_usd"]) if current_user.is_super_admin and c["cost_usd"] is not None else None
+                ),
                 "project_id": str(c["project_id"]) if c["project_id"] else None,
                 "project_name": c["project_name"],
                 "project_slug": c["project_slug"],
@@ -183,6 +191,19 @@ async def get_calls_stats(
     these are real COUNT(*) queries over ALL of the tenant's calls, not
     just the current page. Must be registered before GET /{call_id} or
     FastAPI would try to parse "stats" as a UUID path param.
+
+    "i costi reali delle chiamate devono essere visibili solo dal
+    superadmin e aggregabili anche per tenant, gli utenti del tenant
+    devono vedere quanto del pacchetto hanno utilizzato" (20/08) - two
+    different responses depending on who's asking, not the same payload
+    with some fields hidden client-side (a tenant admin could just read
+    the network tab):
+    - super_admin: real $ costs, totals AND broken down per tenant
+      (by_tenant).
+    - everyone else (admin/power_user/creator, always tenant-scoped):
+      no $ figure anywhere in the response - minutes used against their
+      package allowance instead (tenants.settings->>'included_minutes',
+      no UI to set it yet, None = no package configured).
     """
     db = get_database()
     where = "WHERE 1=1"
@@ -210,19 +231,78 @@ async def get_calls_stats(
             ) AS today,
             COUNT(*) FILTER (WHERE status IN ('completed', 'processed')) AS completed,
             COUNT(*) FILTER (WHERE status = 'in_progress') AS in_progress,
-            AVG(duration_seconds) FILTER (WHERE duration_seconds IS NOT NULL) AS avg_duration_seconds
+            AVG(duration_seconds) FILTER (WHERE duration_seconds IS NOT NULL) AS avg_duration_seconds,
+            SUM(cost_usd) FILTER (WHERE cost_usd IS NOT NULL) AS total_cost_usd,
+            SUM(cost_usd) FILTER (
+                WHERE cost_usd IS NOT NULL
+                AND (created_at AT TIME ZONE 'Europe/Rome')::date = (now() AT TIME ZONE 'Europe/Rome')::date
+            ) AS today_cost_usd,
+            SUM(billable_audio_seconds) FILTER (WHERE billable_audio_seconds IS NOT NULL) AS billable_audio_seconds
         FROM calls
         {where}
         """,
         params,
     )
-    return {
+
+    result = {
         "total": row["total"],
         "today": row["today"],
         "completed": row["completed"],
         "in_progress": row["in_progress"],
         "avg_duration_seconds": float(row["avg_duration_seconds"]) if row["avg_duration_seconds"] is not None else None,
     }
+
+    if current_user.is_super_admin:
+        # Solo chiamate xai_sip_direct hanno un cost_usd calcolato per
+        # ora (vedi app/services/pricing.py) - una somma su chiamate
+        # miste sottostima il vero totale finche' gli altri motori non
+        # sono coperti, il frontend lo etichetta come parziale/stima.
+        result["total_cost_usd"] = float(row["total_cost_usd"]) if row["total_cost_usd"] is not None else 0.0
+        result["today_cost_usd"] = float(row["today_cost_usd"]) if row["today_cost_usd"] is not None else 0.0
+
+        by_tenant_rows = await db.fetch_all(
+            """
+            SELECT t.id AS tenant_id, t.name AS tenant_name,
+                   COUNT(c.id) AS calls_count,
+                   SUM(c.cost_usd) FILTER (WHERE c.cost_usd IS NOT NULL) AS cost_usd,
+                   SUM(c.billable_audio_seconds) FILTER (WHERE c.billable_audio_seconds IS NOT NULL) AS billable_audio_seconds
+            FROM tenants t
+            LEFT JOIN calls c ON c.tenant_id = t.id
+            GROUP BY t.id, t.name
+            HAVING COUNT(c.id) > 0
+            ORDER BY cost_usd DESC NULLS LAST
+            """,
+        )
+        result["by_tenant"] = [
+            {
+                "tenant_id": str(r["tenant_id"]),
+                "tenant_name": r["tenant_name"],
+                "calls_count": r["calls_count"],
+                "cost_usd": float(r["cost_usd"]) if r["cost_usd"] is not None else 0.0,
+                "minutes_used": round((r["billable_audio_seconds"] or 0) / 60, 2),
+            }
+            for r in by_tenant_rows
+        ]
+    else:
+        included_minutes = None
+        tenant_row = await db.fetch_one(
+            "SELECT settings FROM tenants WHERE id = :id", {"id": str(current_user.tenant_id)},
+        )
+        if tenant_row and tenant_row["settings"]:
+            settings = tenant_row["settings"]
+            if isinstance(settings, str):
+                settings = json.loads(settings)
+            included_minutes = (settings or {}).get("included_minutes")
+
+        minutes_used = round((row["billable_audio_seconds"] or 0) / 60, 2)
+        result["minutes_used"] = minutes_used
+        result["minutes_included"] = included_minutes
+        result["percent_used"] = (
+            round(min(minutes_used / included_minutes, 1.0) * 100, 1)
+            if included_minutes else None
+        )
+
+    return result
 
 
 @router.get("/{call_id}")
@@ -309,6 +389,11 @@ async def get_call_detail(
             "started_at": call["started_at"],
             "ended_at": call["ended_at"],
             "duration_seconds": call["duration_seconds"],
+            # Solo super_admin, stesso motivo di list_calls sopra.
+            "billable_audio_seconds": call["billable_audio_seconds"] if current_user.is_super_admin else None,
+            "cost_usd": (
+                float(call["cost_usd"]) if current_user.is_super_admin and call["cost_usd"] is not None else None
+            ),
             "project_id": str(call["project_id"]) if call["project_id"] else None,
             "project_name": call["project_name"],
             "project_slug": call["project_slug"],

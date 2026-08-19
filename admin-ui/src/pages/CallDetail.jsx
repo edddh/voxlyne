@@ -9,10 +9,12 @@ import {
 } from '@ant-design/icons'
 import * as callsApi from '../api/calls'
 import { BRAND } from '../main'
+import { useAuth } from '../hooks/useAuth'
 
 const { Title, Text, Paragraph } = Typography
 
 function CallDetail() {
+  const { isSuperAdmin } = useAuth()
   const { id } = useParams()
   const navigate = useNavigate()
   const [call, setCall] = useState(null)
@@ -239,6 +241,11 @@ function CallDetail() {
               <Descriptions.Item label="Durata">
                 {formatDuration(call.duration_seconds)}
               </Descriptions.Item>
+              {isSuperAdmin && (
+                <Descriptions.Item label="Costo (stima)">
+                  {call.cost_usd != null ? `$${call.cost_usd.toFixed(4)}` : <Text type="secondary">N/D</Text>}
+                </Descriptions.Item>
+              )}
               <Descriptions.Item label="Data Creazione">
                 {new Date(call.created_at).toLocaleString('it-IT')}
               </Descriptions.Item>

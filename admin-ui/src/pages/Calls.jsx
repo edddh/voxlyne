@@ -1,20 +1,23 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Table, Button, Space, Input, Select, DatePicker, Typography, Tag, Card, Row, Col, Statistic, Modal, Form, message
+  Table, Button, Space, Input, Select, DatePicker, Typography, Tag, Card, Row, Col, Statistic, Modal, Form, message, Progress
 } from 'antd'
 import {
   SearchOutlined, PhoneOutlined, FileTextOutlined, FilePdfOutlined, EyeOutlined,
-  CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, PhoneFilled, UserOutlined
+  CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, PhoneFilled, UserOutlined,
+  DollarCircleOutlined
 } from '@ant-design/icons'
 import * as callsApi from '../api/calls'
 import * as projectsApi from '../api/projects'
+import { useAuth } from '../hooks/useAuth'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
 
 function Calls() {
   const navigate = useNavigate()
+  const { isSuperAdmin } = useAuth()
   const [calls, setCalls] = useState([])
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
@@ -33,7 +36,17 @@ function Calls() {
   // cagata e', io voglio sapere piuttosto quante effettuate oggi, quante
   // in totale" - prima "Completate" contava solo tra le righe visibili
   // in quel momento, cambiava a seconda della pagina).
-  const [stats, setStats] = useState({ total: 0, today: 0, completed: 0, in_progress: 0 })
+  // maintainer, 20/08: "i costi reali delle chiamate devono essere visibili
+  // solo dal superadmin... gli utenti del tenant devono vedere quanto
+  // del pacchetto hanno utilizzato" - il backend gia' manda payload
+  // diversi per ruolo (total_cost_usd/by_tenant solo per super_admin,
+  // minutes_used/minutes_included/percent_used per tutti gli altri), qui
+  // e' solo un unico state che li ospita entrambi.
+  const [stats, setStats] = useState({
+    total: 0, today: 0, completed: 0, in_progress: 0,
+    total_cost_usd: 0, today_cost_usd: 0, by_tenant: [],
+    minutes_used: 0, minutes_included: null, percent_used: null,
+  })
 
   // Outbound call modal
   const [outboundModalOpen, setOutboundModalOpen] = useState(false)
@@ -233,6 +246,17 @@ function Calls() {
       align: 'center',
       render: formatDuration,
     },
+    // Il backend non manda affatto cost_usd a chi non e' super_admin
+    // (maintainer, 20/08: "i costi reali... devono essere visibili solo dal
+    // superadmin") - una colonna sempre vuota per tutti gli altri
+    // sarebbe solo rumore, meglio non mostrarla proprio.
+    ...(isSuperAdmin ? [{
+      title: 'Costo',
+      dataIndex: 'cost_usd',
+      key: 'cost',
+      align: 'center',
+      render: (cost) => cost != null ? `$${cost.toFixed(4)}` : <Text type="secondary">-</Text>,
+    }] : []),
     {
       title: 'Record',
       key: 'record',
@@ -350,7 +374,61 @@ function Calls() {
             />
           </Card>
         </Col>
+        <Col xs={12} sm={6}>
+          {isSuperAdmin ? (
+            <Card>
+              <Statistic
+                title="Costo Totale (stima)"
+                value={stats.total_cost_usd}
+                precision={4}
+                prefix={<DollarCircleOutlined />}
+                valueStyle={{ color: '#1890ff' }}
+              />
+              <Text type="secondary" style={{ fontSize: 11 }}>
+                Solo chiamate xai_sip_direct - gli altri motori non sono ancora coperti
+              </Text>
+            </Card>
+          ) : (
+            <Card>
+              <Statistic
+                title="Pacchetto Utilizzato"
+                value={stats.minutes_used}
+                suffix={stats.minutes_included ? `/ ${stats.minutes_included} min` : 'min'}
+                prefix={<DollarCircleOutlined />}
+                valueStyle={{ color: '#1890ff' }}
+              />
+              {stats.percent_used != null ? (
+                <Progress percent={stats.percent_used} size="small" style={{ marginTop: 8 }} />
+              ) : (
+                <Text type="secondary" style={{ fontSize: 11 }}>Nessun pacchetto configurato</Text>
+              )}
+            </Card>
+          )}
+        </Col>
       </Row>
+
+      {isSuperAdmin && stats.by_tenant?.length > 0 && (
+        <Card title="Costi per tenant" size="small" style={{ marginBottom: 24 }}>
+          <Table
+            size="small"
+            pagination={false}
+            dataSource={stats.by_tenant}
+            rowKey="tenant_id"
+            columns={[
+              { title: 'Tenant', dataIndex: 'tenant_name', key: 'tenant_name' },
+              { title: 'Chiamate', dataIndex: 'calls_count', key: 'calls_count', align: 'center' },
+              { title: 'Minuti fatturabili', dataIndex: 'minutes_used', key: 'minutes_used', align: 'center' },
+              {
+                title: 'Costo (stima)',
+                dataIndex: 'cost_usd',
+                key: 'cost_usd',
+                align: 'center',
+                render: (v) => `$${v.toFixed(4)}`,
+              },
+            ]}
+          />
+        </Card>
+      )}
 
       <Card style={{ marginBottom: 16 }}>
         <Row gutter={[16, 16]}>
