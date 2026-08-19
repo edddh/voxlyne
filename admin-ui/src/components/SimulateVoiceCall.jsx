@@ -191,7 +191,7 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA }) {
   }
 
   return (
-    <Modal title="Prova la chiamata vocale" open={open} onCancel={handleClose} footer={null} width={520}>
+    <Modal title="Prova la chiamata vocale" open={open} onCancel={handleClose} footer={null} width="min(520px, 92vw)">
       <Alert
         type="info"
         showIcon

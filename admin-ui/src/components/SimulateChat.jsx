@@ -67,7 +67,7 @@ function SimulateChat({ open, onClose, projectId, promptA, openingMessage }) {
       open={open}
       onCancel={onClose}
       footer={null}
-      width={600}
+      width="min(600px, 92vw)"
     >
       <Alert
         type="info"
