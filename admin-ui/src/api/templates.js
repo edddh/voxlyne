@@ -17,6 +17,17 @@ export const listTemplates = async (category = null) => {
 };
 
 /**
+ * List templates assigned to the current user's tenant - what "Crea da
+ * Template" (Projects.jsx) uses, as opposed to listTemplates() above
+ * (the full catalog, super_admin only).
+ * @returns {Promise<{templates: Array, total: number}>}
+ */
+export const getAssignedTemplates = async () => {
+  const response = await client.get('/api/templates/assigned');
+  return response.data;
+};
+
+/**
  * Create a new global template
  * @param {Object} data - Template data
  * @returns {Promise<Object>} Created template

@@ -134,16 +134,16 @@ function AppLayout() {
   const userMenu = {
     items: [
       {
+        // maintainer, 20/08: "ma profilo impostazioni in alto a destra non
+        // fa nulla" - puntavano a /profile e /settings, mai registrate
+        // in App.jsx: si tornava silenziosamente alla Dashboard.
+        // "Impostazioni" fusa qui dentro (nessun concetto di impostazioni
+        // personali esiste ancora lato backend) - un solo link, dati
+        // account + cambio password, quello che il backend supporta gia'.
         key: 'profile',
         icon: <UserOutlined />,
         label: 'Profilo',
         onClick: () => navigate('/profile'),
-      },
-      {
-        key: 'settings',
-        icon: <SettingOutlined />,
-        label: 'Impostazioni',
-        onClick: () => navigate('/settings'),
       },
       {
         type: 'divider',

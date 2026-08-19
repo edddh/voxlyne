@@ -17,6 +17,7 @@ from app.database.db import get_database
 from app.middleware.auth_middleware import (
     CurrentUser,
     get_current_user,
+    require_roles,
     require_super_admin,
 )
 from app.models.schemas import (
@@ -37,7 +38,7 @@ router = APIRouter(prefix="/api/templates", tags=["Templates"])
 
 @router.get("", response_model=TemplateListResponse)
 async def list_templates(
-    current_user: CurrentUser = Depends(require_super_admin),
+    current_user: CurrentUser = Depends(require_super_admin()),
     category: str = None,
 ):
     """
@@ -91,7 +92,7 @@ async def list_templates(
 @router.post("", response_model=TemplateResponse, status_code=status.HTTP_201_CREATED)
 async def create_template(
     data: TemplateCreate,
-    current_user: CurrentUser = Depends(require_super_admin),
+    current_user: CurrentUser = Depends(require_super_admin()),
 ):
     """
     Create a new global template (super_admin only).
@@ -172,10 +173,71 @@ async def create_template(
     )
 
 
+@router.get("/assigned", response_model=TemplateListResponse)
+async def list_assigned_templates(
+    current_user: CurrentUser = Depends(require_roles(["admin", "creator"])),
+):
+    """
+    Templates assigned to the current user's tenant - what "Crea da
+    Template" (Projects.jsx) actually needs to offer a tenant admin/
+    creator a pick-list, as opposed to GET /api/templates above (the
+    super_admin-only full catalog, used for authoring templates).
+
+    maintainer, 20/08: "anche crea da template non fa nulla" - it navigated
+    straight to the super_admin-only /templates management page, so any
+    other role silently bounced back to the Dashboard (ProtectedRoute's
+    role check has no error message) - not just missing data, the wrong
+    destination entirely: creating a project from a template was never
+    supposed to require template-authoring access, just POST /api/
+    projects/from-template/{id} (already built, never wired to any UI).
+    Must be registered before GET /{template_id} or FastAPI tries to
+    parse "assigned" as a UUID path param.
+    """
+    db = get_database()
+
+    rows = await db.fetch_all(
+        """
+        SELECT p.id, p.name, p.slug, p.type, p.template_category, p.description,
+               p.prompt_a, p.prompt_b, p.consent_message, p.voice_name, p.language,
+               p.is_active, p.created_at, p.updated_at
+        FROM projects p
+        INNER JOIN template_assignments ta ON p.id = ta.template_id
+        WHERE p.is_template = TRUE
+          AND ta.tenant_id = :tenant_id
+          AND ta.is_active = TRUE
+          AND p.is_active = TRUE
+        ORDER BY p.name
+        """,
+        {"tenant_id": str(current_user.tenant_id)},
+    )
+
+    templates = [
+        TemplateResponse(
+            id=row["id"],
+            name=row["name"],
+            slug=row["slug"],
+            type=ProjectType(row["type"]),
+            template_category=row["template_category"],
+            description=row["description"],
+            prompt_a=row["prompt_a"],
+            prompt_b=row["prompt_b"],
+            consent_message=row["consent_message"],
+            voice_name=row["voice_name"],
+            language=row["language"],
+            is_active=row["is_active"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+        for row in rows
+    ]
+
+    return TemplateListResponse(templates=templates, total=len(templates))
+
+
 @router.get("/{template_id}", response_model=TemplateResponse)
 async def get_template(
     template_id: UUID,
-    current_user: CurrentUser = Depends(require_super_admin),
+    current_user: CurrentUser = Depends(require_super_admin()),
 ):
     """Get single template by ID (super_admin only)."""
     db = get_database()
@@ -219,7 +281,7 @@ async def get_template(
 async def update_template(
     template_id: UUID,
     data: TemplateUpdate,
-    current_user: CurrentUser = Depends(require_super_admin),
+    current_user: CurrentUser = Depends(require_super_admin()),
 ):
     """Update a template (super_admin only)."""
     db = get_database()
@@ -263,7 +325,7 @@ async def update_template(
 async def assign_template_to_tenants(
     template_id: UUID,
     data: TemplateAssignmentCreate,
-    current_user: CurrentUser = Depends(require_super_admin),
+    current_user: CurrentUser = Depends(require_super_admin()),
 ):
     """
     Assign a template to multiple tenants (super_admin only).
@@ -324,7 +386,7 @@ async def assign_template_to_tenants(
 @router.get("/{template_id}/assignments", response_model=TemplateAssignmentListResponse)
 async def get_template_assignments(
     template_id: UUID,
-    current_user: CurrentUser = Depends(require_super_admin),
+    current_user: CurrentUser = Depends(require_super_admin()),
 ):
     """
     Get all tenant assignments for a template (super_admin only).
@@ -374,7 +436,7 @@ async def get_template_assignments(
 async def unassign_template_from_tenant(
     template_id: UUID,
     tenant_id: UUID,
-    current_user: CurrentUser = Depends(require_super_admin),
+    current_user: CurrentUser = Depends(require_super_admin()),
 ):
     """
     Remove template assignment from a tenant (super_admin only).
