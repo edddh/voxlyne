@@ -115,8 +115,8 @@ async def list_versions(project_id: UUID) -> list[Dict[str, Any]]:
     db = get_database()
     rows = await db.fetch_all(
         """
-        SELECT id, version_number, status, voice_name, language, voice_engine,
-               published_at, created_by, created_at
+        SELECT id, version_number, status, prompt_a, prompt_b, consent_message,
+               voice_name, language, voice_engine, published_at, created_by, created_at
         FROM agent_versions
         WHERE project_id = :project_id
         ORDER BY version_number DESC

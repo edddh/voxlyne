@@ -1,25 +1,46 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  Card, Button, Space, Input, message, Typography, Tabs, Row, Col, Spin, Alert, Tag, Divider, Switch, Form
+  Card, Button, Space, Input, message, Typography, Tabs, Row, Col, Spin, Alert, Tag, Divider, Switch, List,
 } from 'antd'
-import { SaveOutlined, ArrowLeftOutlined, HistoryOutlined, RocketOutlined } from '@ant-design/icons'
+import { SaveOutlined, ArrowLeftOutlined, RocketOutlined } from '@ant-design/icons'
 import * as projectsApi from '../api/projects'
-import * as promptsApi from '../api/prompts'
+import * as agentVersionsApi from '../api/agentVersions'
 
 const { Title, Text, Paragraph } = Typography
 const { TextArea } = Input
 
+/**
+ * Editor del prompt del progetto.
+ *
+ * Fino al 19/08 leggeva/scriveva solo su un sistema di versioning piu'
+ * vecchio (prompt_versions, app/api/prompts.js) completamente scollegato
+ * da cosa risponde davvero l'agente in chiamata - maintainer: "quando entro
+ * in progetto exampleville non vedo il prompt attuale per la chiamata".
+ * Quel sistema non aveva nulla per Exampleville (creato direttamente a DB in
+ * questa sessione), quindi il campo appariva vuoto anche se il prompt
+ * vero esisteva sia su projects.prompt_a sia sulla versione pubblicata.
+ *
+ * Ora: il testo mostrato/modificato e' projects.prompt_a/prompt_b (la
+ * bozza reale del progetto - stesso campo che PATCH /api/projects/{id}
+ * aggiorna). "Salva" scrive la bozza. "Pubblica" congela la bozza in una
+ * nuova agent_version (app/services/agent_versions.py, il motore che
+ * resolve_inbound() legge davvero per rispondere alle chiamate reali) -
+ * senza questo passaggio esplicito, salvare la bozza da solo non
+ * cambierebbe nulla per una chiamata gia' in corso di risoluzione.
+ */
 function ProjectEdit() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [project, setProject] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [publishing, setPublishing] = useState(false)
   const [promptA, setPromptA] = useState('')
   const [promptB, setPromptB] = useState('')
-  const [activeVersionA, setActiveVersionA] = useState(null)
-  const [activeVersionB, setActiveVersionB] = useState(null)
+  const [savedPromptA, setSavedPromptA] = useState('')
+  const [savedPromptB, setSavedPromptB] = useState('')
+  const [versions, setVersions] = useState([])
   const [hasChangesA, setHasChangesA] = useState(false)
   const [hasChangesB, setHasChangesB] = useState(false)
 
@@ -27,33 +48,29 @@ function ProjectEdit() {
     loadProject()
   }, [id])
 
+  const publishedVersion = versions.find((v) => v.status === 'published')
+  // La bozza (projects.prompt_a/b) e' diversa da quello che una
+  // chiamata in corso sente davvero finche' non viene pubblicata di
+  // nuovo - vale sia per modifiche non salvate sia per modifiche
+  // salvate ma non ancora pubblicate.
+  const draftAheadOfPublished = !publishedVersion || hasChangesA || hasChangesB ||
+    savedPromptA !== (project?.prompt_a || '') || savedPromptB !== (project?.prompt_b || '')
+
   const loadProject = async () => {
     setLoading(true)
     try {
       const data = await projectsApi.getProject(id)
       setProject(data)
-
-      // Load active prompt versions
-      try {
-        const versionsA = await promptsApi.getPromptVersions(id, 'A')
-        const activeA = versionsA.find(v => v.is_active)
-        if (activeA) {
-          setPromptA(activeA.content)
-          setActiveVersionA(activeA)
-        }
-      } catch (e) {
-        // No versions yet
-      }
+      setPromptA(data.prompt_a || '')
+      setPromptB(data.prompt_b || '')
+      setSavedPromptA(data.prompt_a || '')
+      setSavedPromptB(data.prompt_b || '')
 
       try {
-        const versionsB = await promptsApi.getPromptVersions(id, 'B')
-        const activeB = versionsB.find(v => v.is_active)
-        if (activeB) {
-          setPromptB(activeB.content)
-          setActiveVersionB(activeB)
-        }
+        const versionsList = await agentVersionsApi.listAgentVersions(id)
+        setVersions(versionsList)
       } catch (e) {
-        // No versions yet
+        // Nessuna versione pubblicata ancora - normale per un progetto nuovo.
       }
     } catch (error) {
       message.error('Errore caricamento progetto')
@@ -66,10 +83,10 @@ function ProjectEdit() {
   const handlePromptChange = (type, value) => {
     if (type === 'A') {
       setPromptA(value)
-      setHasChangesA(value !== (activeVersionA?.content || ''))
+      setHasChangesA(value !== savedPromptA)
     } else {
       setPromptB(value)
-      setHasChangesB(value !== (activeVersionB?.content || ''))
+      setHasChangesB(value !== savedPromptB)
     }
   }
 
@@ -82,22 +99,37 @@ function ProjectEdit() {
         return
       }
 
-      const newVersion = await promptsApi.createPromptVersion(id, type, content)
-      await promptsApi.activatePromptVersion(newVersion.id)
+      const field = type === 'A' ? 'prompt_a' : 'prompt_b'
+      await projectsApi.updateProject(id, { [field]: content })
 
-      message.success(`Prompt ${type} salvato e attivato (v${newVersion.version})`)
+      message.success('Bozza salvata - pubblica per renderla attiva nelle chiamate')
 
       if (type === 'A') {
-        setActiveVersionA(newVersion)
+        setSavedPromptA(content)
         setHasChangesA(false)
       } else {
-        setActiveVersionB(newVersion)
+        setSavedPromptB(content)
         setHasChangesB(false)
       }
+      setProject((prev) => ({ ...prev, [field]: content }))
     } catch (error) {
       message.error(error.response?.data?.detail || 'Errore salvataggio')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handlePublish = async () => {
+    setPublishing(true)
+    try {
+      await agentVersionsApi.publishVersion(id)
+      message.success('Pubblicato - attivo per le prossime chiamate')
+      const versionsList = await agentVersionsApi.listAgentVersions(id)
+      setVersions(versionsList)
+    } catch (error) {
+      message.error(error.response?.data?.detail || 'Errore pubblicazione')
+    } finally {
+      setPublishing(false)
     }
   }
 
@@ -115,8 +147,7 @@ function ProjectEdit() {
       label: (
         <Space>
           <span>Prompt A (Intervista)</span>
-          {activeVersionA && <Tag color="blue">v{activeVersionA.version}</Tag>}
-          {hasChangesA && <Tag color="orange">Modificato</Tag>}
+          {hasChangesA && <Tag color="orange">Non salvato</Tag>}
         </Space>
       ),
       children: (
@@ -135,27 +166,19 @@ function ProjectEdit() {
             placeholder="Inserisci il prompt di intervista..."
             style={{ fontFamily: 'monospace', fontSize: 13 }}
           />
-          <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
             <Text type="secondary">
               {promptA.length} caratteri • ~{Math.ceil(promptA.length / 4)} token
             </Text>
-            <Space>
-              <Button
-                icon={<HistoryOutlined />}
-                onClick={() => navigate(`/projects/${id}/history?type=A`)}
-              >
-                Storico
-              </Button>
-              <Button
-                type="primary"
-                icon={<SaveOutlined />}
-                onClick={() => savePrompt('A')}
-                loading={saving}
-                disabled={!hasChangesA}
-              >
-                Salva come nuova versione
-              </Button>
-            </Space>
+            <Button
+              type="primary"
+              icon={<SaveOutlined />}
+              onClick={() => savePrompt('A')}
+              loading={saving}
+              disabled={!hasChangesA}
+            >
+              Salva bozza
+            </Button>
           </div>
         </div>
       ),
@@ -165,8 +188,7 @@ function ProjectEdit() {
       label: (
         <Space>
           <span>Prompt B (Estrazione)</span>
-          {activeVersionB && <Tag color="purple">v{activeVersionB.version}</Tag>}
-          {hasChangesB && <Tag color="orange">Modificato</Tag>}
+          {hasChangesB && <Tag color="orange">Non salvato</Tag>}
         </Space>
       ),
       children: (
@@ -185,27 +207,19 @@ function ProjectEdit() {
             placeholder="Inserisci il prompt di estrazione..."
             style={{ fontFamily: 'monospace', fontSize: 13 }}
           />
-          <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
             <Text type="secondary">
               {promptB.length} caratteri • ~{Math.ceil(promptB.length / 4)} token
             </Text>
-            <Space>
-              <Button
-                icon={<HistoryOutlined />}
-                onClick={() => navigate(`/projects/${id}/history?type=B`)}
-              >
-                Storico
-              </Button>
-              <Button
-                type="primary"
-                icon={<SaveOutlined />}
-                onClick={() => savePrompt('B')}
-                loading={saving}
-                disabled={!hasChangesB}
-              >
-                Salva come nuova versione
-              </Button>
-            </Space>
+            <Button
+              type="primary"
+              icon={<SaveOutlined />}
+              onClick={() => savePrompt('B')}
+              loading={saving}
+              disabled={!hasChangesB}
+            >
+              Salva bozza
+            </Button>
           </div>
         </div>
       ),
@@ -214,12 +228,12 @@ function ProjectEdit() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <Space>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 8 }}>
+        <Space wrap>
           <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/projects')}>
             Indietro
           </Button>
-          <Title level={3} style={{ margin: 0 }}>{project?.name}</Title>
+          <Title level={3} style={{ margin: 0, flexShrink: 0 }}>{project?.name}</Title>
           <Tag color={project?.is_active ? 'green' : 'red'}>
             {project?.is_active ? 'Attivo' : 'Inattivo'}
           </Tag>
@@ -227,6 +241,39 @@ function ProjectEdit() {
       </div>
 
       <Row gutter={[24, 24]}>
+        <Col span={24}>
+          <Alert
+            type={draftAheadOfPublished ? 'warning' : 'success'}
+            showIcon
+            message={
+              publishedVersion
+                ? `Versione pubblicata: v${publishedVersion.version_number}${publishedVersion.published_at ? ' · ' + new Date(publishedVersion.published_at).toLocaleString('it-IT') : ''}`
+                : 'Nessuna versione ancora pubblicata - questo progetto non risponde ancora a nessuna simulazione di test'
+            }
+            description={
+              draftAheadOfPublished
+                ? 'La bozza qui sotto contiene modifiche non ancora pubblicate: le chiamate reali continuano a usare la versione pubblicata sopra, non quello che vedi in questa pagina.'
+                : 'La bozza corrisponde esattamente alla versione pubblicata - quello che vedi qui e\' quello che sente chi chiama.'
+            }
+            action={
+              <Button
+                type="primary"
+                icon={<RocketOutlined />}
+                onClick={handlePublish}
+                loading={publishing}
+                disabled={!draftAheadOfPublished || hasChangesA || hasChangesB}
+              >
+                Pubblica
+              </Button>
+            }
+          />
+          {(hasChangesA || hasChangesB) && (
+            <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
+              Salva prima le modifiche nelle schede qui sotto per poter pubblicare.
+            </Text>
+          )}
+        </Col>
+
         <Col span={24}>
           <Card>
             <Paragraph type="secondary">
@@ -245,6 +292,31 @@ function ProjectEdit() {
             <Tabs items={promptItems} />
           </Card>
         </Col>
+
+        {versions.length > 0 && (
+          <Col span={24}>
+            <Card
+              title="Versioni pubblicate"
+              extra={<Button size="small" onClick={() => navigate(`/projects/${id}/history`)}>Storico completo</Button>}
+            >
+              <List
+                size="small"
+                dataSource={versions}
+                renderItem={(v) => (
+                  <List.Item>
+                    <Space>
+                      <Tag color={v.status === 'published' ? 'green' : 'default'}>v{v.version_number}</Tag>
+                      <Text>{v.status}</Text>
+                      {v.published_at && (
+                        <Text type="secondary">{new Date(v.published_at).toLocaleString('it-IT')}</Text>
+                      )}
+                    </Space>
+                  </List.Item>
+                )}
+              />
+            </Card>
+          </Col>
+        )}
 
         <Col span={24}>
           <Card title="Configurazione Output">
