@@ -19,9 +19,11 @@ function buildWsUrl(path) {
 
 const SAMPLE_RATE = 24000
 // Stesso limite imposto lato server (app/routers/simulate_voice.py::
-// SIMULATION_MAX_SECONDS) - qui solo per mostrare il conto alla rovescia,
-// il taglio effettivo lo fa il backend.
-const MAX_CALL_SECONDS = 30
+// SIMULATION_SILENCE_TIMEOUT_SECONDS) - qui solo per mostrare il conto
+// alla rovescia, il taglio effettivo lo fa il backend. maintainer, 19/08:
+// "i 30 secondi di timeout devono scattare dopo 30s di silenzio" - non
+// un limite sulla durata totale della prova, si azzera ad ogni attivita'.
+const SILENCE_TIMEOUT_SECONDS = 30
 
 function floatTo16BitPCM(float32) {
   const int16 = new Int16Array(float32.length)
@@ -64,7 +66,7 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage }
   const [error, setError] = useState(null)
   const [transcript, setTranscript] = useState([])
   const [timedOut, setTimedOut] = useState(false)
-  const [remainingSeconds, setRemainingSeconds] = useState(MAX_CALL_SECONDS)
+  const [remainingSeconds, setRemainingSeconds] = useState(SILENCE_TIMEOUT_SECONDS)
   const wsRef = useRef(null)
   const audioContextRef = useRef(null)
   const streamRef = useRef(null)
@@ -72,6 +74,7 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage }
   const playheadRef = useRef(0)
   const transcriptEndRef = useRef(null)
   const countdownRef = useRef(null)
+  const lastActivityRef = useRef(Date.now())
 
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
@@ -134,7 +137,7 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage }
     setError(null)
     setTranscript([])
     setTimedOut(false)
-    setRemainingSeconds(MAX_CALL_SECONDS)
+    setRemainingSeconds(SILENCE_TIMEOUT_SECONDS)
     playheadRef.current = 0
 
     try {
@@ -154,13 +157,23 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage }
 
       ws.onmessage = (event) => {
         const msg = JSON.parse(event.data)
+        // Stesso criterio del backend (silence_watchdog in simulate_voice.py):
+        // qualunque evento reale inoltrato da xAI conta come attivita' e
+        // riazzera il conto alla rovescia - non e' un limite sulla durata
+        // totale della prova. Esclusi i messaggi che il backend genera lui
+        // stesso (ascolta.*), che non riflettono attivita' del modello.
+        if (!msg.type?.startsWith('ascolta.')) {
+          lastActivityRef.current = Date.now()
+        }
         if (msg.type === 'ascolta.ready') {
           setStatus('live')
-          // Conto alla rovescia visibile per il limite lato server
-          // (maintainer, 19/08: "metti un timeout per la simulazione vocale,
-          // ad esempio 30s").
+          lastActivityRef.current = Date.now()
+          // Conto alla rovescia visibile per il timeout di inattivita'
+          // lato server (maintainer, 19/08: "i 30 secondi di timeout devono
+          // scattare dopo 30s di silenzio").
           countdownRef.current = setInterval(() => {
-            setRemainingSeconds((s) => Math.max(0, s - 1))
+            const elapsed = Math.floor((Date.now() - lastActivityRef.current) / 1000)
+            setRemainingSeconds(Math.max(0, SILENCE_TIMEOUT_SECONDS - elapsed))
           }, 1000)
           // Avvia la cattura microfono solo ora che la sessione e' pronta.
           const source = audioContext.createMediaStreamSource(stream)
@@ -247,7 +260,7 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage }
         type="info"
         showIcon
         message="Modello vocale reale (grok-voice-latest), non un sostituto testuale"
-        description={`Usa il microfono del browser e il prompt attuale nell'editor (anche non salvato), con accesso alla knowledge base del progetto. Non ha accesso agli altri strumenti (Cal.com, ecc.). Ogni prova dura al massimo ${MAX_CALL_SECONDS} secondi.`}
+        description={`Usa il microfono del browser e il prompt attuale nell'editor (anche non salvato), con accesso alla knowledge base del progetto. Non ha accesso agli altri strumenti (Cal.com, ecc.). Si chiude automaticamente dopo ${SILENCE_TIMEOUT_SECONDS} secondi di silenzio.`}
         style={{ marginBottom: 16 }}
       />
 
@@ -261,13 +274,13 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage }
         {status === 'live' && (
           <Space direction="vertical" align="center">
             <Tag icon={<AudioOutlined />} color="green">In chiamata - parla pure</Tag>
-            <Text type="secondary">Tempo rimasto: {remainingSeconds}s</Text>
+            <Text type="secondary">Timeout inattività tra: {remainingSeconds}s</Text>
             <Button danger icon={<StopOutlined />} onClick={stop}>Termina</Button>
           </Space>
         )}
         {status === 'ended' && (
           <Space direction="vertical" align="center">
-            <Tag>{timedOut ? `Chiamata terminata - limite di ${MAX_CALL_SECONDS}s raggiunto` : 'Chiamata terminata'}</Tag>
+            <Tag>{timedOut ? `Chiamata terminata - ${SILENCE_TIMEOUT_SECONDS}s di silenzio` : 'Chiamata terminata'}</Tag>
             <Button icon={<PhoneOutlined />} onClick={start}>Richiama</Button>
           </Space>
         )}

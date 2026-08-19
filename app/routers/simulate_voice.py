@@ -30,6 +30,7 @@ published version.
 import asyncio
 import json
 import logging
+import time
 from typing import Any, Optional
 from urllib.parse import urlencode
 from uuid import UUID
@@ -48,11 +49,17 @@ router = APIRouter()
 XAI_REALTIME_URL = "wss://api.x.ai/v1/realtime"
 
 # maintainer, 19/08: "metti un timeout per la simulazione vocale, ad esempio
-# 30s" - e' una prova, non una chiamata vera: senza un limite duro
-# qualcuno potrebbe lasciarla aperta e consumare inutilmente il credito
-# xAI del tenant. Applicato lato server (non solo in UI) cosi' vale anche
-# se il browser si blocca o la tab resta in background.
-SIMULATION_MAX_SECONDS = 30
+# 30s" - e' una prova, non una chiamata vera: senza un limite qualcuno
+# potrebbe lasciarla aperta e consumare inutilmente il credito xAI del
+# tenant. Applicato lato server (non solo in UI) cosi' vale anche se il
+# browser si blocca o la tab resta in background.
+#
+# 19/08 (correzione): "i 30 secondi di timeout devono scattare dopo 30s
+# di silenzio" - non un limite sulla durata totale della prova, un
+# timeout di INATTIVITA' che si azzera ad ogni evento reale (l'utente
+# parla, l'agente risponde, una tool call) - una prova puo' durare
+# quanto serve finche' succede qualcosa.
+SIMULATION_SILENCE_TIMEOUT_SECONDS = 30
 
 # Stessa definizione di app/integrations/common/tools.py - copiata qui
 # invece di importata per non dipendere dal sistema di flag di quel
@@ -246,20 +253,38 @@ async def simulate_voice(websocket: WebSocket, project_id: UUID, token: str = Qu
 
             await websocket.send_text(json.dumps({"type": "ascolta.ready"}))
 
+            # Aggiornato ad ogni evento REALE ricevuto da xAI (l'utente ha
+            # parlato, l'agente ha risposto, una tool call e' avvenuta) -
+            # non dai pacchetti audio grezzi che il browser manda in
+            # continuazione anche durante il silenzio (input_audio_buffer.
+            # append), quelli non indicano attivita' vera. Con server_vad
+            # xAI non manda letteralmente nulla mentre non succede niente,
+            # quindi "nessun evento da N secondi" e' gia' un buon segnale
+            # di silenzio senza dover distinguere i singoli tipi di evento.
+            last_activity = time.monotonic()
+
             async def browser_to_xai() -> None:
                 while True:
                     raw = await websocket.receive_text()
                     await xai_ws.send(raw)
 
             async def xai_to_browser() -> None:
+                nonlocal last_activity
                 async for raw in xai_ws:
+                    last_activity = time.monotonic()
                     event = json.loads(raw)
                     if event.get("type") == "response.function_call_arguments.done":
                         await _handle_function_call(xai_ws, websocket, event, project_id, tenant_id)
                         continue  # meccanica interna, non serve al browser
                     await websocket.send_text(raw)
 
-            timeout_task = asyncio.create_task(asyncio.sleep(SIMULATION_MAX_SECONDS))
+            async def silence_watchdog() -> None:
+                while True:
+                    await asyncio.sleep(1)
+                    if time.monotonic() - last_activity >= SIMULATION_SILENCE_TIMEOUT_SECONDS:
+                        return
+
+            timeout_task = asyncio.create_task(silence_watchdog())
             browser_task = asyncio.create_task(browser_to_xai())
             xai_task = asyncio.create_task(xai_to_browser())
 
@@ -274,7 +299,7 @@ async def simulate_voice(websocket: WebSocket, project_id: UUID, token: str = Qu
                 try:
                     await websocket.send_text(json.dumps({
                         "type": "ascolta.timeout",
-                        "seconds": SIMULATION_MAX_SECONDS,
+                        "seconds": SIMULATION_SILENCE_TIMEOUT_SECONDS,
                     }))
                 except Exception:
                     pass  # il browser potrebbe aver gia' chiuso
