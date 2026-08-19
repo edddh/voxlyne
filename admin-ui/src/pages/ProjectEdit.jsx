@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  Card, Button, Space, Input, message, Typography, Tabs, Row, Col, Spin, Alert, Tag, Divider, Switch, List,
+  Card, Button, Space, Input, message, Typography, Tabs, Row, Col, Spin, Alert, Tag, Divider, Switch, List, Popconfirm,
 } from 'antd'
-import { SaveOutlined, ArrowLeftOutlined, RocketOutlined, MessageOutlined, PhoneOutlined } from '@ant-design/icons'
+import { SaveOutlined, ArrowLeftOutlined, RocketOutlined, MessageOutlined, PhoneOutlined, UndoOutlined } from '@ant-design/icons'
 import * as projectsApi from '../api/projects'
 import * as agentVersionsApi from '../api/agentVersions'
 import PromptDiff, { normalizeNewlines } from '../components/PromptDiff'
@@ -39,6 +39,7 @@ function ProjectEdit() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const [reverting, setReverting] = useState(false)
   const [promptA, setPromptA] = useState('')
   const [promptB, setPromptB] = useState('')
   const [savedPromptA, setSavedPromptA] = useState('')
@@ -71,6 +72,16 @@ function ProjectEdit() {
     (project?.consent_message || '') !== (publishedVersion?.consent_message || '')
   const hasChangesConsent = consentMessage !== savedConsentMessage
   const hasUnsavedEdits = hasChangesA || hasChangesB || hasChangesConsent
+  // A differenza di draftDiffersFromPublished (bozza SALVATA vs
+  // pubblicata), questo guarda cosa c'e' davvero nell'editor adesso -
+  // incluse modifiche non ancora salvate - per decidere se mostrare il
+  // pulsante "Ripristina pubblicata". maintainer, 20/08: "manca un revert
+  // quando ho salvato una bozza anziche' pubblicarla".
+  const editorDiffersFromPublished = !!publishedVersion && (
+    normalizeNewlines(promptA) !== normalizeNewlines(publishedVersion.prompt_a || '') ||
+    normalizeNewlines(promptB) !== normalizeNewlines(publishedVersion.prompt_b || '') ||
+    consentMessage !== (publishedVersion.consent_message || '')
+  )
 
   const loadProject = async () => {
     setLoading(true)
@@ -148,6 +159,38 @@ function ProjectEdit() {
       message.error(error.response?.data?.detail || 'Errore salvataggio')
     } finally {
       setSavingConsent(false)
+    }
+  }
+
+  const handleRevert = async () => {
+    if (!publishedVersion) return
+    setReverting(true)
+    try {
+      const payload = {
+        prompt_a: publishedVersion.prompt_a || '',
+        prompt_b: publishedVersion.prompt_b || '',
+        consent_message: publishedVersion.consent_message || '',
+      }
+      // Scrive la bozza (projects.prompt_a/b/consent_message) uguale
+      // alla versione pubblicata - stessa PATCH usata da "Salva bozza",
+      // cosi' anche una bozza gia' salvata (non solo modifiche non
+      // ancora salvate nell'editor) torna in linea con cio' che sente
+      // davvero chi chiama.
+      await projectsApi.updateProject(id, payload)
+      setPromptA(payload.prompt_a)
+      setPromptB(payload.prompt_b)
+      setConsentMessage(payload.consent_message)
+      setSavedPromptA(payload.prompt_a)
+      setSavedPromptB(payload.prompt_b)
+      setSavedConsentMessage(payload.consent_message)
+      setHasChangesA(false)
+      setHasChangesB(false)
+      setProject((prev) => ({ ...prev, ...payload }))
+      message.success(`Bozza ripristinata alla versione pubblicata (v${publishedVersion.version_number})`)
+    } catch (error) {
+      message.error(error.response?.data?.detail || 'Errore nel ripristino')
+    } finally {
+      setReverting(false)
     }
   }
 
@@ -314,15 +357,33 @@ function ProjectEdit() {
                 : 'La bozza corrisponde esattamente alla versione pubblicata - quello che vedi qui e\' quello che sente chi chiama, nessuna azione necessaria.'
             }
             action={
-              <Button
-                type="primary"
-                icon={<RocketOutlined />}
-                onClick={handlePublish}
-                loading={publishing}
-                disabled={!draftDiffersFromPublished || hasUnsavedEdits}
-              >
-                Pubblica
-              </Button>
+              <Space>
+                <Popconfirm
+                  title="Ripristinare la versione pubblicata?"
+                  description="La bozza (salvata o no) torna uguale a quello che sente davvero chi chiama adesso - le modifiche fatte qui vanno perse."
+                  onConfirm={handleRevert}
+                  okText="Ripristina"
+                  cancelText="Annulla"
+                  disabled={!editorDiffersFromPublished}
+                >
+                  <Button
+                    icon={<UndoOutlined />}
+                    loading={reverting}
+                    disabled={!editorDiffersFromPublished}
+                  >
+                    Ripristina pubblicata
+                  </Button>
+                </Popconfirm>
+                <Button
+                  type="primary"
+                  icon={<RocketOutlined />}
+                  onClick={handlePublish}
+                  loading={publishing}
+                  disabled={!draftDiffersFromPublished || hasUnsavedEdits}
+                >
+                  Pubblica
+                </Button>
+              </Space>
             }
           />
         </Col>
