@@ -103,7 +103,16 @@ async def list_projects(
     """
     db = get_database()
 
-    conditions = []
+    # Templates (is_template=TRUE, tenant_id=NULL) live in this same
+    # `projects` table but are not real projects - excluded unconditionally,
+    # not just for non-super-admin. Found live (20/08): for a regular tenant
+    # user the "tenant_id = :tenant_id" filter below already excluded them
+    # incidentally (a template's tenant_id is never a real tenant's), but
+    # super_admin skips that filter and saw templates mixed into the
+    # Projects table - one of them got clicked in "Genera servizio runtime",
+    # which then crashed (ValueError: badly formed hexadecimal UUID string)
+    # trying to parse its NULL tenant_id, see runtime_provisioning.py.
+    conditions = ["is_template = FALSE"]
     params: dict = {}
 
     if active_only:

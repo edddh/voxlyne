@@ -93,6 +93,16 @@ async def provision_project_runtime(project: Dict[str, Any]) -> Dict[str, Any]:
 
     script_rel, voice_entrypoint = ENGINE_SCRIPTS[engine_type]
     slug = project["slug"]
+    # Defensive, on top of the caller excluding templates from the
+    # Projects list (app/routers/api.py::list_projects, 20/08) - a
+    # template row has tenant_id=NULL, and UUID(str(None)) raised an
+    # unhandled "badly formed hexadecimal UUID string" (500) instead of
+    # this clear, expected error before that list-query fix existed.
+    if not project.get("tenant_id"):
+        raise RuntimeProvisioningError(
+            "Questo progetto non ha un tenant proprietario (probabile template, non un progetto reale) - "
+            "impossibile generare un'istanza runtime."
+        )
     tenant_id = UUID(str(project["tenant_id"]))
     project_id = UUID(str(project["id"]))
 

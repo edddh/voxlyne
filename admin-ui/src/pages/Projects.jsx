@@ -432,6 +432,38 @@ function Projects() {
     }
   }
 
+  const openFromTemplateModal = async () => {
+    setFromTemplateModalOpen(true)
+    fromTemplateForm.resetFields()
+    setLoadingAssignedTemplates(true)
+    try {
+      const data = await templatesApi.getAssignedTemplates()
+      setAssignedTemplates(data.templates || [])
+    } catch (error) {
+      message.error(error.response?.data?.detail || 'Errore nel caricamento dei template assegnati')
+    } finally {
+      setLoadingAssignedTemplates(false)
+    }
+  }
+
+  const handleCreateFromTemplate = async (values) => {
+    setCreatingFromTemplate(true)
+    try {
+      const project = await projectsApi.createProjectFromTemplate(values.template_id, {
+        name: values.name,
+        slug: values.slug,
+        description: values.description,
+      })
+      message.success(`Progetto "${project.name}" creato dal template`)
+      setFromTemplateModalOpen(false)
+      loadProjects()
+    } catch (error) {
+      message.error(error.response?.data?.detail || 'Errore nella creazione del progetto')
+    } finally {
+      setCreatingFromTemplate(false)
+    }
+  }
+
   const columns = [
     {
       title: 'Nome',
@@ -605,7 +637,7 @@ function Projects() {
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <Title level={3} style={{ margin: 0, flexShrink: 0 }}>Progetti</Title>
         <Space>
-          <Button type="default" onClick={() => navigate('/templates')}>
+          <Button type="default" onClick={openFromTemplateModal}>
             Crea da Template
           </Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>
@@ -1002,6 +1034,73 @@ function Projects() {
               </Button>
             </Paragraph>
           </>
+        )}
+      </Modal>
+
+      <Modal
+        title="Crea da Template"
+        open={fromTemplateModalOpen}
+        onCancel={() => setFromTemplateModalOpen(false)}
+        footer={null}
+        width={600}
+      >
+        {loadingAssignedTemplates ? (
+          <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
+        ) : assignedTemplates.length === 0 ? (
+          <Alert
+            type="info"
+            showIcon
+            message="Nessun template assegnato"
+            description="Il tuo tenant non ha ancora nessun template assegnato - contatta un super admin per farne assegnare uno dalla pagina Template."
+          />
+        ) : (
+          <Form form={fromTemplateForm} layout="vertical" onFinish={handleCreateFromTemplate}>
+            <Form.Item
+              name="template_id"
+              label="Template"
+              rules={[{ required: true, message: 'Seleziona un template' }]}
+            >
+              <Select
+                placeholder="Scegli un template..."
+                options={assignedTemplates.map((t) => ({
+                  value: t.id,
+                  label: t.template_category ? `${t.name} (${t.template_category})` : t.name,
+                }))}
+              />
+            </Form.Item>
+            <Form.Item
+              name="name"
+              label="Nome del nuovo progetto"
+              rules={[{ required: true, message: 'Inserisci nome' }]}
+            >
+              <Input placeholder="es: Comune di Sampletown - URP" />
+            </Form.Item>
+            <Form.Item
+              name="slug"
+              label="Slug"
+              rules={[
+                { required: true, message: 'Inserisci slug' },
+                { pattern: /^[a-z0-9-]+$/, message: 'Solo lettere minuscole, numeri e trattini' },
+              ]}
+            >
+              <Input placeholder="es: comune-sampletown-urp" />
+            </Form.Item>
+            <Form.Item name="description" label="Descrizione (opzionale)">
+              <TextArea rows={2} />
+            </Form.Item>
+            <Text type="secondary" style={{ display: 'block', marginBottom: 16, fontSize: 12 }}>
+              Copia prompt, frase di apertura, voce, lingua e configurazione output del template.
+              Numero di telefono e credenziali restano da collegare separatamente per il nuovo progetto.
+            </Text>
+            <Form.Item>
+              <Space>
+                <Button type="primary" htmlType="submit" loading={creatingFromTemplate}>
+                  Crea progetto
+                </Button>
+                <Button onClick={() => setFromTemplateModalOpen(false)}>Annulla</Button>
+              </Space>
+            </Form.Item>
+          </Form>
         )}
       </Modal>
     </div>
