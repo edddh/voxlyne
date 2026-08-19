@@ -62,9 +62,9 @@ function Dashboard() {
       align: 'right',
     },
     {
-      title: 'Conversione',
-      dataIndex: 'conversion_rate',
-      key: 'conversion_rate',
+      title: 'Completamento',
+      dataIndex: 'completion_rate',
+      key: 'completion_rate',
       align: 'right',
       render: (value) => (
         <Tag color={value >= 50 ? 'green' : value >= 25 ? 'orange' : 'red'}>
@@ -116,12 +116,12 @@ function Dashboard() {
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic
-              title="Tasso Conversione"
-              value={stats?.conversion_rate || 0}
+              title="Tasso di Completamento"
+              value={stats?.completion_rate || 0}
               suffix="%"
               prefix={<RiseOutlined />}
               precision={1}
-              valueStyle={{ color: stats?.conversion_rate >= 50 ? '#52c41a' : '#faad14' }}
+              valueStyle={{ color: stats?.completion_rate >= 50 ? '#52c41a' : '#faad14' }}
             />
           </Card>
         </Col>

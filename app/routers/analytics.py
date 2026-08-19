@@ -97,7 +97,7 @@ async def get_project_stats(
             project_name=s["project_name"],
             total_calls=s["total_calls"],
             completed_calls=s["completed_calls"],
-            conversion_rate=s["conversion_rate"],
+            completion_rate=s["completion_rate"],
             avg_duration_seconds=s["avg_duration_seconds"],
         )
         for s in stats

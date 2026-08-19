@@ -933,7 +933,7 @@ class DashboardStats(BaseModel):
     total_calls_week: int = 0
     total_calls_month: int = 0
     completed_calls_today: int = 0
-    conversion_rate: float = 0.0  # Percentage of completed calls
+    completion_rate: float = 0.0  # % of calls that reached status=completed - not a sales/lead conversion metric
     avg_duration_seconds: float = 0.0
     active_projects: int = 0
     crm_synced_count: int = 0
@@ -961,7 +961,7 @@ class ProjectStatsResponse(BaseModel):
     project_name: str
     total_calls: int = 0
     completed_calls: int = 0
-    conversion_rate: float = 0.0
+    completion_rate: float = 0.0
     avg_duration_seconds: float = 0.0
 
 

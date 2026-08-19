@@ -22,7 +22,9 @@ class AnalyticsService:
     - Dashboard statistics
     - Call trends over time
     - Project-level statistics
-    - Conversion metrics
+    - Completion rate (% of calls reaching status=completed - not a
+      sales/lead conversion metric, see maintainer 20/08's rename from
+      conversion_rate)
     """
 
     async def get_dashboard_stats(
@@ -143,14 +145,14 @@ class AnalyticsService:
         # Calculate conversion rate
         total_today = calls_today["total"] or 0
         completed_today = calls_today["completed"] or 0
-        conversion_rate = (completed_today / total_today * 100) if total_today > 0 else 0.0
+        completion_rate = (completed_today / total_today * 100) if total_today > 0 else 0.0
 
         return {
             "total_calls_today": total_today,
             "total_calls_week": calls_week["total"] or 0,
             "total_calls_month": calls_month["total"] or 0,
             "completed_calls_today": completed_today,
-            "conversion_rate": round(conversion_rate, 1),
+            "completion_rate": round(completion_rate, 1),
             "avg_duration_seconds": round(avg_duration["avg_duration"] or 0, 1),
             "active_projects": active_projects["count"] or 0,
             "crm_synced_count": crm_synced["count"] or 0 if crm_synced else 0,
@@ -282,7 +284,7 @@ class AnalyticsService:
                 "project_name": s["project_name"],
                 "total_calls": s["total_calls"] or 0,
                 "completed_calls": s["completed_calls"] or 0,
-                "conversion_rate": round(
+                "completion_rate": round(
                     (s["completed_calls"] or 0) / (s["total_calls"] or 1) * 100, 1
                 ),
                 "avg_duration_seconds": round(s["avg_duration"] or 0, 1),

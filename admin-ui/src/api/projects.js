@@ -25,6 +25,15 @@ export const deleteProject = async (id) => {
   return response.data
 }
 
+// POST /api/projects/from-template/{template_id} takes name/slug/
+// description as query params, not a JSON body (see app/routers/api.py).
+export const createProjectFromTemplate = async (templateId, { name, slug, description }) => {
+  const response = await client.post(`/api/projects/from-template/${templateId}`, null, {
+    params: { name, slug, description },
+  })
+  return response.data
+}
+
 // Prompt versioning
 export const getPromptVersions = async (projectId, promptType) => {
   const response = await client.get(`/api/projects/${projectId}/prompts/${promptType}/versions`)

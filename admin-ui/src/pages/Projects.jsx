@@ -6,6 +6,7 @@ import {
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, HistoryOutlined, SettingOutlined, ApiOutlined, CheckOutlined, InfoCircleOutlined, ThunderboltOutlined, CopyOutlined } from '@ant-design/icons'
 import * as projectsApi from '../api/projects'
 import * as credentialsApi from '../api/credentials'
+import * as templatesApi from '../api/templates'
 
 const { Title, Text, Paragraph } = Typography
 const { TextArea } = Input
@@ -35,6 +36,16 @@ function Projects() {
   const [provisioningId, setProvisioningId] = useState(null)
   const [provisionResult, setProvisionResult] = useState(null)
   const [provisionModalOpen, setProvisionModalOpen] = useState(false)
+
+  // "Crea da Template" (maintainer, 20/08: "anche crea da template non fa
+  // nulla" - puntava alla pagina di gestione template, super_admin-only,
+  // quindi per chiunque altro non faceva letteralmente nulla di visibile
+  // - vedi GET /api/templates/assigned, app/routers/templates.py).
+  const [fromTemplateModalOpen, setFromTemplateModalOpen] = useState(false)
+  const [assignedTemplates, setAssignedTemplates] = useState([])
+  const [loadingAssignedTemplates, setLoadingAssignedTemplates] = useState(false)
+  const [creatingFromTemplate, setCreatingFromTemplate] = useState(false)
+  const [fromTemplateForm] = Form.useForm()
   const noAutofillProps = {
     autoComplete: 'new-password',
     'data-lpignore': 'true',
