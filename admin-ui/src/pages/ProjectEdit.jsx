@@ -3,10 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   Card, Button, Space, Input, message, Typography, Tabs, Row, Col, Spin, Alert, Tag, Divider, Switch, List,
 } from 'antd'
-import { SaveOutlined, ArrowLeftOutlined, RocketOutlined } from '@ant-design/icons'
+import { SaveOutlined, ArrowLeftOutlined, RocketOutlined, MessageOutlined } from '@ant-design/icons'
 import * as projectsApi from '../api/projects'
 import * as agentVersionsApi from '../api/agentVersions'
 import PromptDiff, { normalizeNewlines } from '../components/PromptDiff'
+import SimulateChat from '../components/SimulateChat'
 
 const { Title, Text, Paragraph } = Typography
 const { TextArea } = Input
@@ -44,6 +45,7 @@ function ProjectEdit() {
   const [versions, setVersions] = useState([])
   const [hasChangesA, setHasChangesA] = useState(false)
   const [hasChangesB, setHasChangesB] = useState(false)
+  const [simulateOpen, setSimulateOpen] = useState(false)
 
   useEffect(() => {
     loadProject()
@@ -185,15 +187,20 @@ function ProjectEdit() {
             <Text type="secondary">
               {promptA.length} caratteri • ~{Math.ceil(promptA.length / 4)} token
             </Text>
-            <Button
-              type="primary"
-              icon={<SaveOutlined />}
-              onClick={() => savePrompt('A')}
-              loading={saving}
-              disabled={!hasChangesA}
-            >
-              Salva bozza
-            </Button>
+            <Space>
+              <Button icon={<MessageOutlined />} onClick={() => setSimulateOpen(true)}>
+                Prova conversazione
+              </Button>
+              <Button
+                type="primary"
+                icon={<SaveOutlined />}
+                onClick={() => savePrompt('A')}
+                loading={saving}
+                disabled={!hasChangesA}
+              >
+                Salva bozza
+              </Button>
+            </Space>
           </div>
         </div>
       ),
@@ -393,6 +400,13 @@ function ProjectEdit() {
           </Card>
         </Col>
       </Row>
+
+      <SimulateChat
+        open={simulateOpen}
+        onClose={() => setSimulateOpen(false)}
+        projectId={id}
+        promptA={promptA}
+      />
     </div>
   )
 }
