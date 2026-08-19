@@ -30,6 +30,26 @@ function Login() {
       const passwordToSend = values.password.trim()
       await login(emailToSend, passwordToSend)
       message.success('Login effettuato')
+
+      // Il salvataggio password del browser non scattava: un login via
+      // AJAX (axios), senza una vera navigazione di pagina dopo l'invio
+      // del form, non basta da solo a far comparire il prompt "salva
+      // password" nella maggior parte dei browser (a differenza di un
+      // vero POST HTML con redirect). La Credential Management API e' il
+      // modo esplicito per chiederlo comunque - supportata da Chrome/Edge,
+      // ignorata senza errori dove non c'e' (Safari ha supporto parziale).
+      if (window.PasswordCredential) {
+        try {
+          const cred = new window.PasswordCredential({
+            id: emailToSend,
+            password: passwordToSend,
+            name: emailToSend,
+          })
+          await navigator.credentials.store(cred)
+        } catch {
+          // Best-effort - mai bloccare il login per questo.
+        }
+      }
     } catch (error) {
       const errorMessage = error.response?.data?.detail || 'Credenziali non valide'
       message.error(errorMessage)
@@ -78,6 +98,7 @@ function Login() {
               ]}
             >
               <Input
+                id="email"
                 prefix={<UserOutlined />}
                 placeholder="Email"
                 type="email"
@@ -96,6 +117,7 @@ function Login() {
               ]}
             >
               <Input.Password
+                id="password"
                 prefix={<LockOutlined />}
                 placeholder="Password"
                 autoComplete="current-password"

@@ -36,12 +36,25 @@ const processQueue = (error, token = null) => {
   failedQueue = []
 }
 
+// Endpoints whose own 401 means "credenziali sbagliate", non "sessione
+// scaduta" - non devono innescare il tentativo di refresh/redirect qui
+// sotto. Trovato: un login con password sbagliata veniva trattato come
+// sessione scaduta (nessun refreshToken ancora presente al primo
+// tentativo -> localStorage.clear() + redirect forzato via
+// window.location.href), quindi l'utente vedeva un lampo/reload della
+// pagina invece del normale messaggio d'errore "Credenziali non valide"
+// gestito da Login.jsx.
+const AUTH_ENDPOINTS_EXEMPT_FROM_REFRESH = ['/api/auth/login', '/api/auth/refresh']
+
 client.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config
+    const isExemptAuthEndpoint = AUTH_ENDPOINTS_EXEMPT_FROM_REFRESH.some((path) =>
+      originalRequest?.url?.includes(path)
+    )
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry && !isExemptAuthEndpoint) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject })
