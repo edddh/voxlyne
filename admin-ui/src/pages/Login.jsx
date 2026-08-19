@@ -26,7 +26,17 @@ function Login() {
       // sulla password (mai lowercase - e' case-sensitive per design):
       // le tastiere/barra suggerimenti mobile a volte aggiungono uno
       // spazio finale quando si accetta un suggerimento.
-      await login(values.email.trim().toLowerCase(), values.password.trim())
+      const emailToSend = values.email.trim().toLowerCase()
+      const passwordToSend = values.password.trim()
+      // TEMP DIAGNOSTIC - rimuovere una volta diagnosticato. Mostra
+      // esattamente cosa sta per essere inviato (email intera,
+      // lunghezza password + primo/ultimo carattere, non la password
+      // intera) prima della chiamata.
+      window.alert(
+        `[DEBUG] Invio email="${emailToSend}" (len ${emailToSend.length}), ` +
+        `password len=${passwordToSend.length} primo="${passwordToSend[0]}" ultimo="${passwordToSend[passwordToSend.length - 1]}"`
+      )
+      await login(emailToSend, passwordToSend)
       message.success('Login effettuato')
     } catch (error) {
       const errorMessage = error.response?.data?.detail || 'Credenziali non valide'
