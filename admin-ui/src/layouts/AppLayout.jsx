@@ -66,7 +66,11 @@ function AppLayout() {
   }, [location.pathname])
 
   const menuItems = [
-    {
+    // Stessi ruoli richiesti dal backend (app/routers/analytics.py:34,
+    // GET /api/analytics/dashboard) - creator e user ricevevano solo un
+    // 403 inghiottito in silenzio dalla pagina, che si vedeva come una
+    // dashboard sempre a zero invece che come "non hai accesso".
+    ['admin', 'super_admin', 'power_user'].includes(user?.role) && {
       key: '/',
       icon: <DashboardOutlined />,
       label: 'Dashboard',
@@ -76,8 +80,6 @@ function AppLayout() {
       icon: <PhoneOutlined />,
       label: 'Chiamate',
     },
-    // Stessi ruoli richiesti dal backend (app/routers/analytics.py) -
-    // niente da guadagnare a mostrare la voce a chi poi riceve solo 403.
     ['admin', 'super_admin', 'power_user'].includes(user?.role) && {
       key: '/analytics',
       icon: <RiseOutlined />,

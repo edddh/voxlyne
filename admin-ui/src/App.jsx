@@ -18,7 +18,7 @@ import CRMIntegration from './pages/CRMIntegration'
 import CalendarIntegration from './pages/CalendarIntegration'
 import TenantCredentials from './pages/TenantCredentials'
 
-function ProtectedRoute({ children, allowedRoles }) {
+function ProtectedRoute({ children, allowedRoles, fallback = '/' }) {
   const { user, loading } = useAuth()
 
   if (loading) {
@@ -30,7 +30,7 @@ function ProtectedRoute({ children, allowedRoles }) {
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/" replace />
+    return <Navigate to={fallback} replace />
   }
 
   return children
@@ -49,7 +49,19 @@ function App() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Dashboard />} />
+        <Route
+          index
+          element={
+            // Stessi ruoli di /analytics (app/routers/analytics.py:34) - "/"
+            // è la pagina di atterraggio di default dopo il login per
+            // chiunque, quindi creator/user ci finivano comunque anche
+            // senza passare dal menu, con un 403 inghiottito in silenzio
+            // che si vedeva come una dashboard sempre a zero.
+            <ProtectedRoute allowedRoles={['admin', 'super_admin', 'power_user']} fallback="/calls">
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
         <Route path="users" element={<Users />} />
         <Route
           path="tenants"
