@@ -19,7 +19,14 @@ const { TextArea } = Input
  * 4 tabs: SIP Address, CRM Integration, Calendar Integration, Prompt Placeholders
  */
 function ProjectConfig() {
-  const { projectId } = useParams()
+  // La route e' registrata come "projects/:id/config" (App.jsx) - il
+  // param si chiama "id", non "projectId". Prima di questo fix
+  // useParams().projectId era sempre undefined, quindi ogni chiamata
+  // API di questa pagina (SIP/CRM/Calendar/Placeholders) partiva verso
+  // /api/projects/undefined/... (visto in log: 422 Unprocessable
+  // Content) - il bottone "Configura" in Projects.jsx apriva la pagina
+  // ma restava vuota/rotta (maintainer: "configura ... non si aprono").
+  const { id: projectId } = useParams()
   const navigate = useNavigate()
   const [project, setProject] = useState(null)
   const [loading, setLoading] = useState(true)
