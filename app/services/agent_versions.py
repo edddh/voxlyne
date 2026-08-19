@@ -8,12 +8,14 @@ immutable agent_versions row, and the inbound resolver reads only from
 published versions, never from the live-editable project row directly.
 """
 
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from uuid import UUID
 
 from app.database.db import get_database
+from app.services.prompt_variables import substitute_custom_variables
 
 
 async def resolve_provider_api_key(tenant_id: Any, provider: str) -> Optional[str]:
@@ -60,13 +62,30 @@ async def publish_version(project_id: UUID, created_by: Optional[UUID] = None) -
     project = await db.fetch_one(
         """
         SELECT id, tenant_id, prompt_a, prompt_b, consent_message,
-               voice_name, language, voice_engine, output_config
+               voice_name, language, voice_engine, output_config,
+               custom_variables
         FROM projects WHERE id = :id
         """,
         {"id": str(project_id)},
     )
     if not project:
         raise ValueError(f"Project not found: {project_id}")
+
+    # {{key}} custom variable substitution happens exactly once, right
+    # here - the draft on `projects` keeps its {{key}} markers forever
+    # (so a value can be edited later, Progetti > Variabili tab, without
+    # touching the prompt text), the published snapshot gets the final
+    # literal text. {{system__xxx}} tags are left untouched for the
+    # voice provider to resolve (see app/services/prompt_variables.py).
+    custom_variables = project["custom_variables"]
+    if isinstance(custom_variables, str):
+        try:
+            custom_variables = json.loads(custom_variables)
+        except json.JSONDecodeError:
+            custom_variables = {}
+    prompt_a = substitute_custom_variables(project["prompt_a"], custom_variables)
+    prompt_b = substitute_custom_variables(project["prompt_b"], custom_variables)
+    consent_message = substitute_custom_variables(project["consent_message"], custom_variables)
 
     async with db.transaction():
         next_version = await db.fetch_val(
@@ -83,24 +102,25 @@ async def publish_version(project_id: UUID, created_by: Optional[UUID] = None) -
             INSERT INTO agent_versions (
                 project_id, tenant_id, version_number, status,
                 prompt_a, prompt_b, consent_message, voice_name, language,
-                voice_engine, output_config, published_at, created_by
+                voice_engine, output_config, custom_variables, published_at, created_by
             ) VALUES (
                 :project_id, :tenant_id, :version_number, 'published',
                 :prompt_a, :prompt_b, :consent_message, :voice_name, :language,
-                :voice_engine, :output_config, :now, :created_by
+                :voice_engine, :output_config, :custom_variables, :now, :created_by
             ) RETURNING id
             """,
             {
                 "project_id": str(project_id),
                 "tenant_id": str(project["tenant_id"]) if project["tenant_id"] else None,
                 "version_number": next_version,
-                "prompt_a": project["prompt_a"],
-                "prompt_b": project["prompt_b"],
-                "consent_message": project["consent_message"],
+                "prompt_a": prompt_a,
+                "prompt_b": prompt_b,
+                "consent_message": consent_message,
                 "voice_name": project["voice_name"],
                 "language": project["language"],
                 "voice_engine": project["voice_engine"],
                 "output_config": project["output_config"],
+                "custom_variables": json.dumps(custom_variables or {}),
                 "now": now,
                 "created_by": str(created_by) if created_by else None,
             },

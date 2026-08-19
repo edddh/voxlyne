@@ -288,6 +288,8 @@ class ProjectUpdate(BaseModel):
     twilio_phone_number: Optional[str] = None
     vapi_phone_number_id: Optional[str] = None
     elevenlabs_voice_id: Optional[str] = None
+    custom_variables_schema: Optional[List[Dict[str, Any]]] = None
+    custom_variables: Optional[Dict[str, Any]] = None
 
 
 class Project(ProjectBase):
@@ -308,6 +310,13 @@ class Project(ProjectBase):
     twilio_phone_number: Optional[str] = None
     vapi_phone_number_id: Optional[str] = None
     elevenlabs_voice_id: Optional[str] = None
+    # {{key}} tags in prompt_a/prompt_b/consent_message this project (or,
+    # on a template row, projects cloned from it) substitutes - not
+    # {{system__xxx}} tags, those are resolved by the voice provider
+    # itself and never touched here (see db_migrations/versions/
+    # e5e14da0c6e3_*).
+    custom_variables_schema: List[Dict[str, Any]] = Field(default_factory=list)
+    custom_variables: Dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
 
@@ -318,6 +327,14 @@ class Project(ProjectBase):
 # ===========================================
 # Template Schemas (M4+)
 # ===========================================
+
+class TemplateCustomVariableField(BaseModel):
+    """One entry in a template's custom_variables_schema."""
+    key: str = Field(..., pattern="^[a-zA-Z0-9_-]+$")
+    label: str
+    description: Optional[str] = None
+    default: Optional[str] = None
+
 
 class TemplateCreate(BaseModel):
     """Schema for creating a template (super_admin only)."""
@@ -331,6 +348,8 @@ class TemplateCreate(BaseModel):
     consent_message: Optional[str] = None
     voice_name: str = "alloy"
     language: str = "it"
+    custom_variables_schema: List[TemplateCustomVariableField] = Field(default_factory=list)
+    custom_variables: Dict[str, Any] = Field(default_factory=dict)
 
 
 class TemplateUpdate(BaseModel):
@@ -343,6 +362,8 @@ class TemplateUpdate(BaseModel):
     consent_message: Optional[str] = None
     voice_name: Optional[str] = None
     language: Optional[str] = None
+    custom_variables_schema: Optional[List[TemplateCustomVariableField]] = None
+    custom_variables: Optional[Dict[str, Any]] = None
 
 
 class TemplateResponse(BaseModel):
@@ -361,6 +382,12 @@ class TemplateResponse(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    # {{key}} tags this template's prompt uses - what a project cloned
+    # from it should ask for at import time (schema) and the template's
+    # own example/default values (see db_migrations/versions/
+    # e5e14da0c6e3_*).
+    custom_variables_schema: List[Dict[str, Any]] = Field(default_factory=list)
+    custom_variables: Dict[str, Any] = Field(default_factory=dict)
 
     class Config:
         from_attributes = True

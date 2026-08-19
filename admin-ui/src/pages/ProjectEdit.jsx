@@ -9,6 +9,7 @@ import * as agentVersionsApi from '../api/agentVersions'
 import PromptDiff, { normalizeNewlines } from '../components/PromptDiff'
 import SimulateChat from '../components/SimulateChat'
 import SimulateVoiceCall from '../components/SimulateVoiceCall'
+import { substituteCustomVariables, extractCustomTags } from '../utils/promptVariables'
 
 const { Title, Text, Paragraph } = Typography
 const { TextArea } = Input
@@ -52,6 +53,15 @@ function ProjectEdit() {
   const [hasChangesB, setHasChangesB] = useState(false)
   const [simulateOpen, setSimulateOpen] = useState(false)
   const [simulateVoiceOpen, setSimulateVoiceOpen] = useState(false)
+  // {{key}} custom variables - il prompt tiene i tag per sempre, questi
+  // sono i valori sostituiti solo alla pubblicazione (app/services/
+  // agent_versions.py::publish_version). maintainer, 20/08: "il template
+  // dovrebbe avere dei campi custom... che possono poi essere modificati
+  // successivamente".
+  const [customVariablesSchema, setCustomVariablesSchema] = useState([])
+  const [customVariables, setCustomVariables] = useState({})
+  const [savedCustomVariables, setSavedCustomVariables] = useState({})
+  const [savingVariables, setSavingVariables] = useState(false)
 
   useEffect(() => {
     loadProject()
@@ -94,6 +104,9 @@ function ProjectEdit() {
       setSavedPromptB(data.prompt_b || '')
       setConsentMessage(data.consent_message || '')
       setSavedConsentMessage(data.consent_message || '')
+      setCustomVariablesSchema(data.custom_variables_schema || [])
+      setCustomVariables(data.custom_variables || {})
+      setSavedCustomVariables(data.custom_variables || {})
 
       try {
         const versionsList = await agentVersionsApi.listAgentVersions(id)
@@ -159,6 +172,27 @@ function ProjectEdit() {
       message.error(error.response?.data?.detail || 'Errore salvataggio')
     } finally {
       setSavingConsent(false)
+    }
+  }
+
+  const hasChangesVariables = JSON.stringify(customVariables) !== JSON.stringify(savedCustomVariables)
+  const schemaKeys = customVariablesSchema.map((f) => f.key)
+  // {{tag}} presenti nel prompt ma senza una voce nella tabella
+  // "Variabili del progetto" sopra - a pubblicazione resterebbero
+  // {{cosi'}} nel testo, letteralmente visibili a chi chiama.
+  const undefinedTagsIn = (text) => extractCustomTags(text).filter((key) => !schemaKeys.includes(key))
+
+  const saveCustomVariables = async () => {
+    setSavingVariables(true)
+    try {
+      await projectsApi.updateProject(id, { custom_variables: customVariables })
+      message.success('Variabili salvate - pubblica per renderle attive nelle chiamate')
+      setSavedCustomVariables(customVariables)
+      setProject((prev) => ({ ...prev, custom_variables: customVariables }))
+    } catch (error) {
+      message.error(error.response?.data?.detail || 'Errore salvataggio')
+    } finally {
+      setSavingVariables(false)
     }
   }
 
@@ -241,6 +275,15 @@ function ProjectEdit() {
             placeholder="Inserisci il prompt di conversazione..."
             style={{ fontFamily: 'monospace', fontSize: 13 }}
           />
+          {undefinedTagsIn(promptA).length > 0 && (
+            <Alert
+              style={{ marginTop: 12 }}
+              type="warning"
+              showIcon
+              message="Tag senza un valore"
+              description={`Questi {{tag}} compaiono nel prompt ma non hanno una variabile definita: ${undefinedTagsIn(promptA).map((t) => `{{${t}}}`).join(', ')}. Restano cosi', visibili letteralmente a chi chiama, finche' non gli dai un valore (Variabili del progetto sopra) o li togli dal prompt.`}
+            />
+          )}
           {publishedVersion && normalizeNewlines(promptA) !== normalizeNewlines(publishedVersion.prompt_a) && (
             <div style={{ marginTop: 16 }}>
               <Text type="secondary" style={{ display: 'block', marginBottom: 6 }}>
@@ -298,6 +341,15 @@ function ProjectEdit() {
             placeholder="Inserisci il prompt di estrazione..."
             style={{ fontFamily: 'monospace', fontSize: 13 }}
           />
+          {undefinedTagsIn(promptB).length > 0 && (
+            <Alert
+              style={{ marginTop: 12 }}
+              type="warning"
+              showIcon
+              message="Tag senza un valore"
+              description={`Questi {{tag}} compaiono nel prompt ma non hanno una variabile definita: ${undefinedTagsIn(promptB).map((t) => `{{${t}}}`).join(', ')}.`}
+            />
+          )}
           {publishedVersion && normalizeNewlines(promptB) !== normalizeNewlines(publishedVersion.prompt_b) && (
             <div style={{ marginTop: 16 }}>
               <Text type="secondary" style={{ display: 'block', marginBottom: 6 }}>
@@ -437,6 +489,55 @@ function ProjectEdit() {
           </Card>
         </Col>
 
+        {customVariablesSchema.length > 0 && (
+          <Col span={24}>
+            <Card
+              title={
+                <Space>
+                  <span>Variabili del progetto</span>
+                  {hasChangesVariables && <Tag color="orange">Non salvato</Tag>}
+                </Space>
+              }
+            >
+              <Alert
+                message="Valori per i tag {{...}} usati nel prompt"
+                description="Definiti dal template da cui e' nato questo progetto. Cambiare un valore qui non modifica il testo del prompt - conta al momento della pubblicazione."
+                type="info"
+                showIcon
+                style={{ marginBottom: 16 }}
+              />
+              <Row gutter={[16, 16]}>
+                {customVariablesSchema.map((field) => (
+                  <Col xs={24} sm={12} key={field.key}>
+                    <Text strong style={{ display: 'block', marginBottom: 4 }}>
+                      {field.label || field.key}
+                    </Text>
+                    <Input
+                      value={customVariables[field.key] || ''}
+                      onChange={(e) => setCustomVariables((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                      placeholder={field.default || `{{${field.key}}}`}
+                    />
+                    {field.description && (
+                      <Text type="secondary" style={{ fontSize: 12 }}>{field.description}</Text>
+                    )}
+                  </Col>
+                ))}
+              </Row>
+              <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
+                <Button
+                  type="primary"
+                  icon={<SaveOutlined />}
+                  onClick={saveCustomVariables}
+                  loading={savingVariables}
+                  disabled={!hasChangesVariables}
+                >
+                  Salva variabili
+                </Button>
+              </div>
+            </Card>
+          </Col>
+        )}
+
         <Col span={24}>
           <Card title="Editor Prompt">
             <Tabs items={promptItems} />
@@ -524,19 +625,22 @@ function ProjectEdit() {
         </Col>
       </Row>
 
+      {/* {{key}} sostituiti prima di arrivare alle simulazioni - provare
+          con {{comune}} letterale invece di "Sampletown" sarebbe fuorviante,
+          non riflette cosa sente davvero chi chiama. */}
       <SimulateChat
         open={simulateOpen}
         onClose={() => setSimulateOpen(false)}
         projectId={id}
-        promptA={promptA}
-        openingMessage={consentMessage}
+        promptA={substituteCustomVariables(promptA, customVariables)}
+        openingMessage={substituteCustomVariables(consentMessage, customVariables)}
       />
       <SimulateVoiceCall
         open={simulateVoiceOpen}
         onClose={() => setSimulateVoiceOpen(false)}
         projectId={id}
-        promptA={promptA}
-        consentMessage={consentMessage}
+        promptA={substituteCustomVariables(promptA, customVariables)}
+        consentMessage={substituteCustomVariables(consentMessage, customVariables)}
       />
     </div>
   )

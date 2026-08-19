@@ -48,6 +48,7 @@ function Projects() {
   const [loadingAssignedTemplates, setLoadingAssignedTemplates] = useState(false)
   const [creatingFromTemplate, setCreatingFromTemplate] = useState(false)
   const [fromTemplateForm] = Form.useForm()
+  const [selectedTemplate, setSelectedTemplate] = useState(null)
   const noAutofillProps = {
     autoComplete: 'new-password',
     'data-lpignore': 'true',
@@ -436,6 +437,7 @@ function Projects() {
 
   const openFromTemplateModal = async () => {
     setFromTemplateModalOpen(true)
+    setSelectedTemplate(null)
     fromTemplateForm.resetFields()
     setLoadingAssignedTemplates(true)
     try {
@@ -448,13 +450,32 @@ function Projects() {
     }
   }
 
+  // maintainer, 20/08: "il template dovrebbe avere dei campi custom che
+  // chiede di riempire quando si effettua l'importazione" - appena si
+  // sceglie un template, i suoi {{key}} diventano campi del form,
+  // pre-compilati con i valori di default del template.
+  const handleTemplateSelect = (templateId) => {
+    const template = assignedTemplates.find((t) => t.id === templateId)
+    setSelectedTemplate(template || null)
+    const varFields = {}
+    for (const field of template?.custom_variables_schema || []) {
+      varFields[`var__${field.key}`] = template.custom_variables?.[field.key] ?? field.default ?? ''
+    }
+    fromTemplateForm.setFieldsValue(varFields)
+  }
+
   const handleCreateFromTemplate = async (values) => {
     setCreatingFromTemplate(true)
     try {
+      const customVariables = {}
+      for (const field of selectedTemplate?.custom_variables_schema || []) {
+        customVariables[field.key] = values[`var__${field.key}`] || ''
+      }
       const project = await projectsApi.createProjectFromTemplate(values.template_id, {
         name: values.name,
         slug: values.slug,
         description: values.description,
+        customVariables,
       })
       message.success(`Progetto "${project.name}" creato dal template`)
       setFromTemplateModalOpen(false)
@@ -1069,12 +1090,32 @@ function Projects() {
             >
               <Select
                 placeholder="Scegli un template..."
+                onChange={handleTemplateSelect}
                 options={assignedTemplates.map((t) => ({
                   value: t.id,
                   label: t.template_category ? `${t.name} (${t.template_category})` : t.name,
                 }))}
               />
             </Form.Item>
+            {selectedTemplate?.custom_variables_schema?.length > 0 && (
+              <>
+                <Divider style={{ margin: '8px 0 16px' }} orientationMargin={0} orientation="left" plain>
+                  Variabili di questo template
+                </Divider>
+                {selectedTemplate.custom_variables_schema.map((field) => (
+                  <Form.Item
+                    key={field.key}
+                    name={`var__${field.key}`}
+                    label={field.label || field.key}
+                    tooltip={field.description}
+                    rules={[{ required: true, message: `Inserisci un valore per ${field.label || field.key}` }]}
+                  >
+                    <Input placeholder={field.default || `{{${field.key}}}`} />
+                  </Form.Item>
+                ))}
+                <Divider style={{ margin: '8px 0 16px' }} />
+              </>
+            )}
             <Form.Item
               name="name"
               label="Nome del nuovo progetto"

@@ -69,6 +69,15 @@ function Templates() {
       consent_message: template.consent_message,
       voice_name: template.voice_name,
       language: template.language,
+      // {{key}} custom variables - maintainer, 20/08: "il template dovrebbe
+      // avere dei campi custom che chiede di riempire quando si
+      // effettua l'importazione". custom_variables_schema defines the
+      // fields, "default" here doubles as the template's own example
+      // value (custom_variables on the template row).
+      custom_variables_schema: (template.custom_variables_schema || []).map((f) => ({
+        ...f,
+        default: template.custom_variables?.[f.key] ?? f.default ?? '',
+      })),
     })
     setModalOpen(true)
   }
@@ -82,6 +91,18 @@ function Templates() {
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields()
+
+      // Il form tiene "default" come singolo campo modificabile per
+      // ogni variabile (raddoppia da "valore di default per i nuovi
+      // progetti" a "valore di esempio del template stesso") - il
+      // backend li vuole separati: custom_variables_schema (la
+      // definizione dei campi) e custom_variables (i valori di QUESTO
+      // template, projects.custom_variables).
+      const schema = values.custom_variables_schema || []
+      values.custom_variables = Object.fromEntries(
+        schema.filter((f) => f?.key).map((f) => [f.key, f.default || ''])
+      )
+      values.custom_variables_schema = schema.filter((f) => f?.key)
 
       if (editingTemplate) {
         await templatesApi.updateTemplate(editingTemplate.id, values)
@@ -323,7 +344,7 @@ function Templates() {
             name="prompt_a"
             label="Main Prompt (Instructions)"
             rules={[{ required: true }]}
-            tooltip="Use placeholders: {{cancel_phrase}}, {{goodbye_phrase}}"
+            tooltip="Use {{key}} for a custom variable a project cloned from this template will fill in (defined below) - use {{system__xxx}} (e.g. {{system__caller_id}}) for a tag the voice provider itself resolves at call time, never edited here."
           >
             <TextArea rows={6} placeholder="AI instructions for conversation flow..." />
           </Form.Item>
@@ -347,6 +368,47 @@ function Templates() {
               <Select.Option value="shimmer">Shimmer</Select.Option>
             </Select>
           </Form.Item>
+
+          <Divider orientation="left" orientationMargin={0}>
+            Custom Variables ({'{{key}}'} tags)
+          </Divider>
+          <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+            One row per {'{{key}}'} used above. A project created from this template will be asked to
+            fill in a value for each one at import time, and can change it again later.
+          </Text>
+          <Form.List name="custom_variables_schema">
+            {(fields, { add, remove }) => (
+              <>
+                {fields.map(({ key, name, ...restField }) => (
+                  <Space key={key} align="baseline" style={{ display: 'flex', marginBottom: 8 }} wrap>
+                    <Form.Item
+                      {...restField}
+                      name={[name, 'key']}
+                      rules={[
+                        { required: true, message: 'key' },
+                        { pattern: /^[a-zA-Z0-9_-]+$/, message: 'letters/numbers/_/- only' },
+                      ]}
+                    >
+                      <Input placeholder="key (e.g. comune)" style={{ width: 140 }} />
+                    </Form.Item>
+                    <Form.Item {...restField} name={[name, 'label']} rules={[{ required: true, message: 'label' }]}>
+                      <Input placeholder="Label (e.g. Nome del Comune)" style={{ width: 200 }} />
+                    </Form.Item>
+                    <Form.Item {...restField} name={[name, 'default']}>
+                      <Input placeholder="Default/example value" style={{ width: 200 }} />
+                    </Form.Item>
+                    <Form.Item {...restField} name={[name, 'description']}>
+                      <Input placeholder="Description (optional)" style={{ width: 220 }} />
+                    </Form.Item>
+                    <DeleteOutlined onClick={() => remove(name)} style={{ color: '#ff4d4f' }} />
+                  </Space>
+                ))}
+                <Button type="dashed" onClick={() => add()} icon={<PlusOutlined />}>
+                  Add variable
+                </Button>
+              </>
+            )}
+          </Form.List>
         </Form>
       </Modal>
 

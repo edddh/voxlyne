@@ -54,6 +54,21 @@ def _serialize_project(project_row) -> dict:
             item["output_config"] = json.loads(output_config)
         except json.JSONDecodeError:
             item["output_config"] = {}
+    # Stessa gestione difensiva di output_config sopra - il driver a
+    # volte restituisce le colonne JSONB come stringa non ancora
+    # deserializzata (20/08, custom_variables_schema/custom_variables).
+    schema = item.get("custom_variables_schema")
+    if isinstance(schema, str):
+        try:
+            item["custom_variables_schema"] = json.loads(schema)
+        except json.JSONDecodeError:
+            item["custom_variables_schema"] = []
+    values = item.get("custom_variables")
+    if isinstance(values, str):
+        try:
+            item["custom_variables"] = json.loads(values)
+        except json.JSONDecodeError:
+            item["custom_variables"] = {}
     return item
 
 
@@ -136,6 +151,11 @@ async def create_project_from_template(
     name: str = Query(..., min_length=1),
     slug: str = Query(..., pattern="^[a-z0-9-]+$"),
     description: str = Query(None),
+    custom_variables: str = Query(
+        None,
+        description="JSON object of {{key}} values for this project (filled in at import time) - "
+                    "falls back to the template's own default values for any key not provided.",
+    ),
     current_user: CurrentUser = Depends(require_roles(["admin", "creator"]))
 ):
     """
@@ -198,6 +218,34 @@ async def create_project_from_template(
         except (json.JSONDecodeError, TypeError):
             template_output_config = {}
 
+    # {{key}} custom variables (20/08, maintainer: "il template dovrebbe
+    # avere dei campi custom che chiede di riempire quando si effettua
+    # l'importazione") - the schema (which fields exist) always comes
+    # from the template unchanged; the values start as the template's
+    # own defaults, overridden by whatever the caller filled in at
+    # import time.
+    template_schema = template["custom_variables_schema"]
+    if isinstance(template_schema, str):
+        try:
+            template_schema = json.loads(template_schema)
+        except (json.JSONDecodeError, TypeError):
+            template_schema = []
+    template_values = template["custom_variables"]
+    if isinstance(template_values, str):
+        try:
+            template_values = json.loads(template_values)
+        except (json.JSONDecodeError, TypeError):
+            template_values = {}
+    new_values = dict(template_values or {})
+    if custom_variables:
+        try:
+            provided = json.loads(custom_variables)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="custom_variables must be valid JSON")
+        if not isinstance(provided, dict):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="custom_variables must be a JSON object")
+        new_values.update(provided)
+
     async with db.transaction():
         project_id = await db.fetch_val(
             """
@@ -205,11 +253,13 @@ async def create_project_from_template(
                 tenant_id, name, slug, type, description,
                 prompt_a, prompt_b, consent_message, voice_name, language,
                 voice_engine, ai_provider, output_config, voice_provider_config,
+                custom_variables_schema, custom_variables,
                 is_template, from_template_id, created_by
             ) VALUES (
                 :tenant_id, :name, :slug, :type, :description,
                 :prompt_a, :prompt_b, :consent_message, :voice_name, :language,
                 :voice_engine, :ai_provider, :output_config, :voice_provider_config,
+                :custom_variables_schema, :custom_variables,
                 FALSE, :template_id, :created_by
             ) RETURNING id
             """,
@@ -230,6 +280,8 @@ async def create_project_from_template(
                 "voice_provider_config": json.dumps(template["voice_provider_config"] or {})
                     if not isinstance(template["voice_provider_config"], str)
                     else template["voice_provider_config"],
+                "custom_variables_schema": json.dumps(template_schema or []),
+                "custom_variables": json.dumps(new_values),
                 "template_id": str(template_id),
                 "created_by": str(current_user.id),
             }
@@ -431,6 +483,10 @@ async def update_project(
         update_data["call_direction"] = update_data["call_direction"].value
     if "output_config" in update_data and update_data["output_config"] is not None:
         update_data["output_config"] = json.dumps(update_data["output_config"])
+    if "custom_variables_schema" in update_data and update_data["custom_variables_schema"] is not None:
+        update_data["custom_variables_schema"] = json.dumps(update_data["custom_variables_schema"])
+    if "custom_variables" in update_data and update_data["custom_variables"] is not None:
+        update_data["custom_variables"] = json.dumps(update_data["custom_variables"])
 
     set_clauses = []
     params = {"project_id": str(project_id), "updated_at": datetime.now(timezone.utc)}

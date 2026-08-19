@@ -7,7 +7,9 @@ Template management for super_admin:
 - Templates are read-only for tenants (copy-on-create pattern)
 """
 
+import json
 import logging
+from enum import Enum
 from typing import List
 from uuid import UUID
 
@@ -35,6 +37,51 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/templates", tags=["Templates"])
 
+TEMPLATE_COLUMNS = """
+    id, name, slug, type, template_category, description,
+    prompt_a, prompt_b, consent_message, voice_name, language,
+    is_active, created_at, updated_at, custom_variables_schema, custom_variables
+"""
+
+
+def _serialize_template(row) -> TemplateResponse:
+    """
+    Shared row->TemplateResponse mapping, used by every endpoint below -
+    previously duplicated inline 4 times, each one a place the 20/08
+    custom_variables_schema/custom_variables columns could have been
+    (and almost were) forgotten in one spot but not another.
+    """
+    schema = row["custom_variables_schema"]
+    if isinstance(schema, str):
+        try:
+            schema = json.loads(schema)
+        except json.JSONDecodeError:
+            schema = []
+    values = row["custom_variables"]
+    if isinstance(values, str):
+        try:
+            values = json.loads(values)
+        except json.JSONDecodeError:
+            values = {}
+    return TemplateResponse(
+        id=row["id"],
+        name=row["name"],
+        slug=row["slug"],
+        type=ProjectType(row["type"]),
+        template_category=row["template_category"],
+        description=row["description"],
+        prompt_a=row["prompt_a"],
+        prompt_b=row["prompt_b"],
+        consent_message=row["consent_message"],
+        voice_name=row["voice_name"],
+        language=row["language"],
+        is_active=row["is_active"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+        custom_variables_schema=schema or [],
+        custom_variables=values or {},
+    )
+
 
 @router.get("", response_model=TemplateListResponse)
 async def list_templates(
@@ -49,13 +96,7 @@ async def list_templates(
     """
     db = get_database()
 
-    query = """
-        SELECT id, name, slug, type, template_category, description,
-               prompt_a, prompt_b, consent_message, voice_name, language,
-               is_active, created_at, updated_at
-        FROM projects
-        WHERE is_template = TRUE
-    """
+    query = f"SELECT {TEMPLATE_COLUMNS} FROM projects WHERE is_template = TRUE"
     params = {}
 
     if category:
@@ -65,26 +106,7 @@ async def list_templates(
     query += " ORDER BY created_at DESC"
 
     rows = await db.fetch_all(query, params)
-
-    templates = [
-        TemplateResponse(
-            id=row["id"],
-            name=row["name"],
-            slug=row["slug"],
-            type=ProjectType(row["type"]),
-            template_category=row["template_category"],
-            description=row["description"],
-            prompt_a=row["prompt_a"],
-            prompt_b=row["prompt_b"],
-            consent_message=row["consent_message"],
-            voice_name=row["voice_name"],
-            language=row["language"],
-            is_active=row["is_active"],
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
-        )
-        for row in rows
-    ]
+    templates = [_serialize_template(row) for row in rows]
 
     return TemplateListResponse(templates=templates, total=len(templates))
 
@@ -121,10 +143,12 @@ async def create_template(
         INSERT INTO projects (
             name, slug, type, template_category, description,
             prompt_a, prompt_b, consent_message, voice_name, language,
+            custom_variables_schema, custom_variables,
             is_template, is_active, created_by
         ) VALUES (
             :name, :slug, :type, :template_category, :description,
             :prompt_a, :prompt_b, :consent_message, :voice_name, :language,
+            :custom_variables_schema, :custom_variables,
             TRUE, TRUE, :created_by
         ) RETURNING id
         """,
@@ -139,38 +163,17 @@ async def create_template(
             "consent_message": data.consent_message,
             "voice_name": data.voice_name,
             "language": data.language,
+            "custom_variables_schema": json.dumps([f.model_dump() for f in data.custom_variables_schema]),
+            "custom_variables": json.dumps(data.custom_variables),
             "created_by": str(current_user.id),
         }
     )
 
-    # Fetch created template
     template = await db.fetch_one(
-        """
-        SELECT id, name, slug, type, template_category, description,
-               prompt_a, prompt_b, consent_message, voice_name, language,
-               is_active, created_at, updated_at
-        FROM projects
-        WHERE id = :id
-        """,
+        f"SELECT {TEMPLATE_COLUMNS} FROM projects WHERE id = :id",
         {"id": str(template_id)}
     )
-
-    return TemplateResponse(
-        id=template["id"],
-        name=template["name"],
-        slug=template["slug"],
-        type=ProjectType(template["type"]),
-        template_category=template["template_category"],
-        description=template["description"],
-        prompt_a=template["prompt_a"],
-        prompt_b=template["prompt_b"],
-        consent_message=template["consent_message"],
-        voice_name=template["voice_name"],
-        language=template["language"],
-        is_active=template["is_active"],
-        created_at=template["created_at"],
-        updated_at=template["updated_at"],
-    )
+    return _serialize_template(template)
 
 
 @router.get("/assigned", response_model=TemplateListResponse)
@@ -199,7 +202,7 @@ async def list_assigned_templates(
         """
         SELECT p.id, p.name, p.slug, p.type, p.template_category, p.description,
                p.prompt_a, p.prompt_b, p.consent_message, p.voice_name, p.language,
-               p.is_active, p.created_at, p.updated_at
+               p.is_active, p.created_at, p.updated_at, p.custom_variables_schema, p.custom_variables
         FROM projects p
         INNER JOIN template_assignments ta ON p.id = ta.template_id
         WHERE p.is_template = TRUE
@@ -211,26 +214,7 @@ async def list_assigned_templates(
         {"tenant_id": str(current_user.tenant_id)},
     )
 
-    templates = [
-        TemplateResponse(
-            id=row["id"],
-            name=row["name"],
-            slug=row["slug"],
-            type=ProjectType(row["type"]),
-            template_category=row["template_category"],
-            description=row["description"],
-            prompt_a=row["prompt_a"],
-            prompt_b=row["prompt_b"],
-            consent_message=row["consent_message"],
-            voice_name=row["voice_name"],
-            language=row["language"],
-            is_active=row["is_active"],
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
-        )
-        for row in rows
-    ]
-
+    templates = [_serialize_template(row) for row in rows]
     return TemplateListResponse(templates=templates, total=len(templates))
 
 
@@ -243,13 +227,7 @@ async def get_template(
     db = get_database()
 
     template = await db.fetch_one(
-        """
-        SELECT id, name, slug, type, template_category, description,
-               prompt_a, prompt_b, consent_message, voice_name, language,
-               is_active, created_at, updated_at
-        FROM projects
-        WHERE id = :id AND is_template = TRUE
-        """,
+        f"SELECT {TEMPLATE_COLUMNS} FROM projects WHERE id = :id AND is_template = TRUE",
         {"id": str(template_id)}
     )
 
@@ -259,22 +237,7 @@ async def get_template(
             detail=f"Template {template_id} not found"
         )
 
-    return TemplateResponse(
-        id=template["id"],
-        name=template["name"],
-        slug=template["slug"],
-        type=ProjectType(template["type"]),
-        template_category=template["template_category"],
-        description=template["description"],
-        prompt_a=template["prompt_a"],
-        prompt_b=template["prompt_b"],
-        consent_message=template["consent_message"],
-        voice_name=template["voice_name"],
-        language=template["language"],
-        is_active=template["is_active"],
-        created_at=template["created_at"],
-        updated_at=template["updated_at"],
-    )
+    return _serialize_template(template)
 
 
 @router.put("/{template_id}", response_model=TemplateResponse)
@@ -302,9 +265,16 @@ async def update_template(
     params = {"id": str(template_id)}
 
     for field, value in data.dict(exclude_unset=True).items():
-        if value is not None:
-            updates.append(f"{field} = :{field}")
-            params[field] = value if not isinstance(value, Enum) else value.value
+        if value is None:
+            continue
+        if field == "custom_variables_schema":
+            value = json.dumps(value)
+        elif field == "custom_variables":
+            value = json.dumps(value)
+        elif isinstance(value, Enum):
+            value = value.value
+        updates.append(f"{field} = :{field}")
+        params[field] = value
 
     if not updates:
         raise HTTPException(

@@ -26,10 +26,17 @@ export const deleteProject = async (id) => {
 }
 
 // POST /api/projects/from-template/{template_id} takes name/slug/
-// description as query params, not a JSON body (see app/routers/api.py).
-export const createProjectFromTemplate = async (templateId, { name, slug, description }) => {
+// description/custom_variables as query params, not a JSON body (see
+// app/routers/api.py). custom_variables is JSON-encoded here - the
+// backend parses it back into an object.
+export const createProjectFromTemplate = async (templateId, { name, slug, description, customVariables }) => {
   const response = await client.post(`/api/projects/from-template/${templateId}`, null, {
-    params: { name, slug, description },
+    params: {
+      name,
+      slug,
+      description,
+      custom_variables: customVariables ? JSON.stringify(customVariables) : undefined,
+    },
   })
   return response.data
 }
