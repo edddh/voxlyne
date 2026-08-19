@@ -4,6 +4,7 @@ import AppLayout from './layouts/AppLayout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Analytics from './pages/Analytics'
+import Profile from './pages/Profile'
 import Users from './pages/Users'
 import Tenants from './pages/Tenants'
 import Templates from './pages/Templates'
@@ -80,6 +81,7 @@ function App() {
         <Route path="projects/:id/history" element={<PromptHistory />} />
         <Route path="calls" element={<Calls />} />
         <Route path="calls/:id" element={<CallDetail />} />
+        <Route path="profile" element={<Profile />} />
         <Route
           path="analytics"
           element={

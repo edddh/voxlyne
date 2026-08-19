@@ -471,7 +471,13 @@ async def test_tenant_credential(
 @router.post("/projects/{project_id}/runtime/provision")
 async def provision_project_runtime(
     project_id: UUID,
-    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin"])),
+    # maintainer, 20/08: "non si riuscirebbe a evitare 'Genera servizio
+    # runtime'? mi sembra una cosa che va al di la' delle funzionalita'
+    # tipiche di un admin di tenant" - giusto, e' un'azione
+    # infrastrutturale (config/systemd di un processo standalone), non
+    # qualcosa che un admin di tenant dovrebbe poter fare. Era
+    # ["admin", "super_admin"], ristretto a super_admin soltanto.
+    current_user: CurrentUser = Depends(require_roles(["super_admin"])),
 ):
     """
     Generate a standalone runtime instance (config + env + start script +

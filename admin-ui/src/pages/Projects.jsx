@@ -7,6 +7,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, HistoryOutl
 import * as projectsApi from '../api/projects'
 import * as credentialsApi from '../api/credentials'
 import * as templatesApi from '../api/templates'
+import { useAuth } from '../hooks/useAuth'
 
 const { Title, Text, Paragraph } = Typography
 const { TextArea } = Input
@@ -15,6 +16,7 @@ const NEW_VOICE_ENGINES = ['livekit_xai', 'livekit_openai', 'xai_sip_direct', 'o
 
 function Projects() {
   const navigate = useNavigate()
+  const { isSuperAdmin } = useAuth()
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
@@ -604,8 +606,13 @@ function Projects() {
               onClick={() => navigate(`/projects/${record.id}/config`)}
             />
           </Tooltip>
-          {NEW_VOICE_ENGINES.includes(record.voice_engine) && (
-            <Tooltip title="Genera servizio runtime (config + systemd, come earlier-prototype)">
+          {isSuperAdmin && NEW_VOICE_ENGINES.includes(record.voice_engine) && (
+            // maintainer, 20/08: "non si riuscirebbe a evitare 'Genera
+            // servizio runtime'? mi sembra una cosa che va al di la'
+            // delle funzionalita' tipiche di un admin di tenant" -
+            // azione infrastrutturale, stesso require_roles(["super_
+            // admin"]) del backend (era ["admin","super_admin"]).
+            <Tooltip title="Genera servizio runtime (config + systemd, come earlier-prototype) - solo super admin">
               <Button
                 icon={<ThunderboltOutlined />}
                 size="small"
