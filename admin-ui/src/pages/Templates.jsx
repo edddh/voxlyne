@@ -380,30 +380,70 @@ function Templates() {
             {(fields, { add, remove }) => (
               <>
                 {fields.map(({ key, name, ...restField }) => (
-                  <Space key={key} align="baseline" style={{ display: 'flex', marginBottom: 8 }} wrap>
+                  <Card
+                    key={key}
+                    size="small"
+                    style={{ marginBottom: 12, background: '#fafafa' }}
+                    extra={
+                      <DeleteOutlined onClick={() => remove(name)} style={{ color: '#ff4d4f' }} />
+                    }
+                  >
+                    <Space size={4} align="center" style={{ marginBottom: 4 }}>
+                      <Text style={{ fontFamily: 'monospace', fontSize: 15 }}>{'{{'}</Text>
+                      <Form.Item
+                        {...restField}
+                        name={[name, 'key']}
+                        rules={[
+                          { required: true, message: 'obbligatorio' },
+                          { pattern: /^[a-zA-Z0-9_-]+$/, message: 'solo lettere/numeri/_/-' },
+                        ]}
+                        style={{ marginBottom: 0 }}
+                      >
+                        <Input
+                          placeholder="comune"
+                          style={{ width: 160, fontFamily: 'monospace' }}
+                        />
+                      </Form.Item>
+                      <Text style={{ fontFamily: 'monospace', fontSize: 15 }}>{'}}'}</Text>
+                      <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
+                        cosi' com'e' scritto nel prompt sopra
+                      </Text>
+                    </Space>
+
+                    <Space style={{ width: '100%', display: 'flex' }} wrap>
+                      <Form.Item
+                        {...restField}
+                        name={[name, 'label']}
+                        label="Etichetta"
+                        rules={[{ required: true, message: 'obbligatoria' }]}
+                        style={{ flex: 1, minWidth: 220, marginBottom: 8 }}
+                      >
+                        <Input placeholder="es. Nome del Comune" />
+                      </Form.Item>
+                      <Form.Item
+                        {...restField}
+                        name={[name, 'default']}
+                        label="Valore di default / esempio"
+                        style={{ flex: 1, minWidth: 220, marginBottom: 8 }}
+                      >
+                        <Input placeholder="es. Exampleville" />
+                      </Form.Item>
+                    </Space>
+
                     <Form.Item
                       {...restField}
-                      name={[name, 'key']}
-                      rules={[
-                        { required: true, message: 'key' },
-                        { pattern: /^[a-zA-Z0-9_-]+$/, message: 'letters/numbers/_/- only' },
-                      ]}
+                      name={[name, 'description']}
+                      label="Descrizione"
+                      style={{ marginBottom: 0 }}
                     >
-                      <Input placeholder="key (e.g. comune)" style={{ width: 140 }} />
+                      <TextArea
+                        rows={2}
+                        placeholder="A cosa serve questa variabile, dove viene usata nel prompt..."
+                      />
                     </Form.Item>
-                    <Form.Item {...restField} name={[name, 'label']} rules={[{ required: true, message: 'label' }]}>
-                      <Input placeholder="Label (e.g. Nome del Comune)" style={{ width: 200 }} />
-                    </Form.Item>
-                    <Form.Item {...restField} name={[name, 'default']}>
-                      <Input placeholder="Default/example value" style={{ width: 200 }} />
-                    </Form.Item>
-                    <Form.Item {...restField} name={[name, 'description']}>
-                      <Input placeholder="Description (optional)" style={{ width: 220 }} />
-                    </Form.Item>
-                    <DeleteOutlined onClick={() => remove(name)} style={{ color: '#ff4d4f' }} />
-                  </Space>
+                  </Card>
                 ))}
-                <Button type="dashed" onClick={() => add()} icon={<PlusOutlined />}>
+                <Button type="dashed" onClick={() => add()} icon={<PlusOutlined />} block>
                   Add variable
                 </Button>
               </>
