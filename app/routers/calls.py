@@ -167,6 +167,54 @@ async def list_calls(
     }
 
 
+@router.get("/stats")
+async def get_calls_stats(
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator", "power_user"])),
+    tenant_ctx: TenantContext = Depends(get_tenant_context),
+):
+    """
+    Real aggregate counts for the Chiamate page's stat cards.
+
+    maintainer, 20/08: the old cards ("Completate (in lista)" etc.) were
+    computed client-side from whatever page of results happened to be
+    loaded (up to page_size rows) - not a real total, and it changed
+    depending on which page you were looking at. "che cagata e', io
+    voglio sapere piuttosto quante effettuate oggi, quante in totale" -
+    these are real COUNT(*) queries over ALL of the tenant's calls, not
+    just the current page. Must be registered before GET /{call_id} or
+    FastAPI would try to parse "stats" as a UUID path param.
+    """
+    db = get_database()
+    where = "WHERE 1=1"
+    params = {}
+    if not current_user.is_super_admin:
+        where += " AND tenant_id = :tenant_id"
+        params["tenant_id"] = str(current_user.tenant_id)
+
+    row = await db.fetch_one(
+        f"""
+        SELECT
+            COUNT(*) AS total,
+            COUNT(*) FILTER (
+                WHERE (created_at AT TIME ZONE 'Europe/Rome')::date = (now() AT TIME ZONE 'Europe/Rome')::date
+            ) AS today,
+            COUNT(*) FILTER (WHERE status IN ('completed', 'processed')) AS completed,
+            COUNT(*) FILTER (WHERE status IN ('processing', 'in_progress')) AS processing,
+            AVG(duration_seconds) FILTER (WHERE duration_seconds IS NOT NULL) AS avg_duration_seconds
+        FROM calls
+        {where}
+        """,
+        params,
+    )
+    return {
+        "total": row["total"],
+        "today": row["today"],
+        "completed": row["completed"],
+        "processing": row["processing"],
+        "avg_duration_seconds": float(row["avg_duration_seconds"]) if row["avg_duration_seconds"] is not None else None,
+    }
+
+
 @router.get("/{call_id}")
 async def get_call_detail(
     call_id: UUID,

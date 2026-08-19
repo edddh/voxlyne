@@ -28,8 +28,12 @@ function Calls() {
   const [projectFilter, setProjectFilter] = useState(null)
   const [dateRange, setDateRange] = useState(null)
 
-  // Stats
-  const [stats, setStats] = useState({ today: 0, completed: 0, processing: 0 })
+  // Stats - conteggi reali sul tenant intero (GET /api/v2/calls/stats),
+  // non piu' calcolati sulla sola pagina caricata (maintainer, 20/08: "che
+  // cagata e', io voglio sapere piuttosto quante effettuate oggi, quante
+  // in totale" - prima "Completate" contava solo tra le righe visibili
+  // in quel momento, cambiava a seconda della pagina).
+  const [stats, setStats] = useState({ total: 0, today: 0, completed: 0, processing: 0 })
 
   // Outbound call modal
   const [outboundModalOpen, setOutboundModalOpen] = useState(false)
@@ -38,6 +42,7 @@ function Calls() {
 
   useEffect(() => {
     loadProjects()
+    loadStats()
   }, [])
 
   useEffect(() => {
@@ -50,6 +55,18 @@ function Calls() {
       setProjects(data.projects || data)
     } catch (error) {
       console.error('Error loading projects:', error)
+    }
+  }
+
+  // Indipendente dai filtri/paginazione della tabella sotto - e' sempre
+  // il quadro reale di tutte le chiamate del tenant, non di quelle
+  // filtrate/visibili in questo momento.
+  const loadStats = async () => {
+    try {
+      const data = await callsApi.getCallsStats()
+      setStats(data)
+    } catch (error) {
+      console.error('Error loading call stats:', error)
     }
   }
 
@@ -66,19 +83,6 @@ function Calls() {
       const data = await callsApi.getCalls(params)
       setCalls(data.calls)
       setTotal(data.total)
-
-      // Calculate simple stats
-      const today = data.calls.filter(c =>
-        new Date(c.created_at).toDateString() === new Date().toDateString()
-      ).length
-      const completed = data.calls.filter(c =>
-        c.status === 'completed' || c.status === 'processed'
-      ).length
-      const processing = data.calls.filter(c =>
-        c.status === 'processing' || c.status === 'in_progress'
-      ).length
-
-      setStats({ today, completed, processing })
     } catch (error) {
       console.error('Error loading calls:', error)
     } finally {
@@ -102,6 +106,7 @@ function Calls() {
       setOutboundModalOpen(false)
       outboundForm.resetFields()
       loadCalls()
+      loadStats()
     } catch (error) {
       const msg = error.response?.data?.detail || 'Errore avvio chiamata'
       message.error(msg)
@@ -306,7 +311,7 @@ function Calls() {
       </div>
 
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col xs={24} sm={8}>
+        <Col xs={12} sm={6}>
           <Card>
             <Statistic
               title="Chiamate Oggi"
@@ -315,17 +320,26 @@ function Calls() {
             />
           </Card>
         </Col>
-        <Col xs={24} sm={8}>
+        <Col xs={12} sm={6}>
           <Card>
             <Statistic
-              title="Completate (in lista)"
+              title="Chiamate Totali"
+              value={stats.total}
+              prefix={<PhoneOutlined />}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={6}>
+          <Card>
+            <Statistic
+              title="Completate"
               value={stats.completed}
               prefix={<CheckCircleOutlined />}
               valueStyle={{ color: '#52c41a' }}
             />
           </Card>
         </Col>
-        <Col xs={24} sm={8}>
+        <Col xs={12} sm={6}>
           <Card>
             <Statistic
               title="In Elaborazione"
