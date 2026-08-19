@@ -6,10 +6,20 @@ import { diffWords } from 'diff'
  * ancora salvate) - maintainer, 19/08: "sarebbe bello che fosse evidenziata
  * la differenza tra bozza e pubblicato nel testo".
  */
-function PromptDiff({ published, draft }) {
-  if (published === draft) return null
+// Normalizza gli "a capo" prima di confrontare: un <textarea> puo'
+// restituire \r\n mentre il testo salvato/pubblicato arriva dall'API con
+// \n soltanto - senza questo, OGNI riga risulterebbe diversa (non solo
+// quella davvero modificata), perche' diffWords tratta \r\n e \n come
+// token distinti. Trovato in ambiente di sviluppo (19/08): maintainer aveva aggiunto
+// una sola riga ma il diff segnava tutto il testo come cambiato.
+export const normalizeNewlines = (text) => (text || '').replace(/\r\n/g, '\n')
 
-  const parts = diffWords(published || '', draft || '')
+function PromptDiff({ published, draft }) {
+  const normalizedPublished = normalizeNewlines(published)
+  const normalizedDraft = normalizeNewlines(draft)
+  if (normalizedPublished === normalizedDraft) return null
+
+  const parts = diffWords(normalizedPublished, normalizedDraft)
 
   return (
     <pre

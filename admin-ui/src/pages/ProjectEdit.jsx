@@ -6,7 +6,7 @@ import {
 import { SaveOutlined, ArrowLeftOutlined, RocketOutlined } from '@ant-design/icons'
 import * as projectsApi from '../api/projects'
 import * as agentVersionsApi from '../api/agentVersions'
-import PromptDiff from '../components/PromptDiff'
+import PromptDiff, { normalizeNewlines } from '../components/PromptDiff'
 
 const { Title, Text, Paragraph } = Typography
 const { TextArea } = Input
@@ -173,7 +173,7 @@ function ProjectEdit() {
             placeholder="Inserisci il prompt di intervista..."
             style={{ fontFamily: 'monospace', fontSize: 13 }}
           />
-          {publishedVersion && promptA !== (publishedVersion.prompt_a || '') && (
+          {publishedVersion && normalizeNewlines(promptA) !== normalizeNewlines(publishedVersion.prompt_a) && (
             <div style={{ marginTop: 16 }}>
               <Text type="secondary" style={{ display: 'block', marginBottom: 6 }}>
                 Differenze rispetto alla versione pubblicata (v{publishedVersion.version_number}):
@@ -222,7 +222,7 @@ function ProjectEdit() {
             placeholder="Inserisci il prompt di estrazione..."
             style={{ fontFamily: 'monospace', fontSize: 13 }}
           />
-          {publishedVersion && promptB !== (publishedVersion.prompt_b || '') && (
+          {publishedVersion && normalizeNewlines(promptB) !== normalizeNewlines(publishedVersion.prompt_b) && (
             <div style={{ marginTop: 16 }}>
               <Text type="secondary" style={{ display: 'block', marginBottom: 6 }}>
                 Differenze rispetto alla versione pubblicata (v{publishedVersion.version_number}):
