@@ -43,6 +43,9 @@ function ProjectEdit() {
   const [promptB, setPromptB] = useState('')
   const [savedPromptA, setSavedPromptA] = useState('')
   const [savedPromptB, setSavedPromptB] = useState('')
+  const [consentMessage, setConsentMessage] = useState('')
+  const [savedConsentMessage, setSavedConsentMessage] = useState('')
+  const [savingConsent, setSavingConsent] = useState(false)
   const [versions, setVersions] = useState([])
   const [hasChangesA, setHasChangesA] = useState(false)
   const [hasChangesB, setHasChangesB] = useState(false)
@@ -64,8 +67,10 @@ function ProjectEdit() {
   // dell'ultima versione pubblicata.
   const draftDiffersFromPublished = !publishedVersion ||
     (project?.prompt_a || '') !== (publishedVersion?.prompt_a || '') ||
-    (project?.prompt_b || '') !== (publishedVersion?.prompt_b || '')
-  const hasUnsavedEdits = hasChangesA || hasChangesB
+    (project?.prompt_b || '') !== (publishedVersion?.prompt_b || '') ||
+    (project?.consent_message || '') !== (publishedVersion?.consent_message || '')
+  const hasChangesConsent = consentMessage !== savedConsentMessage
+  const hasUnsavedEdits = hasChangesA || hasChangesB || hasChangesConsent
 
   const loadProject = async () => {
     setLoading(true)
@@ -76,6 +81,8 @@ function ProjectEdit() {
       setPromptB(data.prompt_b || '')
       setSavedPromptA(data.prompt_a || '')
       setSavedPromptB(data.prompt_b || '')
+      setConsentMessage(data.consent_message || '')
+      setSavedConsentMessage(data.consent_message || '')
 
       try {
         const versionsList = await agentVersionsApi.listAgentVersions(id)
@@ -127,6 +134,20 @@ function ProjectEdit() {
       message.error(error.response?.data?.detail || 'Errore salvataggio')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const saveConsentMessage = async () => {
+    setSavingConsent(true)
+    try {
+      await projectsApi.updateProject(id, { consent_message: consentMessage })
+      message.success('Frase di apertura salvata - pubblica per renderla attiva nelle chiamate')
+      setSavedConsentMessage(consentMessage)
+      setProject((prev) => ({ ...prev, consent_message: consentMessage }))
+    } catch (error) {
+      message.error(error.response?.data?.detail || 'Errore salvataggio')
+    } finally {
+      setSavingConsent(false)
     }
   }
 
@@ -320,6 +341,42 @@ function ProjectEdit() {
         </Col>
 
         <Col span={24}>
+          <Card
+            title={
+              <Space>
+                <span>Frase di apertura</span>
+                {hasChangesConsent && <Tag color="orange">Non salvato</Tag>}
+              </Space>
+            }
+          >
+            <Alert
+              message="Cosa sente chi chiama per primo"
+              description="La prima frase pronunciata dall'agente all'inizio della chiamata, prima che chi chiama dica qualsiasi cosa. Fa parte della stessa bozza/pubblicazione dei prompt qui sotto."
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+            />
+            <TextArea
+              value={consentMessage}
+              onChange={(e) => setConsentMessage(e.target.value)}
+              rows={2}
+              placeholder="Es. Salve, come posso aiutarla?"
+            />
+            <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
+              <Button
+                type="primary"
+                icon={<SaveOutlined />}
+                onClick={saveConsentMessage}
+                loading={savingConsent}
+                disabled={!hasChangesConsent}
+              >
+                Salva bozza
+              </Button>
+            </div>
+          </Card>
+        </Col>
+
+        <Col span={24}>
           <Card title="Editor Prompt">
             <Tabs items={promptItems} />
           </Card>
@@ -411,13 +468,14 @@ function ProjectEdit() {
         onClose={() => setSimulateOpen(false)}
         projectId={id}
         promptA={promptA}
-        openingMessage={project?.consent_message}
+        openingMessage={consentMessage}
       />
       <SimulateVoiceCall
         open={simulateVoiceOpen}
         onClose={() => setSimulateVoiceOpen(false)}
         projectId={id}
         promptA={promptA}
+        consentMessage={consentMessage}
       />
     </div>
   )

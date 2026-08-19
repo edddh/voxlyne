@@ -55,7 +55,7 @@ function int16FromBase64(base64) {
  * l'API realtime a WebSocket, quindi qui si parla davvero con quella,
  * non con un sostituto.
  */
-function SimulateVoiceCall({ open, onClose, projectId, promptA }) {
+function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage }) {
   const [status, setStatus] = useState('idle') // idle | connecting | live | error | ended
   const [error, setError] = useState(null)
   const [transcript, setTranscript] = useState([])
@@ -136,7 +136,7 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA }) {
       wsRef.current = ws
 
       ws.onopen = () => {
-        ws.send(JSON.stringify({ type: 'start', instructions: promptA }))
+        ws.send(JSON.stringify({ type: 'start', instructions: promptA, consent_message: consentMessage }))
       }
 
       ws.onmessage = (event) => {
@@ -202,7 +202,7 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA }) {
       setStatus('error')
       cleanup()
     }
-  }, [projectId, promptA, playChunk, cleanup, status, appendTranscript])
+  }, [projectId, promptA, consentMessage, playChunk, cleanup, status, appendTranscript])
 
   const stop = useCallback(() => {
     cleanup()
@@ -265,12 +265,17 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA }) {
                     {t.result?.results?.length ? ` (${t.result.results.length} risultati)` : ''}
                   </Text>
                 ) : (
-                  <>
-                    <Text type="secondary" strong style={{ marginRight: 6 }}>
+                  // List.Item e' un flex container: senza un wrapper i due
+                  // <Text> diventano flex item indipendenti e, se stretti,
+                  // l'etichetta si comprime lettera per lettera invece di
+                  // restare su una riga (maintainer, "agente è scritto tutto
+                  // spezzato" + "i label a sinistra non hanno spazio").
+                  <div style={{ display: 'flex', gap: 6, width: '100%' }}>
+                    <Text type="secondary" strong style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
                       {t.role === 'user' ? 'Tu:' : 'Agente:'}
                     </Text>
-                    <Text>{t.content}</Text>
-                  </>
+                    <Text style={{ minWidth: 0 }}>{t.content}</Text>
+                  </div>
                 )}
               </List.Item>
             )}

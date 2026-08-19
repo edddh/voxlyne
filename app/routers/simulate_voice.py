@@ -178,7 +178,11 @@ async def simulate_voice(websocket: WebSocket, project_id: UUID, token: str = Qu
     xai_ws_url = f"{XAI_REALTIME_URL}?{query}"
     headers = {"Authorization": f"Bearer {api_key}"}
 
-    consent_message = project["consent_message"] or "Salve, come posso aiutarla?"
+    # La frase di apertura arriva dal browser (bozza corrente nell'editor,
+    # non ancora salvata) - stesso trattamento di `instructions` sopra.
+    # Fallback sul valore salvato solo se il browser non ne manda uno
+    # (retrocompatibilita').
+    consent_message = first.get("consent_message") or project["consent_message"] or "Salve, come posso aiutarla?"
 
     try:
         async with websockets.connect(xai_ws_url, additional_headers=headers) as xai_ws:
