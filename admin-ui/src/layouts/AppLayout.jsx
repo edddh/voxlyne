@@ -12,6 +12,7 @@ import {
   ApiOutlined,
   CalendarOutlined,
   ProfileOutlined,
+  RiseOutlined,
 } from '@ant-design/icons'
 import { useAuth } from '../hooks/useAuth'
 import { BRAND } from '../main'
@@ -74,6 +75,13 @@ function AppLayout() {
       key: '/calls',
       icon: <PhoneOutlined />,
       label: 'Chiamate',
+    },
+    // Stessi ruoli richiesti dal backend (app/routers/analytics.py) -
+    // niente da guadagnare a mostrare la voce a chi poi riceve solo 403.
+    ['admin', 'super_admin', 'power_user'].includes(user?.role) && {
+      key: '/analytics',
+      icon: <RiseOutlined />,
+      label: 'Analytics',
     },
     {
       key: '/projects',

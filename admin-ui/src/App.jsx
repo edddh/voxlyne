@@ -3,6 +3,7 @@ import { useAuth } from './hooks/useAuth'
 import AppLayout from './layouts/AppLayout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import Analytics from './pages/Analytics'
 import Users from './pages/Users'
 import Tenants from './pages/Tenants'
 import Templates from './pages/Templates'
@@ -79,6 +80,14 @@ function App() {
         <Route path="projects/:id/history" element={<PromptHistory />} />
         <Route path="calls" element={<Calls />} />
         <Route path="calls/:id" element={<CallDetail />} />
+        <Route
+          path="analytics"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'super_admin', 'power_user']}>
+              <Analytics />
+            </ProtectedRoute>
+          }
+        />
         <Route path="integrations/crm" element={<CRMIntegration />} />
         <Route path="integrations/calendar" element={<CalendarIntegration />} />
       </Route>

@@ -334,6 +334,14 @@ class AnalyticsService:
             "processing": 0,
             "processed": 0,
             "declined": 0,
+            # Aggiunto 20/08 insieme al nuovo CallStatus.ESCALATED (vedi
+            # db_migrations/versions/a3905808ab22_*) - questo dict era
+            # rimasto quello di prima, quindi una chiamata "escalated"
+            # sarebbe comunque comparsa (l'assegnazione sotto crea la
+            # chiave se manca) ma senza uno zero esplicito quando non ce
+            # ne sono, trovato verificando dal vivo la nuova pagina
+            # Analytics.
+            "escalated": 0,
             "cancelled": 0,
         }
 
