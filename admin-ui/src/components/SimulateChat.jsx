@@ -18,7 +18,7 @@ const { Text } = Typography
  * Non ha accesso alla knowledge base ne' agli altri strumenti (Cal.com,
  * ecc.) - solo il ragionamento del prompt puro.
  */
-function SimulateChat({ open, onClose, projectId, promptA }) {
+function SimulateChat({ open, onClose, projectId, promptA, openingMessage }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -27,11 +27,17 @@ function SimulateChat({ open, onClose, projectId, promptA }) {
 
   useEffect(() => {
     if (open) {
-      setMessages([])
+      // La frase di apertura e' la prima cosa che chi chiama sente
+      // davvero (consent_message del progetto) - mancava del tutto
+      // (maintainer, 19/08: "non dice la frase in apertura"). Mostrata
+      // subito e inclusa nella storia inviata al modello, cosi' le
+      // risposte successive la tengono in considerazione come farebbe in
+      // una chiamata vera.
+      setMessages(openingMessage ? [{ role: 'assistant', content: openingMessage }] : [])
       setError(null)
       setInput('')
     }
-  }, [open])
+  }, [open, openingMessage])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })

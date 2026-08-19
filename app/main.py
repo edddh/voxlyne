@@ -21,7 +21,7 @@ from app.database.db import (
     run_migrations,
 )
 from app.models.schemas import ErrorResponse, HealthResponse
-from app.routers import agent_versions, analytics, api, auth, calendar, calls, credentials, crm, health, knowledge_base, outbound, project_config, prompt_blocks, prompts, simulation, telephony_provisioning, templates, tenants, users, webhook, webhook_vapi, webhook_xai
+from app.routers import agent_versions, analytics, api, auth, calendar, calls, credentials, crm, health, knowledge_base, outbound, project_config, prompt_blocks, prompts, simulate_voice, simulation, telephony_provisioning, templates, tenants, users, webhook, webhook_vapi, webhook_xai
 from app.services.rag.scheduler import RagRecrawlScheduler
 from app.services.session_cleanup import SessionCleanup
 
@@ -236,6 +236,10 @@ app.include_router(knowledge_base.router, prefix="/api", tags=["Knowledge Base"]
 
 # Prompt simulation router (test-chat prima di pubblicare, 19/08)
 app.include_router(simulation.router, prefix="/api", tags=["Simulation"])
+
+# Live voice simulation (WebSocket relay a xAI realtime, 19/08 - vera
+# chiamata voce col modello reale, non un sostituto testuale)
+app.include_router(simulate_voice.router, tags=["Simulate Voice"])
 
 
 # ===========================================

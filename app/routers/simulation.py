@@ -12,8 +12,10 @@ without the complexity of a full audio round-trip.
 """
 
 import logging
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -28,10 +30,12 @@ router = APIRouter()
 # Text models used for simulation only - NOT the realtime voice models
 # actually used in a live call (grok-voice-fast-1.0, gpt-4o-realtime-*),
 # those are WebSocket APIs unusable from a simple request/response chat.
-# Chosen from each provider's current general-purpose text model, verified
-# live against the real xAI API before wiring this in (18/08).
+# xai: "grok-4.6" (reasoning) took ~10s per reply in testing - switched to
+# the non-reasoning variant after maintainer reported the simulation "ci
+# mette tanto a rispondere" (19/08) - verified live: 0.65s vs 10.6s for
+# the same prompt, same quality of answer for this kind of short reply.
 SIMULATION_MODELS = {
-    "xai": "grok-4.6",
+    "xai": "grok-4.20-0309-non-reasoning",
     "openai": "gpt-4o",
 }
 
@@ -87,7 +91,26 @@ async def simulate_conversation(
 
     client = AsyncOpenAI(api_key=api_key, base_url="https://api.x.ai/v1" if provider == "xai" else None)
 
-    chat_messages: List[Dict[str, Any]] = [{"role": "system", "content": body.prompt_a}]
+    # Molti prompt (es. il template Comune/URP) istruiscono l'agente a
+    # usare il tool "current_datetime" come unica fonte di verita' per
+    # data/ora - questa simulazione non ha alcun tool collegato (vedi
+    # docstring del modulo), quindi senza questo il modello a volte scrive
+    # letteralmente il nome del tool invece di rispondere (maintainer, 19/08:
+    # "mi ha risposto con **current_datetime**"). Inietta il fatto
+    # direttamente cosi' il modello ha gia' l'informazione e non ha
+    # bisogno di "chiamare" nulla.
+    now_rome = datetime.now(ZoneInfo("Europe/Rome"))
+    datetime_fact = (
+        f"[Informazione di sistema per questa simulazione: la data e ora corrente "
+        f"a Europe/Rome sono {now_rome.strftime('%A %d %B %Y, %H:%M')}. Usala direttamente "
+        f"se ti serve rispondere a domande su data/ora/giorno della settimana - non hai "
+        f"nessuno strumento da chiamare in questa conversazione di prova, tutte le "
+        f"informazioni che ti servono sono gia' qui o nelle istruzioni sopra.]"
+    )
+    chat_messages: List[Dict[str, Any]] = [
+        {"role": "system", "content": body.prompt_a},
+        {"role": "system", "content": datetime_fact},
+    ]
     chat_messages += [{"role": m.role, "content": m.content} for m in body.messages]
 
     try:

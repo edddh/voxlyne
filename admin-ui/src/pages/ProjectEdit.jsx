@@ -3,11 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   Card, Button, Space, Input, message, Typography, Tabs, Row, Col, Spin, Alert, Tag, Divider, Switch, List,
 } from 'antd'
-import { SaveOutlined, ArrowLeftOutlined, RocketOutlined, MessageOutlined } from '@ant-design/icons'
+import { SaveOutlined, ArrowLeftOutlined, RocketOutlined, MessageOutlined, PhoneOutlined } from '@ant-design/icons'
 import * as projectsApi from '../api/projects'
 import * as agentVersionsApi from '../api/agentVersions'
 import PromptDiff, { normalizeNewlines } from '../components/PromptDiff'
 import SimulateChat from '../components/SimulateChat'
+import SimulateVoiceCall from '../components/SimulateVoiceCall'
 
 const { Title, Text, Paragraph } = Typography
 const { TextArea } = Input
@@ -46,6 +47,7 @@ function ProjectEdit() {
   const [hasChangesA, setHasChangesA] = useState(false)
   const [hasChangesB, setHasChangesB] = useState(false)
   const [simulateOpen, setSimulateOpen] = useState(false)
+  const [simulateVoiceOpen, setSimulateVoiceOpen] = useState(false)
 
   useEffect(() => {
     loadProject()
@@ -187,9 +189,12 @@ function ProjectEdit() {
             <Text type="secondary">
               {promptA.length} caratteri • ~{Math.ceil(promptA.length / 4)} token
             </Text>
-            <Space>
+            <Space wrap>
+              <Button icon={<PhoneOutlined />} onClick={() => setSimulateVoiceOpen(true)}>
+                Prova chiamata vocale
+              </Button>
               <Button icon={<MessageOutlined />} onClick={() => setSimulateOpen(true)}>
-                Prova conversazione
+                Prova conversazione testuale
               </Button>
               <Button
                 type="primary"
@@ -404,6 +409,13 @@ function ProjectEdit() {
       <SimulateChat
         open={simulateOpen}
         onClose={() => setSimulateOpen(false)}
+        projectId={id}
+        promptA={promptA}
+        openingMessage={project?.consent_message}
+      />
+      <SimulateVoiceCall
+        open={simulateVoiceOpen}
+        onClose={() => setSimulateVoiceOpen(false)}
         projectId={id}
         promptA={promptA}
       />
