@@ -580,15 +580,23 @@ function ProjectEdit() {
                 ? `Versione pubblicata: v${publishedVersion.version_number}${publishedVersion.published_at ? ' · ' + new Date(publishedVersion.published_at).toLocaleString('it-IT') : ''}`
                 : 'Nessuna versione ancora pubblicata - questo progetto non risponde ancora a nessuna simulazione di test'
             }
+            // I bottoni erano nello slot "action" di Alert (di fianco al
+            // testo) - su schermo stretto quello spazio si comprimeva
+            // quasi a zero e il testo andava a capo lettera per lettera
+            // (maintainer: "il testo... è strettissimo... scritto tutto in
+            // verticale", stesso bug gia' visto altrove in sessione).
+            // Spostati sotto al testo, dentro "description", cosi' non
+            // competono mai per la larghezza.
             description={
-              hasUnsavedEdits
-                ? 'Passo 1 di 2: hai modifiche non ancora salvate nelle schede qui sotto. Premi "Salva bozza" nella scheda che hai modificato, poi torna qui per pubblicarle.'
-                : draftDiffersFromPublished
-                ? 'Passo 2 di 2: la bozza salvata e\' pronta ma non ancora attiva. Le chiamate reali continuano a usare la versione pubblicata sopra finche\' non premi "Pubblica".'
-                : 'La bozza corrisponde esattamente alla versione pubblicata - quello che vedi qui e\' quello che sente chi chiama, nessuna azione necessaria.'
-            }
-            action={
-              <Space>
+              <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                <Text>
+                  {hasUnsavedEdits
+                    ? 'Passo 1 di 2: hai modifiche non ancora salvate nelle schede qui sotto. Premi "Salva bozza" nella scheda che hai modificato, poi torna qui per pubblicarle.'
+                    : draftDiffersFromPublished
+                    ? 'Passo 2 di 2: la bozza salvata e\' pronta ma non ancora attiva. Le chiamate reali continuano a usare la versione pubblicata sopra finche\' non premi "Pubblica".'
+                    : 'La bozza corrisponde esattamente alla versione pubblicata - quello che vedi qui e\' quello che sente chi chiama, nessuna azione necessaria.'}
+                </Text>
+                <Space wrap>
                 <Popconfirm
                   title="Ripristinare la versione pubblicata?"
                   description="La bozza (salvata o no) torna uguale a quello che sente davvero chi chiama adesso - le modifiche fatte qui vanno perse."
@@ -614,6 +622,7 @@ function ProjectEdit() {
                 >
                   Pubblica
                 </Button>
+                </Space>
               </Space>
             }
           />
