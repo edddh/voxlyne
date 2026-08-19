@@ -631,6 +631,16 @@ class LegacyController:
             if not results:
                 return {"status": "no_results"}
             return {"status": "ok", "results": results}
+        if name == "request_human_operator":
+            # Segna solo lo stato per la finalizzazione (vedi
+            # _finalize_call_record) - non esiste un vero trasferimento
+            # SIP qui, il prompt del tool istruisce il modello a
+            # congedarsi e chiudere da solo.
+            state = self.call_context.get(call_id) if call_id else None
+            if state:
+                state.metadata["declined_reason"] = "human_requested"
+            logging.info("request_human_operator called [%s]", call_id)
+            return {"status": "acknowledged"}
         if name == "current_datetime":
             now = datetime.now(ZoneInfo("Europe/Rome"))
             return {
@@ -995,6 +1005,30 @@ class LegacyController:
         state.metadata["_finalized"] = True
 
         db = get_database()
+
+        # 20/08 (maintainer): "Rifiutata" per xai_sip_direct deve scattare
+        # solo se il chiamante riattacca senza dire nulla, o chiede
+        # esplicitamente un operatore umano - non e' piu' un mislabel del
+        # cleanup (vedi session_cleanup.py, corretto separatamente). La
+        # seconda condizione arriva dal tool request_human_operator
+        # (app/integrations/common/tools.py) che imposta questo flag
+        # quando il modello lo chiama; la prima si verifica qui: se non
+        # e' mai stato persistito un turno "user", il chiamante non ha
+        # mai parlato.
+        final_status = CallStatus.COMPLETED.value
+        if state.metadata.get("declined_reason") == "human_requested":
+            final_status = CallStatus.DECLINED.value
+        else:
+            try:
+                user_turns = await db.fetch_val(
+                    "SELECT COUNT(*) FROM transcripts WHERE call_id = :id AND role = 'user'",
+                    {"id": internal_call_id},
+                )
+                if not user_turns:
+                    final_status = CallStatus.DECLINED.value
+            except Exception:
+                logging.exception("Failed to check transcript activity for %s", internal_call_id)
+
         try:
             await db.execute(
                 """
@@ -1003,7 +1037,7 @@ class LegacyController:
                 {
                     "id": internal_call_id,
                     "ended_at": datetime.now(timezone.utc),
-                    "status": CallStatus.COMPLETED.value,
+                    "status": final_status,
                 },
             )
         except Exception:

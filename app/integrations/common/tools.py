@@ -77,6 +77,25 @@ def build_tools(scenario_config: dict | None = None) -> list[dict[str, Any]]:
             },
         },
         {
+            # 20/08 (maintainer): "Rifiutata" per il Comune deve scattare se
+            # il chiamante chiede esplicitamente un operatore umano - non
+            # gestito, non gated come gli altri sotto: sempre offerto,
+            # nessuna configurazione esterna richiesta. Il gestore
+            # (runtime_workers/realtime_service.py::call_tool) segna la
+            # chiamata per la finalizzazione (_finalize_call_record); non
+            # esiste un trasferimento SIP reale, quindi il modello deve
+            # comunque congedarsi e chiudere la chiamata dopo averlo
+            # chiamato, non restare in attesa.
+            "type": "function",
+            "name": "request_human_operator",
+            "description": "Call this the moment the caller explicitly asks to speak with a human operator/person instead of the AI assistant, or clearly states the AI cannot help them. After calling it, tell the caller a human will follow up (you cannot transfer the call live), say goodbye, and end the conversation - do not keep trying to help with the AI.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+        },
+        {
             "type": "function",
             "name": "calcom_get_availability",
             "description": "Check available booking slots from Cal.com for a time range. Use this first for standard visit availability.",
