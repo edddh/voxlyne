@@ -211,8 +211,8 @@ function Templates() {
   return (
     <div style={{ padding: 24 }}>
       <Card>
-        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Title level={2} style={{ margin: 0 }}>Templates</Title>
+        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+          <Title level={2} style={{ margin: 0, flexShrink: 0 }}>Templates</Title>
           <Button
             type="primary"
             icon={<PlusOutlined />}

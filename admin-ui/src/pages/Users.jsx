@@ -204,8 +204,8 @@ function Users() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <Title level={3} style={{ margin: 0 }}>Utenti</Title>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+        <Title level={3} style={{ margin: 0, flexShrink: 0 }}>Utenti</Title>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>
           Nuovo Utente
         </Button>

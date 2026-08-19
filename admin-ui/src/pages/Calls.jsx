@@ -292,8 +292,8 @@ function Calls() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <Title level={3} style={{ margin: 0 }}>Chiamate</Title>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 8 }}>
+        <Title level={3} style={{ margin: 0, flexShrink: 0 }}>Chiamate</Title>
         <Button
           type="primary"
           icon={<PhoneFilled />}

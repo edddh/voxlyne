@@ -173,8 +173,8 @@ function TenantCredentials() {
         </Button>
       </Space>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <Title level={3} style={{ margin: 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+        <Title level={3} style={{ margin: 0, flexShrink: 0 }}>
           Credenziali - {tenant?.name || tenantId}
         </Title>
         <Button type="primary" icon={<PlusOutlined />} onClick={openModal}>

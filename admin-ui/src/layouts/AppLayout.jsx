@@ -9,8 +9,6 @@ import {
   PhoneOutlined,
   SettingOutlined,
   LogoutOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
   ApiOutlined,
   CalendarOutlined,
   ProfileOutlined,
@@ -20,6 +18,22 @@ import { BRAND } from '../main'
 import logo from '../assets/ascolta-logo.png'
 
 const { Header, Sider, Content } = Layout
+
+// Hamburger di marca: 3 righe bianche, l'ultima arancione (accento Ascolta,
+// lo stesso usato ovunque nel resto dell'interfaccia) - al posto delle
+// icone antd generiche MenuFold/MenuUnfold. maintainer, 19/08: "il toast
+// [= il pulsante del menu] dovrebbe essere esteticamente come quella
+// del sito con linee bianche l'ultima arancione".
+function MenuToggleIcon() {
+  const barStyle = { display: 'block', width: 18, height: 2, borderRadius: 1 }
+  return (
+    <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 4, cursor: 'pointer' }}>
+      <span style={{ ...barStyle, background: BRAND.white }} />
+      <span style={{ ...barStyle, background: BRAND.white }} />
+      <span style={{ ...barStyle, background: BRAND.orange }} />
+    </span>
+  )
+}
 
 function AppLayout() {
   const screens = Grid.useBreakpoint()
@@ -219,9 +233,8 @@ function AppLayout() {
         >
           <Button
             type="text"
-            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            icon={<MenuToggleIcon />}
             onClick={() => setCollapsed(!collapsed)}
-            style={{ fontSize: 16, color: BRAND.white }}
           />
           <Space>
             <Dropdown menu={userMenu} placement="bottomRight">
