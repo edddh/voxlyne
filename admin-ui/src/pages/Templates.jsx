@@ -5,6 +5,7 @@ import {
 import { PlusOutlined, EditOutlined, DeleteOutlined, TeamOutlined, CheckOutlined } from '@ant-design/icons'
 import * as templatesApi from '../api/templates'
 import * as tenantsApi from '../api/tenants'
+import { BRAND } from '../main'
 
 const { Title, Text } = Typography
 const { TextArea } = Input
@@ -383,33 +384,42 @@ function Templates() {
                   <Card
                     key={key}
                     size="small"
-                    style={{ marginBottom: 12, background: '#fafafa' }}
+                    // Era #fafafa (chiaro) su un'app sempre in tema scuro
+                    // (main.jsx::BRAND, darkAlgorithm) - testo bianco del
+                    // tema su sfondo chiaro, illeggibile. maintainer: "togli
+                    // sfondo bianco e metti uno sfondo grigio scuro, usa
+                    // scritte bianche e arancioni" - stessi token del
+                    // resto dell'app, non un colore a caso.
+                    style={{ marginBottom: 12, background: BRAND.bgElevated, borderColor: BRAND.border }}
+                    // title = identita' (il tag {{key}}, scorribile a
+                    // colpo d'occhio riga per riga), extra = azione (solo
+                    // il cestino) - stessa convenzione gia' usata nel
+                    // resto dell'app, invece di stipare la descrizione
+                    // nell'header in competizione con l'icona.
+                    title={
+                      <Space size={4} align="center">
+                        <Text style={{ fontFamily: 'monospace', fontSize: 15, color: BRAND.orange, fontWeight: 'bold' }}>{'{{'}</Text>
+                        <Form.Item
+                          {...restField}
+                          name={[name, 'key']}
+                          rules={[
+                            { required: true, message: 'obbligatorio' },
+                            { pattern: /^[a-zA-Z0-9_-]+$/, message: 'solo lettere/numeri/_/-' },
+                          ]}
+                          style={{ marginBottom: 0 }}
+                        >
+                          <Input
+                            placeholder="comune"
+                            style={{ width: 160, fontFamily: 'monospace', color: BRAND.white }}
+                          />
+                        </Form.Item>
+                        <Text style={{ fontFamily: 'monospace', fontSize: 15, color: BRAND.orange, fontWeight: 'bold' }}>{'}}'}</Text>
+                      </Space>
+                    }
                     extra={
                       <DeleteOutlined onClick={() => remove(name)} style={{ color: '#ff4d4f' }} />
                     }
                   >
-                    <Space size={4} align="center" style={{ marginBottom: 4 }}>
-                      <Text style={{ fontFamily: 'monospace', fontSize: 15 }}>{'{{'}</Text>
-                      <Form.Item
-                        {...restField}
-                        name={[name, 'key']}
-                        rules={[
-                          { required: true, message: 'obbligatorio' },
-                          { pattern: /^[a-zA-Z0-9_-]+$/, message: 'solo lettere/numeri/_/-' },
-                        ]}
-                        style={{ marginBottom: 0 }}
-                      >
-                        <Input
-                          placeholder="comune"
-                          style={{ width: 160, fontFamily: 'monospace' }}
-                        />
-                      </Form.Item>
-                      <Text style={{ fontFamily: 'monospace', fontSize: 15 }}>{'}}'}</Text>
-                      <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
-                        cosi' com'e' scritto nel prompt sopra
-                      </Text>
-                    </Space>
-
                     <Space style={{ width: '100%', display: 'flex' }} wrap>
                       <Form.Item
                         {...restField}
