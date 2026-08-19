@@ -191,7 +191,7 @@ function Calls() {
       },
     },
     {
-      title: 'Candidato',
+      title: 'Chiamante',
       dataIndex: 'candidate_name',
       key: 'candidate',
       render: (name) => name || <Text type="secondary">-</Text>,

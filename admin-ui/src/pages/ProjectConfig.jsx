@@ -566,7 +566,7 @@ function ProjectConfig() {
           >
             <TextArea
               rows={8}
-              placeholder='{"calendar_keywords": ["appuntamento", "colloquio"], "cancel_keywords": ["cancella", "elimina"]}'
+              placeholder='{"calendar_keywords": ["appuntamento", "prenotazione"], "cancel_keywords": ["cancella", "elimina"]}'
               style={{ fontFamily: 'monospace' }}
             />
           </Form.Item>

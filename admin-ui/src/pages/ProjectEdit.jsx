@@ -178,15 +178,15 @@ function ProjectEdit() {
       key: 'A',
       label: (
         <Space>
-          <span>Prompt A (Intervista)</span>
+          <span>Prompt A (Conversazione)</span>
           {hasChangesA && <Tag color="orange">Non salvato</Tag>}
         </Space>
       ),
       children: (
         <div>
           <Alert
-            message="Prompt di Intervista"
-            description="Questo prompt guida l'AI durante il colloquio telefonico. Include istruzioni su come condurre l'intervista, le domande da porre e come gestire le risposte del candidato."
+            message="Prompt di Conversazione"
+            description="Questo prompt guida l'AI durante la chiamata telefonica. Include istruzioni su come condurre la conversazione, le domande o informazioni da fornire e come gestire le risposte di chi chiama."
             type="info"
             showIcon
             style={{ marginBottom: 16 }}
@@ -195,7 +195,7 @@ function ProjectEdit() {
             value={promptA}
             onChange={(e) => handlePromptChange('A', e.target.value)}
             rows={20}
-            placeholder="Inserisci il prompt di intervista..."
+            placeholder="Inserisci il prompt di conversazione..."
             style={{ fontFamily: 'monospace', fontSize: 13 }}
           />
           {publishedVersion && normalizeNewlines(promptA) !== normalizeNewlines(publishedVersion.prompt_a) && (
@@ -243,7 +243,7 @@ function ProjectEdit() {
         <div>
           <Alert
             message="Prompt di Estrazione"
-            description="Questo prompt viene usato per estrarre informazioni strutturate dalla trascrizione del colloquio. Definisce il formato JSON di output e i campi da estrarre."
+            description="Questo prompt viene usato per estrarre informazioni strutturate dalla trascrizione della chiamata. Definisce il formato JSON di output e i campi da estrarre."
             type="info"
             showIcon
             style={{ marginBottom: 16 }}

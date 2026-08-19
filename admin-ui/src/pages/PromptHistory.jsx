@@ -81,7 +81,7 @@ function PromptHistory() {
       ),
     },
     {
-      title: 'Anteprima prompt (intervista)',
+      title: 'Anteprima prompt (conversazione)',
       dataIndex: 'prompt_a',
       key: 'prompt_a',
       ellipsis: true,
@@ -187,7 +187,7 @@ function PromptHistory() {
           items={[
             {
               key: 'A',
-              label: 'Prompt A (Intervista)',
+              label: 'Prompt A (Conversazione)',
               children: (
                 <pre style={{
                   fontFamily: 'monospace', fontSize: 12, backgroundColor: '#f5f5f5',

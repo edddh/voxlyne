@@ -114,7 +114,7 @@ function CalendarIntegration() {
     <Card loading={loading}>
       <Alert
         message="Integrazione Google Calendar"
-        description="Crea automaticamente eventi nel calendario Google per ogni intervista. Richiede un progetto Google Cloud con Google Calendar API abilitata."
+        description="Crea automaticamente eventi nel calendario Google per ogni chiamata. Richiede un progetto Google Cloud con Google Calendar API abilitata."
         type="info"
         showIcon
         style={{ marginBottom: 16 }}
@@ -235,7 +235,7 @@ function CalendarIntegration() {
     <Card loading={loading}>
       <Alert
         message="Integrazione Microsoft Outlook"
-        description="Crea automaticamente eventi nel calendario Microsoft Outlook/365 per ogni intervista. Richiede un'app registrata in Azure AD."
+        description="Crea automaticamente eventi nel calendario Microsoft Outlook/365 per ogni chiamata. Richiede un'app registrata in Azure AD."
         type="info"
         showIcon
         style={{ marginBottom: 16 }}

@@ -253,7 +253,7 @@ function Templates() {
             label="Template Name"
             rules={[{ required: true, message: 'Please enter template name' }]}
           >
-            <Input placeholder="e.g., Demo Organization Recruiting Template" />
+            <Input placeholder="e.g., Customer Support Template" />
           </Form.Item>
 
           <Form.Item
@@ -262,7 +262,7 @@ function Templates() {
             rules={[{ required: true, message: 'Please enter slug' }]}
             tooltip="URL-friendly identifier (lowercase, no spaces)"
           >
-            <Input placeholder="e.g., demo-organization-recruiting" />
+            <Input placeholder="e.g., customer-support" />
           </Form.Item>
 
           <Space style={{ width: '100%' }} size="large">
@@ -272,9 +272,17 @@ function Templates() {
               rules={[{ required: true }]}
               style={{ width: 200 }}
             >
+              {/* Deve rispecchiare esattamente ProjectType (app/models/
+                  schemas.py) - il backend valida "type" contro
+                  quell'enum. "interview" non ne fa parte: prima di
+                  questa correzione, creare un template con questo valore
+                  avrebbe fallito con un 422 alla submit. */}
               <Select>
-                <Select.Option value="interview">Interview</Select.Option>
+                <Select.Option value="recruiting">Recruiting</Select.Option>
+                <Select.Option value="lead_gen">Lead Gen</Select.Option>
+                <Select.Option value="support">Support</Select.Option>
                 <Select.Option value="survey">Survey</Select.Option>
+                <Select.Option value="other">Other</Select.Option>
               </Select>
             </Form.Item>
 

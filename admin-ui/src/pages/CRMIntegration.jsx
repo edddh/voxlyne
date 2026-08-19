@@ -183,7 +183,7 @@ function CRMIntegration() {
                 name="sync_contacts"
                 label="Sincronizza Contatti"
                 valuePropName="checked"
-                extra="Crea o aggiorna contatti HubSpot da candidati"
+                extra="Crea o aggiorna contatti HubSpot da chi chiama"
               >
                 <Switch />
               </Form.Item>
@@ -192,7 +192,7 @@ function CRMIntegration() {
                 name="sync_deals"
                 label="Sincronizza Deal"
                 valuePropName="checked"
-                extra="Crea deal per ogni intervista completata"
+                extra="Crea deal per ogni chiamata completata"
               >
                 <Switch />
               </Form.Item>
@@ -201,7 +201,7 @@ function CRMIntegration() {
                 name="create_tasks"
                 label="Crea Task di Follow-up"
                 valuePropName="checked"
-                extra="Crea automaticamente task per follow-up post-intervista"
+                extra="Crea automaticamente task per follow-up post-chiamata"
               >
                 <Switch />
               </Form.Item>

@@ -94,7 +94,7 @@ function CallDetail() {
               }}>
                 <Space direction="vertical" size={0} style={{ width: '100%' }}>
                   <Text strong style={{ color: isAssistant ? '#1890ff' : '#52c41a' }}>
-                    {isAssistant ? '🤖 AI Assistant' : '👤 Candidato'}
+                    {isAssistant ? '🤖 AI Assistant' : '👤 Chiamante'}
                   </Text>
                   <Paragraph style={{ marginTop: 8, marginBottom: 0 }}>
                     {msg.content}
@@ -200,7 +200,7 @@ function CallDetail() {
                   {statusConfig.label}
                 </Tag>
               </Descriptions.Item>
-              <Descriptions.Item label="Candidato">
+              <Descriptions.Item label="Chiamante">
                 {call.candidate_name || <Text type="secondary">-</Text>}
               </Descriptions.Item>
               <Descriptions.Item label="Email">
