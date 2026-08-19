@@ -663,7 +663,7 @@ function Projects() {
             <TextArea rows={3} placeholder="Descrizione del progetto..." />
           </Form.Item>
           <Row gutter={16}>
-            <Col span={12}>
+            <Col xs={24} sm={12}>
               <Form.Item name="language" label="Lingua chiamata">
                 <Select
                   options={[
@@ -677,7 +677,7 @@ function Projects() {
               </Form.Item>
             </Col>
             {editingProject && (
-              <Col span={12}>
+              <Col xs={24} sm={12}>
                 <Form.Item name="is_active" label="Stato" valuePropName="checked">
                   <Switch checkedChildren="Attivo" unCheckedChildren="Inattivo" />
                 </Form.Item>
@@ -686,7 +686,7 @@ function Projects() {
           </Row>
           <Divider orientation="left" style={{ fontSize: 13 }}>Voice Engine (M5)</Divider>
           <Row gutter={16}>
-            <Col span={12}>
+            <Col xs={24} sm={12}>
               <Form.Item name="voice_engine" label="Voice Engine">
                 <Select
                   options={[
@@ -701,7 +701,7 @@ function Projects() {
                 />
               </Form.Item>
             </Col>
-            <Col span={12}>
+            <Col xs={24} sm={12}>
               <Form.Item noStyle shouldUpdate={(prev, curr) => prev.voice_engine !== curr.voice_engine}>
                 {({ getFieldValue }) => {
                   const isNewProvider = NEW_VOICE_ENGINES.includes(getFieldValue('voice_engine'))
@@ -745,12 +745,12 @@ function Projects() {
                     <Input placeholder="ID assistente Vapi (dalla dashboard Vapi)" />
                   </Form.Item>
                   <Row gutter={16}>
-                    <Col span={12}>
+                    <Col xs={24} sm={12}>
                       <Form.Item name="twilio_phone_number" label="Numero Twilio (da)">
                         <Input placeholder="+4915123456789" />
                       </Form.Item>
                     </Col>
-                    <Col span={12}>
+                    <Col xs={24} sm={12}>
                       <Form.Item name="vapi_phone_number_id" label="Vapi Phone Number ID">
                         <Input placeholder="ID numero in Vapi" />
                       </Form.Item>

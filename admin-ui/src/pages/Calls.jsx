@@ -306,7 +306,7 @@ function Calls() {
       </div>
 
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col span={8}>
+        <Col xs={24} sm={8}>
           <Card>
             <Statistic
               title="Chiamate Oggi"
@@ -315,7 +315,7 @@ function Calls() {
             />
           </Card>
         </Col>
-        <Col span={8}>
+        <Col xs={24} sm={8}>
           <Card>
             <Statistic
               title="Completate (in lista)"
@@ -325,7 +325,7 @@ function Calls() {
             />
           </Card>
         </Col>
-        <Col span={8}>
+        <Col xs={24} sm={8}>
           <Card>
             <Statistic
               title="In Elaborazione"
@@ -339,7 +339,7 @@ function Calls() {
 
       <Card style={{ marginBottom: 16 }}>
         <Row gutter={[16, 16]}>
-          <Col span={6}>
+          <Col xs={24} sm={12} md={6}>
             <Input
               placeholder="Cerca telefono..."
               prefix={<SearchOutlined />}
@@ -348,7 +348,7 @@ function Calls() {
               allowClear
             />
           </Col>
-          <Col span={5}>
+          <Col xs={12} sm={12} md={5}>
             <Select
               placeholder="Stato"
               style={{ width: '100%' }}
@@ -367,7 +367,7 @@ function Calls() {
               ]}
             />
           </Col>
-          <Col span={5}>
+          <Col xs={12} sm={12} md={5}>
             <Select
               placeholder="Progetto"
               style={{ width: '100%' }}
@@ -377,7 +377,7 @@ function Calls() {
               options={projects.map(p => ({ value: p.id, label: p.name }))}
             />
           </Col>
-          <Col span={8}>
+          <Col xs={24} sm={24} md={8}>
             <RangePicker
               style={{ width: '100%' }}
               value={dateRange}

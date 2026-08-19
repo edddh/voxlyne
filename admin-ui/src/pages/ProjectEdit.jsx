@@ -321,7 +321,7 @@ function ProjectEdit() {
         <Col span={24}>
           <Card title="Configurazione Output">
             <Row gutter={[16, 16]}>
-              <Col span={6}>
+              <Col xs={12} sm={6}>
                 <Card size="small" title="Email PDF">
                   <Switch
                     checked={project?.config?.send_email || false}
@@ -332,7 +332,7 @@ function ProjectEdit() {
                   </Text>
                 </Card>
               </Col>
-              <Col span={6}>
+              <Col xs={12} sm={6}>
                 <Card size="small" title="Sync CRM">
                   <Switch
                     checked={project?.config?.sync_crm || false}
@@ -343,7 +343,7 @@ function ProjectEdit() {
                   </Text>
                 </Card>
               </Col>
-              <Col span={6}>
+              <Col xs={12} sm={6}>
                 <Card size="small" title="Calendario">
                   <Switch
                     checked={project?.config?.create_event || false}
@@ -354,7 +354,7 @@ function ProjectEdit() {
                   </Text>
                 </Card>
               </Col>
-              <Col span={6}>
+              <Col xs={12} sm={6}>
                 <Card size="small" title="Webhook">
                   <Switch
                     checked={project?.config?.webhook_enabled || false}
