@@ -6,6 +6,7 @@ import {
 import { SaveOutlined, ArrowLeftOutlined, RocketOutlined } from '@ant-design/icons'
 import * as projectsApi from '../api/projects'
 import * as agentVersionsApi from '../api/agentVersions'
+import PromptDiff from '../components/PromptDiff'
 
 const { Title, Text, Paragraph } = Typography
 const { TextArea } = Input
@@ -172,6 +173,14 @@ function ProjectEdit() {
             placeholder="Inserisci il prompt di intervista..."
             style={{ fontFamily: 'monospace', fontSize: 13 }}
           />
+          {publishedVersion && promptA !== (publishedVersion.prompt_a || '') && (
+            <div style={{ marginTop: 16 }}>
+              <Text type="secondary" style={{ display: 'block', marginBottom: 6 }}>
+                Differenze rispetto alla versione pubblicata (v{publishedVersion.version_number}):
+              </Text>
+              <PromptDiff published={publishedVersion.prompt_a || ''} draft={promptA} />
+            </div>
+          )}
           <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
             <Text type="secondary">
               {promptA.length} caratteri • ~{Math.ceil(promptA.length / 4)} token
@@ -213,6 +222,14 @@ function ProjectEdit() {
             placeholder="Inserisci il prompt di estrazione..."
             style={{ fontFamily: 'monospace', fontSize: 13 }}
           />
+          {publishedVersion && promptB !== (publishedVersion.prompt_b || '') && (
+            <div style={{ marginTop: 16 }}>
+              <Text type="secondary" style={{ display: 'block', marginBottom: 6 }}>
+                Differenze rispetto alla versione pubblicata (v{publishedVersion.version_number}):
+              </Text>
+              <PromptDiff published={publishedVersion.prompt_b || ''} draft={promptB} />
+            </div>
+          )}
           <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
             <Text type="secondary">
               {promptB.length} caratteri • ~{Math.ceil(promptB.length / 4)} token
