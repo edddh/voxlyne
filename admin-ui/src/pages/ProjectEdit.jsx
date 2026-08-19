@@ -49,12 +49,18 @@ function ProjectEdit() {
   }, [id])
 
   const publishedVersion = versions.find((v) => v.status === 'published')
-  // La bozza (projects.prompt_a/b) e' diversa da quello che una
-  // chiamata in corso sente davvero finche' non viene pubblicata di
-  // nuovo - vale sia per modifiche non salvate sia per modifiche
-  // salvate ma non ancora pubblicate.
-  const draftAheadOfPublished = !publishedVersion || hasChangesA || hasChangesB ||
-    savedPromptA !== (project?.prompt_a || '') || savedPromptB !== (project?.prompt_b || '')
+  // Bug corretto 19/08 (maintainer: "non capisco cosa devo fare per
+  // pubblicare"): confrontava la bozza salvata con se stessa
+  // (project.prompt_a, aggiornato subito dopo ogni salvataggio) invece
+  // che con la versione davvero pubblicata - dopo "Salva bozza" il
+  // banner poteva sembrare gia' a posto anche quando non lo era, e il
+  // pulsante Pubblica restava disabilitato senza una spiegazione chiara
+  // del perche'. Il confronto giusto e' bozza salvata vs. contenuto
+  // dell'ultima versione pubblicata.
+  const draftDiffersFromPublished = !publishedVersion ||
+    (project?.prompt_a || '') !== (publishedVersion?.prompt_a || '') ||
+    (project?.prompt_b || '') !== (publishedVersion?.prompt_b || '')
+  const hasUnsavedEdits = hasChangesA || hasChangesB
 
   const loadProject = async () => {
     setLoading(true)
@@ -243,7 +249,7 @@ function ProjectEdit() {
       <Row gutter={[24, 24]}>
         <Col span={24}>
           <Alert
-            type={draftAheadOfPublished ? 'warning' : 'success'}
+            type={hasUnsavedEdits ? 'info' : draftDiffersFromPublished ? 'warning' : 'success'}
             showIcon
             message={
               publishedVersion
@@ -251,9 +257,11 @@ function ProjectEdit() {
                 : 'Nessuna versione ancora pubblicata - questo progetto non risponde ancora a nessuna simulazione di test'
             }
             description={
-              draftAheadOfPublished
-                ? 'La bozza qui sotto contiene modifiche non ancora pubblicate: le chiamate reali continuano a usare la versione pubblicata sopra, non quello che vedi in questa pagina.'
-                : 'La bozza corrisponde esattamente alla versione pubblicata - quello che vedi qui e\' quello che sente chi chiama.'
+              hasUnsavedEdits
+                ? 'Passo 1 di 2: hai modifiche non ancora salvate nelle schede qui sotto. Premi "Salva bozza" nella scheda che hai modificato, poi torna qui per pubblicarle.'
+                : draftDiffersFromPublished
+                ? 'Passo 2 di 2: la bozza salvata e\' pronta ma non ancora attiva. Le chiamate reali continuano a usare la versione pubblicata sopra finche\' non premi "Pubblica".'
+                : 'La bozza corrisponde esattamente alla versione pubblicata - quello che vedi qui e\' quello che sente chi chiama, nessuna azione necessaria.'
             }
             action={
               <Button
@@ -261,17 +269,12 @@ function ProjectEdit() {
                 icon={<RocketOutlined />}
                 onClick={handlePublish}
                 loading={publishing}
-                disabled={!draftAheadOfPublished || hasChangesA || hasChangesB}
+                disabled={!draftDiffersFromPublished || hasUnsavedEdits}
               >
                 Pubblica
               </Button>
             }
           />
-          {(hasChangesA || hasChangesB) && (
-            <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
-              Salva prima le modifiche nelle schede qui sotto per poter pubblicare.
-            </Text>
-          )}
         </Col>
 
         <Col span={24}>
