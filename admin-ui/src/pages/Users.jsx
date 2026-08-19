@@ -234,6 +234,7 @@ function Users() {
       </Space>
 
       <Table
+        scroll={{ x: 'max-content' }}
         dataSource={users}
         columns={columns}
         rowKey="id"

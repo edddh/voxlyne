@@ -229,6 +229,7 @@ function Templates() {
         <Divider />
 
         <Table
+          scroll={{ x: 'max-content' }}
           columns={columns}
           dataSource={templates}
           rowKey="id"

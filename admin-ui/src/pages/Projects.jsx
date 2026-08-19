@@ -613,6 +613,7 @@ function Projects() {
       />
 
       <Table
+        scroll={{ x: 'max-content' }}
         dataSource={projects}
         columns={columns}
         rowKey="id"
@@ -793,6 +794,7 @@ function Projects() {
             ) : (
               <>
                 <Table
+                  scroll={{ x: 'max-content' }}
                   dataSource={credentials}
                   rowKey="id"
                   size="small"

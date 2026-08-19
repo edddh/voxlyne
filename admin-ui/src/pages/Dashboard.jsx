@@ -180,6 +180,7 @@ function Dashboard() {
       <Card style={{ marginTop: 24 }}>
         <Title level={4}>Statistiche per Progetto</Title>
         <Table
+          scroll={{ x: 'max-content' }}
           dataSource={projectStats}
           columns={projectColumns}
           rowKey="project_id"

@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { Layout, Menu, Dropdown, Avatar, Space, Button } from 'antd'
+import { Layout, Menu, Dropdown, Avatar, Space, Button, Grid } from 'antd'
 import {
   DashboardOutlined,
   UserOutlined,
@@ -22,10 +22,33 @@ import logo from '../assets/ascolta-logo.png'
 const { Header, Sider, Content } = Layout
 
 function AppLayout() {
+  const screens = Grid.useBreakpoint()
+  // antd riporta i breakpoint come oggetto con chiavi progressive
+  // (xs/sm/md/lg/xl/xxl); finche' non arriva la prima misurazione reale
+  // dal browser, screens.lg e' undefined - trattarlo come "non ancora
+  // so, assumo desktop" evita un lampo di sidebar aperta su schermi
+  // piccoli al primo render.
+  const isMobile = screens.lg === false
   const [collapsed, setCollapsed] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
   const { user, logout, isSuperAdmin, isAdmin } = useAuth()
+
+  // Sidebar chiusa di default su mobile (era sempre aperta, a
+  // larghezza fissa, su qualunque schermo - inutilizzabile su telefono:
+  // maintainer, 18/08, "su mobile il sito e' difficilmente usabile").
+  // Su desktop resta aperta di default come prima.
+  useEffect(() => {
+    setCollapsed(isMobile)
+  }, [isMobile])
+
+  // Richiudi automaticamente la sidebar-overlay su mobile dopo aver
+  // scelto una voce di menu - altrimenti resta aperta sopra la pagina
+  // appena caricata.
+  useEffect(() => {
+    if (isMobile) setCollapsed(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname])
 
   const menuItems = [
     {
@@ -123,12 +146,33 @@ function AppLayout() {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
+      {/* Backdrop: solo su mobile, solo a sidebar aperta - tocca fuori
+          per richiuderla, come qualunque drawer. Su desktop la sidebar
+          spinge il contenuto come prima, nessun backdrop. */}
+      {isMobile && !collapsed && (
+        <div
+          onClick={() => setCollapsed(true)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            zIndex: 999,
+          }}
+        />
+      )}
       <Sider
         trigger={null}
         collapsible
         collapsed={collapsed}
+        collapsedWidth={isMobile ? 0 : 80}
         theme="dark"
-        style={{ background: BRAND.bg, borderRight: `1px solid ${BRAND.border}` }}
+        style={{
+          background: BRAND.bg,
+          borderRight: `1px solid ${BRAND.border}`,
+          ...(isMobile
+            ? { position: 'fixed', top: 0, left: 0, height: '100vh', zIndex: 1000, overflow: 'auto' }
+            : {}),
+        }}
       >
         <div
           style={{
@@ -159,15 +203,18 @@ function AppLayout() {
           }}
         />
       </Sider>
-      <Layout>
+      <Layout style={isMobile ? { marginLeft: 0 } : undefined}>
         <Header
           style={{
-            padding: '0 24px',
+            padding: '0 12px',
             background: BRAND.bgElevated,
             borderBottom: `1px solid ${BRAND.border}`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
+            position: 'sticky',
+            top: 0,
+            zIndex: 998,
           }}
         >
           <Button
@@ -182,22 +229,31 @@ function AppLayout() {
                 <Avatar style={{ backgroundColor: BRAND.orange, color: BRAND.bg, fontWeight: 700 }}>
                   {user?.full_name?.charAt(0) || user?.email?.charAt(0)?.toUpperCase()}
                 </Avatar>
-                <div style={{ lineHeight: 1.2 }}>
-                  <div style={{ fontWeight: 500, color: BRAND.white }}>{user?.full_name || user?.email}</div>
-                  <div style={{ fontSize: 12, color: BRAND.textDim }}>{roleLabels[user?.role]}</div>
-                </div>
+                {/* Nome/ruolo per esteso solo dove c'e' spazio - su
+                    schermi stretti restano solo l'avatar e il menu a
+                    tendina, gia' sufficienti per accedere a profilo/logout. */}
+                {screens.sm && (
+                  <div style={{ lineHeight: 1.2 }}>
+                    <div style={{ fontWeight: 500, color: BRAND.white }}>{user?.full_name || user?.email}</div>
+                    <div style={{ fontSize: 12, color: BRAND.textDim }}>{roleLabels[user?.role]}</div>
+                  </div>
+                )}
               </Space>
             </Dropdown>
           </Space>
         </Header>
         <Content
           style={{
-            margin: 24,
-            padding: 24,
+            margin: isMobile ? 12 : 24,
+            padding: isMobile ? 12 : 24,
             background: BRAND.bgContainer,
             border: `1px solid ${BRAND.border}`,
             borderRadius: 8,
             minHeight: 280,
+            // Se una pagina contiene qualcosa di piu' largo dello
+            // schermo (tabella, codice...) scorre qui dentro, non tutta
+            // la pagina in orizzontale.
+            overflowX: 'auto',
           }}
         >
           <Outlet />

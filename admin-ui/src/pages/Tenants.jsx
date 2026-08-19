@@ -169,6 +169,7 @@ function Tenants() {
       />
 
       <Table
+        scroll={{ x: 'max-content' }}
         dataSource={tenants}
         columns={columns}
         rowKey="id"

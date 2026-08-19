@@ -207,6 +207,7 @@ function PromptHistory() {
       label: `Prompt A (${versionsA.length} versioni)`,
       children: (
         <Table
+          scroll={{ x: 'max-content' }}
           dataSource={versionsA.sort((a, b) => b.version - a.version)}
           columns={columns.map(c => ({
             ...c,
@@ -224,6 +225,7 @@ function PromptHistory() {
       label: `Prompt B (${versionsB.length} versioni)`,
       children: (
         <Table
+          scroll={{ x: 'max-content' }}
           dataSource={versionsB.sort((a, b) => b.version - a.version)}
           columns={columns.map(c => ({
             ...c,

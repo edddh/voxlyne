@@ -191,6 +191,7 @@ function TenantCredentials() {
       </Paragraph>
 
       <Table
+        scroll={{ x: 'max-content' }}
         dataSource={credentials}
         columns={columns}
         rowKey="id"

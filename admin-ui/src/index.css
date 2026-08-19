@@ -4,6 +4,15 @@
   box-sizing: border-box;
 }
 
+html, body {
+  /* Rete di sicurezza: la pagina intera non deve mai scorrere in
+     orizzontale su mobile - un elemento troppo largo che sfugge alla
+     sua sezione scorre li' dentro (vedi Content in AppLayout.jsx), non
+     sposta tutta la pagina. */
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background: #121417;

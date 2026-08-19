@@ -66,11 +66,13 @@ function Login() {
         alignItems: 'center',
         justifyContent: 'center',
         background: BRAND.bg,
+        padding: 16,
       }}
     >
       <Card
         style={{
-          width: 400,
+          width: '100%',
+          maxWidth: 400,
           background: BRAND.bgContainer,
           border: `1px solid ${BRAND.border}`,
           boxShadow: '0 12px 32px rgba(0,0,0,0.4)',

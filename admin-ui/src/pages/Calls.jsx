@@ -390,6 +390,7 @@ function Calls() {
       </Card>
 
       <Table
+        scroll={{ x: 'max-content' }}
         dataSource={calls}
         columns={columns}
         rowKey="id"
