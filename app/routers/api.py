@@ -104,7 +104,7 @@ async def list_assigned_templates(
 
 @router.get("/projects", response_model=List[Project])
 async def list_projects(
-    active_only: bool = Query(True, description="Only return active projects"),
+    active_only: Optional[bool] = Query(None, description="True=solo attivi, False=solo inattivi, null=tutti"),
     current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator", "power_user", "user"])),
 ):
     """
@@ -130,8 +130,10 @@ async def list_projects(
     conditions = ["is_template = FALSE"]
     params: dict = {}
 
-    if active_only:
+    if active_only is True:
         conditions.append("is_active = TRUE")
+    elif active_only is False:
+        conditions.append("is_active = FALSE")
 
     if not current_user.is_super_admin:
         conditions.append("tenant_id = :tenant_id")

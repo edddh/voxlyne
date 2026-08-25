@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Table, Button, Space, Input, Modal, Form, Select, message, Tag, Popconfirm, Typography, Tooltip, Switch, Card, Row, Col, Divider, Spin, Alert
 } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, HistoryOutlined, SettingOutlined, ApiOutlined, CheckOutlined, InfoCircleOutlined, ThunderboltOutlined, CopyOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, SearchOutlined, HistoryOutlined, SettingOutlined, ApiOutlined, CheckOutlined, InfoCircleOutlined, ThunderboltOutlined, CopyOutlined, PauseCircleOutlined, PlayCircleOutlined } from '@ant-design/icons'
 import * as projectsApi from '../api/projects'
 import * as credentialsApi from '../api/credentials'
 import * as templatesApi from '../api/templates'
@@ -23,6 +23,7 @@ function Projects() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('active')
   const [modalOpen, setModalOpen] = useState(false)
   const [editingProject, setEditingProject] = useState(null)
   const [form] = Form.useForm()
@@ -57,16 +58,20 @@ function Projects() {
 
   useEffect(() => {
     loadProjects()
-  }, [page, pageSize, search])
+  }, [page, pageSize, search, statusFilter])
 
   const loadProjects = async () => {
     setLoading(true)
     try {
       const params = { page, page_size: pageSize }
       if (search) params.search = search
+      if (statusFilter === 'active') params.active_only = true
+      if (statusFilter === 'inactive') params.active_only = false
+      if (statusFilter === 'all') params.active_only = null
       const data = await projectsApi.getProjects(params)
-      setProjects(data.projects || data)
-      setTotal(data.total || data.length)
+      const rawProjects = data.projects || data
+      setProjects(rawProjects)
+      setTotal(data.total || rawProjects.length)
     } catch (error) {
       message.error('Errore caricamento progetti')
     } finally {
@@ -421,6 +426,16 @@ function Projects() {
     }
   }
 
+  const handleReactivate = async (project) => {
+    try {
+      await projectsApi.updateProject(project.id, { is_active: true })
+      message.success('Progetto riattivato')
+      loadProjects()
+    } catch (error) {
+      message.error(error.response?.data?.detail || 'Errore')
+    }
+  }
+
   const handleProvisionRuntime = async (project) => {
     setProvisioningId(project.id)
     try {
@@ -493,9 +508,15 @@ function Projects() {
       dataIndex: 'name',
       key: 'name',
       render: (name, record) => (
-        <Space direction="vertical" size={0}>
+        <Space direction="vertical" size={0} style={{ maxWidth: 320 }}>
           <Text strong>{name}</Text>
-          <Text type="secondary" style={{ fontSize: 12 }}>{record.description}</Text>
+          <Paragraph
+            type="secondary"
+            style={{ fontSize: 12, marginBottom: 0 }}
+            ellipsis={{ rows: 2, tooltip: record.description }}
+          >
+            {record.description}
+          </Paragraph>
         </Space>
       ),
     },
@@ -598,14 +619,16 @@ function Projects() {
       key: 'actions',
       render: (_, record) => (
         <Space>
-          <Tooltip title="Modifica Prompt">
-            <Button
-              icon={<EditOutlined />}
-              size="small"
-              type="primary"
-              onClick={() => navigate(`/projects/${record.id}/edit`)}
-            />
-          </Tooltip>
+          {record.is_active && (
+            <Tooltip title="Modifica Prompt">
+              <Button
+                icon={<EditOutlined />}
+                size="small"
+                type="primary"
+                onClick={() => navigate(`/projects/${record.id}/edit`)}
+              />
+            </Tooltip>
+          )}
           <Tooltip title="Storico Prompt">
             <Button
               icon={<HistoryOutlined />}
@@ -613,20 +636,22 @@ function Projects() {
               onClick={() => navigate(`/projects/${record.id}/history`)}
             />
           </Tooltip>
-          <Tooltip title="Impostazioni">
+          <Tooltip title={record.is_active ? 'Impostazioni' : 'Dettagli / Riattiva'}>
             <Button
               icon={<SettingOutlined />}
               size="small"
               onClick={() => openModal(record)}
             />
           </Tooltip>
-          <Tooltip title="Configura (SIP, CRM, Calendar)">
-            <Button
-              icon={<ApiOutlined />}
-              size="small"
-              onClick={() => navigate(`/projects/${record.id}/config`)}
-            />
-          </Tooltip>
+          {record.is_active && (
+            <Tooltip title="Configura (SIP, CRM, Calendar)">
+              <Button
+                icon={<ApiOutlined />}
+                size="small"
+                onClick={() => navigate(`/projects/${record.id}/config`)}
+              />
+            </Tooltip>
+          )}
           {isSuperAdmin && NEW_VOICE_ENGINES.includes(record.voice_engine) && (
             // maintainer, 20/08: "non si riuscirebbe a evitare 'Genera
             // servizio runtime'? mi sembra una cosa che va al di la'
@@ -642,16 +667,29 @@ function Projects() {
               />
             </Tooltip>
           )}
-          {record.slug !== 'default' && (
+          {record.slug !== 'default' && record.is_active && (
             <Popconfirm
               title="Disattivare questo progetto?"
-              description="Il progetto non sarà più utilizzabile."
+              description="Il progetto non sarà più utilizzabile, ma resterà nel database e potrà essere riattivato."
               onConfirm={() => handleDelete(record.id)}
               okText="Sì"
               cancelText="No"
             >
               <Tooltip title="Disattiva">
-                <Button icon={<DeleteOutlined />} size="small" danger />
+                <Button icon={<PauseCircleOutlined />} size="small" danger />
+              </Tooltip>
+            </Popconfirm>
+          )}
+          {record.slug !== 'default' && !record.is_active && (
+            <Popconfirm
+              title="Riattivare questo progetto?"
+              description="Il progetto tornerà visibile e utilizzabile."
+              onConfirm={() => handleReactivate(record)}
+              okText="Sì"
+              cancelText="No"
+            >
+              <Tooltip title="Riattiva">
+                <Button icon={<PlayCircleOutlined />} size="small" />
               </Tooltip>
             </Popconfirm>
           )}
@@ -674,14 +712,26 @@ function Projects() {
         </Space>
       </div>
 
-      <Input
-        placeholder="Cerca progetti..."
-        prefix={<SearchOutlined />}
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        style={{ width: 250, marginBottom: 16 }}
-        allowClear
-      />
+      <Space style={{ marginBottom: 16, flexWrap: 'wrap' }}>
+        <Input
+          placeholder="Cerca progetti..."
+          prefix={<SearchOutlined />}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ width: 250 }}
+          allowClear
+        />
+        <Select
+          value={statusFilter}
+          onChange={setStatusFilter}
+          style={{ width: 180 }}
+          options={[
+            { value: 'active', label: 'Solo attivi' },
+            { value: 'inactive', label: 'Solo inattivi' },
+            { value: 'all', label: 'Tutti' },
+          ]}
+        />
+      </Space>
 
       <Table
         scroll={{ x: 'max-content' }}
