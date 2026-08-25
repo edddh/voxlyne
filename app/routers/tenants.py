@@ -24,10 +24,120 @@ from app.models.schemas import (
     TenantResponse,
     TenantUpdate,
 )
+from app.services.pricing import (
+    VOICE_PRICING_SETTINGS_KEY,
+    default_xai_voice_pricing_per_minute,
+    normalize_xai_voice_pricing_per_minute,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/tenants", tags=["Tenants"])
+
+
+async def _get_voice_pricing_settings(db) -> dict[str, float]:
+    row = await db.fetch_one(
+        "SELECT value FROM settings WHERE key = :key",
+        {"key": VOICE_PRICING_SETTINGS_KEY},
+    )
+    if not row or not row["value"]:
+        return default_xai_voice_pricing_per_minute()
+    try:
+        parsed = json.loads(row["value"])
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return default_xai_voice_pricing_per_minute()
+    if not isinstance(parsed, dict):
+        return default_xai_voice_pricing_per_minute()
+    return normalize_xai_voice_pricing_per_minute(parsed)
+
+
+async def _save_voice_pricing_settings(db, pricing: dict[str, float]) -> None:
+    await db.execute(
+        """
+        INSERT INTO settings (key, value, description)
+        VALUES (:key, :value, :description)
+        ON CONFLICT (key) DO UPDATE
+        SET value = EXCLUDED.value,
+            description = EXCLUDED.description
+        """,
+        {
+            "key": VOICE_PRICING_SETTINGS_KEY,
+            "value": json.dumps(pricing),
+            "description": "Per-model xAI voice pricing in USD/minute",
+        },
+    )
+
+
+async def _recalculate_estimated_xai_costs(db, pricing: dict[str, float]) -> None:
+    default_rate = pricing.get("grok-voice-latest", 0.08)
+    case_clauses = []
+    params = {"default_rate": default_rate}
+    for index, (model_name, rate) in enumerate(pricing.items()):
+        model_key = f"model_{index}"
+        rate_key = f"rate_{index}"
+        case_clauses.append(f"WHEN session_model = :{model_key} THEN :{rate_key}")
+        params[model_key] = model_name
+        params[rate_key] = rate
+
+    case_sql = " ".join(case_clauses) if case_clauses else ""
+    await db.execute(
+        f"""
+        UPDATE calls
+        SET cost_usd = ROUND(
+                (duration_seconds::numeric / 60.0) * (
+                    CASE
+                        {case_sql}
+                        ELSE :default_rate
+                    END
+                ),
+                4
+            )
+        WHERE voice_engine = 'xai_sip_direct'
+          AND duration_seconds IS NOT NULL
+          AND cost_in_usd_ticks IS NULL
+          AND cost_source = 'est_duration'
+        """,
+        params,
+    )
+    await db.execute(
+        f"""
+        UPDATE calls
+        SET cost_usd = ROUND(
+                (billable_audio_seconds::numeric / 60.0) * (
+                    CASE
+                        {case_sql}
+                        ELSE :default_rate
+                    END
+                ),
+                4
+            )
+        WHERE voice_engine = 'xai_sip_direct'
+          AND billable_audio_seconds IS NOT NULL
+          AND cost_in_usd_ticks IS NULL
+          AND (cost_source = 'est_billable' OR cost_source IS NULL)
+        """,
+        params,
+    )
+
+
+@router.get("/system/voice-pricing")
+async def get_voice_pricing_settings(
+    current_user: CurrentUser = Depends(require_super_admin()),
+):
+    db = get_database()
+    return {"pricing_per_minute": await _get_voice_pricing_settings(db)}
+
+
+@router.put("/system/voice-pricing")
+async def update_voice_pricing_settings(
+    payload: dict,
+    current_user: CurrentUser = Depends(require_super_admin()),
+):
+    db = get_database()
+    pricing = normalize_xai_voice_pricing_per_minute(payload.get("pricing_per_minute"))
+    await _save_voice_pricing_settings(db, pricing)
+    await _recalculate_estimated_xai_costs(db, pricing)
+    return {"status": "ok", "pricing_per_minute": pricing}
 
 
 @router.get("", response_model=TenantListResponse)

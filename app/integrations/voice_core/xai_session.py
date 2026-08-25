@@ -60,6 +60,7 @@ def build_xai_session_update(
         "audio": {
             "input": {
                 "transcription": {
+                    "model": "grok-transcribe",
                     "language_hint": language or "it",
                 },
             },

@@ -632,14 +632,19 @@ class LegacyController:
                 return {"status": "no_results"}
             return {"status": "ok", "results": results}
         if name == "request_human_operator":
-            # Segna solo lo stato per la finalizzazione (vedi
-            # _finalize_call_record) - non esiste un vero trasferimento
-            # SIP qui, il prompt del tool istruisce il modello a
-            # congedarsi e chiudere da solo.
+            # 19/08 (collaborator, poi maintainer): versione minima per un test reale
+            # prima di generalizzare - un solo numero fisso letto da
+            # output_config.transfer.human_operator_number sul progetto,
+            # trasferimento vero via xAI realtime "refer" API. Se il
+            # progetto non ha un numero configurato, si ricade sul
+            # comportamento precedente (il modello si congeda e chiude).
             state = self.call_context.get(call_id) if call_id else None
             if state:
                 state.metadata["declined_reason"] = "human_requested"
             logging.info("request_human_operator called [%s]", call_id)
+            transferred = await self._try_transfer_to_human(call_id, state)
+            if transferred:
+                return {"status": "transferring"}
             return {"status": "acknowledged"}
         if name == "current_datetime":
             now = datetime.now(ZoneInfo("Europe/Rome"))
@@ -916,6 +921,95 @@ class LegacyController:
             return await self.run_nc_api("files", "get", "--path", arguments["path"])
         raise ValueError(f"Unknown tool: {name}")
 
+    async def _try_transfer_to_human(self, call_id: str | None, state: Any) -> bool:
+        """
+        Trasferimento SIP reale verso un numero fisso, letto da
+        output_config.transfer.human_operator_number sul progetto (vedi
+        VoiceCallState.scenario_name = project_id). Versione minima
+        (19/08, maintainer: "costruisco solo il tool minimo... tu fai una
+        chiamata vera") - un solo numero, nessuna scelta per tipo di
+        richiesta ancora. Usa la refer API di xAI realtime, verificata
+        live con un call_id finto (400 "invalid call_id", non 404/401 -
+        endpoint/auth/shape corretti).
+        Ritorna True se il trasferimento e' stato tentato con successo
+        (risposta 2xx da xAI), False altrimenti (nessun numero configurato
+        o errore - in quel caso il modello si congeda e chiude da solo,
+        comportamento precedente).
+        """
+        if not call_id or not state or not state.scenario_name:
+            logging.warning("Transfer: missing call_id/state/scenario_name [%s]", call_id)
+            return False
+        tenant_id = state.metadata.get("tenant_id")
+        try:
+            db = get_database()
+            # projects ha FORCE RLS (tenant_isolation_select) - una query
+            # diretta senza contesto restituisce silenziosamente 0 righe,
+            # non un errore (bug reale trovato qui: il primo tentativo di
+            # trasferimento non falliva con un'eccezione, spariva e basta -
+            # nessun log, "row" era semplicemente None). tenant_id e' gia'
+            # noto (state.metadata, popolato all'accettazione della
+            # chiamata), stesso pattern usato per la verifica via
+            # TestClient altrove nel progetto.
+            async with db.transaction():
+                if tenant_id:
+                    await db.execute(
+                        "SELECT set_config('app.tenant_id', :tid, true)", {"tid": str(tenant_id)}
+                    )
+                row = await db.fetch_one(
+                    "SELECT output_config FROM projects WHERE id = :id",
+                    {"id": state.scenario_name},
+                )
+        except Exception:
+            logging.exception("Transfer: failed to load project %s", state.scenario_name)
+            return False
+        if not row:
+            logging.warning(
+                "Transfer: project %s not found (RLS or missing row, tenant_id=%s)",
+                state.scenario_name, tenant_id,
+            )
+            return False
+        output_config = row["output_config"]
+        if isinstance(output_config, str):
+            try:
+                output_config = json.loads(output_config)
+            except json.JSONDecodeError:
+                output_config = {}
+        transfer_cfg = (output_config or {}).get("transfer") or {}
+        # 19/08 (maintainer, dopo il primo test fallito con tel:+numero -> 502
+        # grezzo di Cloudflare, non un errore JSON pulito come col call_id
+        # finto): "non ho mai acquistato un numero fisico su x.ai" - ipotesi
+        # e' che target_uri "tel:" richieda a x.ai un'uscita PSTN che non
+        # abbiamo, mentre un target_uri "sip:" resta dentro la loro
+        # infrastruttura di segnalazione. target_uri esplicito (nuovo campo)
+        # ha priorita' e permette di testare un URI SIP diretto; il vecchio
+        # human_operator_number resta come fallback retrocompatibile per un
+        # numero telefonico semplice.
+        target_uri = transfer_cfg.get("target_uri")
+        if not target_uri:
+            number = transfer_cfg.get("human_operator_number")
+            target_uri = f"tel:{number}" if number else None
+        if not target_uri:
+            logging.info("Transfer: no target_uri/human_operator_number configured for project %s", state.scenario_name)
+            return False
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                response = await client.post(
+                    f"{self.xai_base_url}/realtime/calls/{call_id}/refer",
+                    headers={"Authorization": f"Bearer {state.api_key}"},
+                    json={"target_uri": target_uri},
+                )
+            if response.status_code // 100 != 2:
+                logging.error(
+                    "Transfer failed [%s] -> %s: HTTP %s %s",
+                    call_id, target_uri, response.status_code, response.text,
+                )
+                return False
+            logging.info("Transfer accepted [%s] -> %s: %s", call_id, target_uri, response.text)
+            return True
+        except Exception:
+            logging.exception("Transfer request failed [%s] -> %s", call_id, target_uri)
+            return False
+
     async def _create_call_record(
         self, xai_call_id: str, caller_number: str, resolved: dict[str, Any],
     ) -> "uuid.UUID":
@@ -939,10 +1033,10 @@ class LegacyController:
             """
             INSERT INTO calls (
                 id, phone_number, status, xai_call_id, started_at,
-                project_id, tenant_id, agent_version_id, voice_engine, direction
+                project_id, tenant_id, agent_version_id, voice_engine, direction, session_model
             ) VALUES (
                 :id, :phone_number, :status, :xai_call_id, :started_at,
-                :project_id, :tenant_id, :agent_version_id, 'xai_sip_direct', 'inbound'
+                :project_id, :tenant_id, :agent_version_id, 'xai_sip_direct', 'inbound', :session_model
             )
             """,
             {
@@ -954,20 +1048,80 @@ class LegacyController:
                 "project_id": str(resolved["project_id"]),
                 "tenant_id": str(resolved["tenant_id"]),
                 "agent_version_id": str(resolved["agent_version_id"]) if resolved.get("agent_version_id") else None,
+                "session_model": str(self.model or "grok-voice-latest"),
             },
         )
         return internal_call_id
 
-    async def _persist_transcript(self, internal_call_id: str, role: str, text: str) -> None:
+    async def _persist_transcript(
+        self,
+        internal_call_id: str,
+        role: str,
+        text: str,
+        row_id: int | None = None,
+    ) -> int | None:
         """Same schema/pattern as app/services/realtime_session.py's _persist_transcript (OpenAI path)."""
         if not text:
-            return
+            return row_id
         db = get_database()
         try:
-            await db.execute(
+            if row_id is not None:
+                updated = await db.fetch_one(
+                    """
+                    UPDATE transcripts
+                    SET content = :content, timestamp = :timestamp
+                    WHERE id = :id
+                    RETURNING id
+                    """,
+                    {
+                        "id": row_id,
+                        "content": text,
+                        "timestamp": datetime.now(timezone.utc),
+                    },
+                )
+                if updated:
+                    return int(updated["id"])
+            previous = await db.fetch_one(
+                """
+                SELECT id, content
+                FROM transcripts
+                WHERE call_id = :call_id AND role = :role
+                ORDER BY timestamp DESC
+                LIMIT 1
+                """,
+                {
+                    "call_id": internal_call_id,
+                    "role": role,
+                },
+            )
+            # xAI inbound can emit progressively longer "completed"
+            # transcripts for the same utterance. Keep only the latest
+            # extension instead of storing every prefix as a new turn.
+            if previous:
+                previous_text = (previous["content"] or "").strip()
+                current_text = text.strip()
+                if current_text == previous_text:
+                    return int(previous["id"])
+                if previous_text and current_text.startswith(previous_text):
+                    updated = await db.fetch_one(
+                        """
+                        UPDATE transcripts
+                        SET content = :content, timestamp = :timestamp
+                        WHERE id = :id
+                        RETURNING id
+                        """,
+                        {
+                            "id": previous["id"],
+                            "content": text,
+                            "timestamp": datetime.now(timezone.utc),
+                        },
+                    )
+                    return int(updated["id"]) if updated else int(previous["id"])
+            created = await db.fetch_one(
                 """
                 INSERT INTO transcripts (call_id, role, content, timestamp)
                 VALUES (:call_id, :role, :content, :timestamp)
+                RETURNING id
                 """,
                 {
                     "call_id": internal_call_id,
@@ -976,8 +1130,40 @@ class LegacyController:
                     "timestamp": datetime.now(timezone.utc),
                 },
             )
+            return int(created["id"]) if created else None
         except Exception:
             logging.exception("Failed to persist transcript for call %s", internal_call_id)
+            return row_id
+
+    def _merge_user_transcript_fragments(self, fragments: list[str]) -> str:
+        merged = ""
+        for fragment in fragments:
+            cleaned = (fragment or "").strip()
+            if not cleaned:
+                continue
+            if not merged:
+                merged = cleaned
+                continue
+            if cleaned.startswith(merged):
+                merged = cleaned
+                continue
+            if merged.startswith(cleaned):
+                continue
+            overlap = self._find_fragment_overlap(merged, cleaned)
+            if overlap > 0:
+                merged = f"{merged}{cleaned[overlap:]}"
+            else:
+                merged = f"{merged} {cleaned}"
+        return merged.strip()
+
+    def _find_fragment_overlap(self, previous: str, current: str) -> int:
+        prev = previous.strip()
+        curr = current.strip()
+        max_overlap = min(len(prev), len(curr))
+        for size in range(max_overlap, 4, -1):
+            if prev[-size:].lower() == curr[:size].lower():
+                return size
+        return 0
 
     async def _finalize_call_record(self, state: "VoiceCallState") -> None:
         """
@@ -1031,16 +1217,36 @@ class LegacyController:
             except Exception:
                 logging.exception("Failed to check transcript activity for %s", internal_call_id)
 
-        from app.services.pricing import estimate_xai_call_cost_usd
+        from app.services.pricing import (
+            cost_usd_from_ticks,
+            estimate_xai_call_cost_usd,
+            load_xai_voice_pricing_per_minute,
+        )
 
         billable_audio_seconds = state.metadata.get("billable_audio_seconds")
-        cost_usd = estimate_xai_call_cost_usd(billable_audio_seconds)
+        actual_cost_ticks = state.metadata.get("cost_in_usd_ticks")
+        session_model = state.metadata.get("session_model") or state.model
+        cost_usd = cost_usd_from_ticks(actual_cost_ticks)
+        cost_source = "exact" if cost_usd is not None else None
+        if cost_usd is None:
+            pricing_per_minute = await load_xai_voice_pricing_per_minute(db)
+            cost_usd = estimate_xai_call_cost_usd(
+                billable_audio_seconds,
+                model_name=session_model,
+                pricing_per_minute=pricing_per_minute,
+            )
+            if cost_usd is not None:
+                cost_source = "est_billable"
 
         try:
             await db.execute(
                 """
                 UPDATE calls SET ended_at = COALESCE(ended_at, :ended_at), status = :status,
-                       billable_audio_seconds = :billable_audio_seconds, cost_usd = :cost_usd
+                       billable_audio_seconds = :billable_audio_seconds,
+                       session_model = COALESCE(session_model, :session_model),
+                       cost_in_usd_ticks = :cost_in_usd_ticks,
+                       cost_source = :cost_source,
+                       cost_usd = :cost_usd
                 WHERE id = :id
                 """,
                 {
@@ -1048,6 +1254,9 @@ class LegacyController:
                     "ended_at": datetime.now(timezone.utc),
                     "status": final_status,
                     "billable_audio_seconds": billable_audio_seconds,
+                    "session_model": session_model,
+                    "cost_in_usd_ticks": actual_cost_ticks,
+                    "cost_source": cost_source,
                     "cost_usd": cost_usd,
                 },
             )
@@ -1248,18 +1457,48 @@ class LegacyController:
                     etype = event.get("type", "")
                     if etype == "session.created":
                         logging.info("Session created for call %s", call_id)
-                    elif etype == "conversation.item.input_audio_transcription.completed":
+                    elif etype in {
+                        "conversation.item.input_audio_transcription.updated",
+                        "conversation.item.input_audio_transcription.completed",
+                    }:
                         transcript_text = event.get("transcript", "")
-                        logging.info("User transcript [%s]: %s", call_id, transcript_text)
+                        logging.info("User transcript [%s][%s]: %s", call_id, etype, transcript_text)
                         internal_call_id = call_state.metadata.get("internal_call_id")
                         if internal_call_id:
-                            await self._persist_transcript(internal_call_id, "user", transcript_text)
+                            item_id = (
+                                event.get("item_id")
+                                or event.get("id")
+                                or (event.get("item") or {}).get("id")
+                            )
+                            user_items = call_state.metadata.setdefault("_current_user_item_ids", [])
+                            user_texts = call_state.metadata.setdefault("_current_user_item_texts", {})
+                            current_user_row_id = call_state.metadata.get("_current_user_row_id")
+                            if item_id and item_id not in user_items:
+                                user_items.append(item_id)
+                            if item_id:
+                                user_texts[item_id] = transcript_text
+                                merged_user_text = self._merge_user_transcript_fragments(
+                                    [user_texts[item] for item in user_items if user_texts.get(item)]
+                                )
+                            else:
+                                merged_user_text = transcript_text
+                            persisted_row_id = await self._persist_transcript(
+                                internal_call_id,
+                                "user",
+                                merged_user_text,
+                                row_id=current_user_row_id,
+                            )
+                            if persisted_row_id is not None:
+                                call_state.metadata["_current_user_row_id"] = persisted_row_id
                     elif etype == "response.output_audio_transcript.done":
                         transcript_text = event.get("transcript", "")
                         logging.info("Assistant transcript [%s]: %s", call_id, transcript_text)
                         internal_call_id = call_state.metadata.get("internal_call_id")
                         if internal_call_id:
                             await self._persist_transcript(internal_call_id, "assistant", transcript_text)
+                            call_state.metadata.pop("_current_user_row_id", None)
+                            call_state.metadata.pop("_current_user_item_ids", None)
+                            call_state.metadata.pop("_current_user_item_texts", None)
                     elif etype == "response.function_call_arguments.done":
                         await self.handle_function_call(conn, SimpleNamespace(**event), call_id)
                     elif etype == "error":
@@ -1267,17 +1506,59 @@ class LegacyController:
                     elif etype == "response.done":
                         status = (event.get("response") or {}).get("status")
                         logging.info("Response done [%s]: %s", call_id, status)
-                        # 20/08: usage.billable_audio_seconds e' un
-                        # campo TOP-LEVEL sull'evento (non dentro
-                        # response.usage, che risulta vuoto {}) -
-                        # verificato con una chiamata di test diretta
-                        # contro l'API reale prima di scriverlo. Somma
-                        # su tutte le risposte della chiamata, letta poi
-                        # in _finalize_call_record per calcolare il costo.
-                        billable = (event.get("usage") or {}).get("billable_audio_seconds")
+                        response_obj = event.get("response") or {}
+                        response_id = response_obj.get("id") or event.get("response_id")
+                        # Seguiamo solo i campi documentati per cost
+                        # tracking (`usage.cost_in_usd_ticks`) e
+                        # registriamo il payload rilevante di
+                        # response.done per fissare la shape reale del
+                        # flusso SIP/realtime voice in ambiente di sviluppo.
+                        usage = event.get("usage") or response_obj.get("usage") or {}
+                        logging.info(
+                            "Response done payload [%s]: event_keys=%s response_keys=%s usage=%s response_usage=%s",
+                            call_id,
+                            sorted(event.keys()),
+                            sorted(response_obj.keys()),
+                            event.get("usage"),
+                            response_obj.get("usage"),
+                        )
+                        billable = usage.get("billable_audio_seconds")
                         if billable:
-                            call_state.metadata["billable_audio_seconds"] = (
-                                call_state.metadata.get("billable_audio_seconds", 0) + billable
+                            response_billable = call_state.metadata.setdefault("_response_billable_audio_seconds", {})
+                            if response_id:
+                                response_billable[response_id] = max(
+                                    response_billable.get(response_id, 0),
+                                    billable,
+                                )
+                                call_state.metadata["billable_audio_seconds"] = sum(response_billable.values())
+                            else:
+                                call_state.metadata["billable_audio_seconds"] = max(
+                                    call_state.metadata.get("billable_audio_seconds", 0),
+                                    billable,
+                                )
+                        # xAI cost tracking: exact billed amount per
+                        # call, in integer USD ticks. Stesso discorso
+                        # del campo sopra: se il provider lo manda come
+                        # valore cumulativo, sommare gonfia tutto.
+                        # Conserviamo quindi il massimo osservato.
+                        cost_ticks = usage.get("cost_in_usd_ticks")
+                        if cost_ticks is not None:
+                            call_state.metadata["cost_in_usd_ticks"] = max(
+                                call_state.metadata.get("cost_in_usd_ticks", 0),
+                                cost_ticks,
+                            )
+                            logging.info(
+                                "Response done [%s]: exact usage found billable=%s cost_in_usd_ticks=%s",
+                                call_id,
+                                billable,
+                                cost_ticks,
+                            )
+                        else:
+                            logging.info(
+                                "Response done [%s]: no exact cost_in_usd_ticks billable=%s usage_keys=%s",
+                                call_id,
+                                billable,
+                                sorted(usage.keys()),
                             )
         finally:
             await self._finalize_call_record(call_state)

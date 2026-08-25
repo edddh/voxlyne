@@ -56,6 +56,31 @@ def _extract_json_field(json_data, key: str):
     return None
 
 
+async def _can_view_costs(db, current_user: CurrentUser) -> bool:
+    """
+    Real call costs are always visible to super_admin. Tenant admins can
+    optionally see them when the tenant-level setting
+    settings.show_costs_to_tenant_admin is enabled by a super_admin.
+    """
+    if current_user.is_super_admin:
+        return True
+    if current_user.role != "admin" or not current_user.tenant_id:
+        return False
+    tenant_row = await db.fetch_one(
+        "SELECT settings FROM tenants WHERE id = :id",
+        {"id": str(current_user.tenant_id)},
+    )
+    if not tenant_row or not tenant_row["settings"]:
+        return False
+    settings = tenant_row["settings"]
+    if isinstance(settings, str):
+        try:
+            settings = json.loads(settings)
+        except json.JSONDecodeError:
+            settings = {}
+    return bool((settings or {}).get("show_costs_to_tenant_admin"))
+
+
 @router.get("")
 async def list_calls(
     page: int = Query(1, ge=1),
@@ -79,6 +104,7 @@ async def list_calls(
     - Tenant isolation (automatic for non-super-admin)
     """
     db = get_database()
+    can_view_costs = await _can_view_costs(db, current_user)
 
     # Build base query
     base_query = """
@@ -156,7 +182,9 @@ async def list_calls(
                 # tenant-scoped) ha /stats con minutes_used/
                 # minutes_included invece.
                 "cost_usd": (
-                    float(c["cost_usd"]) if current_user.is_super_admin and c["cost_usd"] is not None else None
+                    float(c["cost_usd"])
+                    if can_view_costs and c["cost_usd"] is not None
+                    else None
                 ),
                 "project_id": str(c["project_id"]) if c["project_id"] else None,
                 "project_name": c["project_name"],
@@ -172,11 +200,17 @@ async def list_calls(
         "page": page,
         "page_size": page_size,
         "pages": (total + page_size - 1) // page_size,
+        "can_view_costs": can_view_costs,
     }
 
 
 @router.get("/stats")
 async def get_calls_stats(
+    status: Optional[CallStatus] = None,
+    project_id: Optional[UUID] = None,
+    phone_search: Optional[str] = None,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
     current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator", "power_user"])),
     tenant_ctx: TenantContext = Depends(get_tenant_context),
 ):
@@ -206,11 +240,32 @@ async def get_calls_stats(
       no UI to set it yet, None = no package configured).
     """
     db = get_database()
+    can_view_costs = await _can_view_costs(db, current_user)
     where = "WHERE 1=1"
     params = {}
     if not current_user.is_super_admin:
         where += " AND tenant_id = :tenant_id"
         params["tenant_id"] = str(current_user.tenant_id)
+
+    if status:
+        where += " AND status = :status"
+        params["status"] = status.value
+
+    if project_id:
+        where += " AND project_id = :project_id"
+        params["project_id"] = str(project_id)
+
+    if phone_search:
+        where += " AND phone_number ILIKE :phone_search"
+        params["phone_search"] = f"%{phone_search}%"
+
+    if date_from:
+        where += " AND created_at >= :date_from"
+        params["date_from"] = date_from
+
+    if date_to:
+        where += " AND created_at <= :date_to"
+        params["date_to"] = date_to
 
     # 20/08 (maintainer): "in_progress" (chiamata dal vivo adesso) e
     # "processing" (post-elaborazione automatica di pochi secondi dopo
@@ -237,7 +292,16 @@ async def get_calls_stats(
                 WHERE cost_usd IS NOT NULL
                 AND (created_at AT TIME ZONE 'Europe/Rome')::date = (now() AT TIME ZONE 'Europe/Rome')::date
             ) AS today_cost_usd,
-            SUM(billable_audio_seconds) FILTER (WHERE billable_audio_seconds IS NOT NULL) AS billable_audio_seconds
+            SUM(duration_seconds) FILTER (
+                WHERE duration_seconds IS NOT NULL
+                AND date_trunc('month', created_at AT TIME ZONE 'Europe/Rome') =
+                    date_trunc('month', now() AT TIME ZONE 'Europe/Rome')
+            ) AS duration_seconds_current_month,
+            SUM(duration_seconds) FILTER (
+                WHERE duration_seconds IS NOT NULL
+                AND date_trunc('year', created_at AT TIME ZONE 'Europe/Rome') =
+                    date_trunc('year', now() AT TIME ZONE 'Europe/Rome')
+            ) AS duration_seconds_current_year
         FROM calls
         {where}
         """,
@@ -250,39 +314,58 @@ async def get_calls_stats(
         "completed": row["completed"],
         "in_progress": row["in_progress"],
         "avg_duration_seconds": float(row["avg_duration_seconds"]) if row["avg_duration_seconds"] is not None else None,
+        # Coerenza esplicita richiesta: questi minuti devono combaciare
+        # con la lista chiamate sotto, quindi derivano dalla stessa
+        # popolazione filtrata e dalla durata chiamata, non da un
+        # contatore tecnico separato.
+        "minutes_used": round((row["duration_seconds_current_month"] or 0) / 60, 2),
+        "minutes_used_current_month": round((row["duration_seconds_current_month"] or 0) / 60, 2),
+        "minutes_used_current_year": round((row["duration_seconds_current_year"] or 0) / 60, 2),
     }
 
-    if current_user.is_super_admin:
-        # Solo chiamate xai_sip_direct hanno un cost_usd calcolato per
-        # ora (vedi app/services/pricing.py) - una somma su chiamate
-        # miste sottostima il vero totale finche' gli altri motori non
-        # sono coperti, il frontend lo etichetta come parziale/stima.
+    if can_view_costs:
         result["total_cost_usd"] = float(row["total_cost_usd"]) if row["total_cost_usd"] is not None else 0.0
         result["today_cost_usd"] = float(row["today_cost_usd"]) if row["today_cost_usd"] is not None else 0.0
 
-        by_tenant_rows = await db.fetch_all(
-            """
-            SELECT t.id AS tenant_id, t.name AS tenant_name,
-                   COUNT(c.id) AS calls_count,
-                   SUM(c.cost_usd) FILTER (WHERE c.cost_usd IS NOT NULL) AS cost_usd,
-                   SUM(c.billable_audio_seconds) FILTER (WHERE c.billable_audio_seconds IS NOT NULL) AS billable_audio_seconds
-            FROM tenants t
-            LEFT JOIN calls c ON c.tenant_id = t.id
-            GROUP BY t.id, t.name
-            HAVING COUNT(c.id) > 0
-            ORDER BY cost_usd DESC NULLS LAST
-            """,
-        )
-        result["by_tenant"] = [
-            {
-                "tenant_id": str(r["tenant_id"]),
-                "tenant_name": r["tenant_name"],
-                "calls_count": r["calls_count"],
-                "cost_usd": float(r["cost_usd"]) if r["cost_usd"] is not None else 0.0,
-                "minutes_used": round((r["billable_audio_seconds"] or 0) / 60, 2),
-            }
-            for r in by_tenant_rows
-        ]
+        if current_user.is_super_admin:
+            by_tenant_rows = await db.fetch_all(
+                """
+                SELECT t.id AS tenant_id, t.name AS tenant_name,
+                       COUNT(c.id) AS calls_count,
+                       SUM(c.cost_usd) FILTER (WHERE c.cost_usd IS NOT NULL) AS cost_usd,
+                       SUM(c.billable_audio_seconds) FILTER (WHERE c.billable_audio_seconds IS NOT NULL) AS billable_audio_seconds
+                FROM tenants t
+                LEFT JOIN calls c ON c.tenant_id = t.id
+                GROUP BY t.id, t.name
+                HAVING COUNT(c.id) > 0
+                ORDER BY cost_usd DESC NULLS LAST
+                """,
+            )
+            result["by_tenant"] = [
+                {
+                    "tenant_id": str(r["tenant_id"]),
+                    "tenant_name": r["tenant_name"],
+                    "calls_count": r["calls_count"],
+                    "cost_usd": float(r["cost_usd"]) if r["cost_usd"] is not None else 0.0,
+                    "minutes_used": round((r["billable_audio_seconds"] or 0) / 60, 2),
+                }
+                for r in by_tenant_rows
+            ]
+        if not current_user.is_super_admin and current_user.tenant_id:
+            tenant_row = await db.fetch_one(
+                "SELECT settings FROM tenants WHERE id = :id", {"id": str(current_user.tenant_id)},
+            )
+            included_minutes = None
+            if tenant_row and tenant_row["settings"]:
+                settings = tenant_row["settings"]
+                if isinstance(settings, str):
+                    settings = json.loads(settings)
+                included_minutes = (settings or {}).get("included_minutes")
+            result["minutes_included"] = included_minutes
+            result["percent_used"] = (
+                round(min(result["minutes_used"] / included_minutes, 1.0) * 100, 1)
+                if included_minutes else None
+            )
     else:
         included_minutes = None
         tenant_row = await db.fetch_one(
@@ -294,14 +377,13 @@ async def get_calls_stats(
                 settings = json.loads(settings)
             included_minutes = (settings or {}).get("included_minutes")
 
-        minutes_used = round((row["billable_audio_seconds"] or 0) / 60, 2)
-        result["minutes_used"] = minutes_used
         result["minutes_included"] = included_minutes
         result["percent_used"] = (
-            round(min(minutes_used / included_minutes, 1.0) * 100, 1)
+            round(min(result["minutes_used"] / included_minutes, 1.0) * 100, 1)
             if included_minutes else None
         )
 
+    result["can_view_costs"] = can_view_costs
     return result
 
 
@@ -315,6 +397,7 @@ async def get_call_detail(
     Get detailed call information including transcript.
     """
     db = get_database()
+    can_view_costs = await _can_view_costs(db, current_user)
 
     # Build query with tenant check
     query = """
@@ -390,9 +473,11 @@ async def get_call_detail(
             "ended_at": call["ended_at"],
             "duration_seconds": call["duration_seconds"],
             # Solo super_admin, stesso motivo di list_calls sopra.
-            "billable_audio_seconds": call["billable_audio_seconds"] if current_user.is_super_admin else None,
+            "billable_audio_seconds": call["billable_audio_seconds"] if can_view_costs else None,
             "cost_usd": (
-                float(call["cost_usd"]) if current_user.is_super_admin and call["cost_usd"] is not None else None
+                float(call["cost_usd"])
+                if can_view_costs and call["cost_usd"] is not None
+                else None
             ),
             "project_id": str(call["project_id"]) if call["project_id"] else None,
             "project_name": call["project_name"],
@@ -407,6 +492,7 @@ async def get_call_detail(
             "candidate_name": _extract_json_field(record["json_data"], "candidate_name") if record else None,
             "candidate_email": _extract_json_field(record["json_data"], "email") if record else None,
             "has_pdf": record["pdf_key"] is not None if record else False,
+            "can_view_costs": can_view_costs,
         },
         "transcript": [
             {

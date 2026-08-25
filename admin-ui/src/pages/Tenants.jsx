@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Table, Button, Space, Input, InputNumber, Modal, Form, message, Tag, Popconfirm, Typography, Tooltip
+  Table, Button, Space, Input, InputNumber, Modal, Form, message, Tag, Popconfirm, Typography, Tooltip, Switch, Card
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, KeyOutlined } from '@ant-design/icons'
 import * as tenantsApi from '../api/tenants'
@@ -19,10 +19,20 @@ function Tenants() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editingTenant, setEditingTenant] = useState(null)
   const [form] = Form.useForm()
+  const [voicePricing, setVoicePricing] = useState({
+    'grok-voice-latest': 0.08,
+    'grok-voice-think-fast-2.0': 0.08,
+    'grok-voice-think-fast-1.0': 0.05,
+  })
+  const [savingVoicePricing, setSavingVoicePricing] = useState(false)
 
   useEffect(() => {
     loadTenants()
   }, [page, pageSize, search])
+
+  useEffect(() => {
+    loadVoicePricing()
+  }, [])
 
   const loadTenants = async () => {
     setLoading(true)
@@ -39,6 +49,34 @@ function Tenants() {
     }
   }
 
+  const loadVoicePricing = async () => {
+    try {
+      const data = await tenantsApi.getVoicePricingSettings()
+      if (data?.pricing_per_minute) {
+        setVoicePricing(data.pricing_per_minute)
+      }
+    } catch (error) {
+      message.error('Errore caricamento tariffario voce')
+    }
+  }
+
+  const handleSaveVoicePricing = async () => {
+    setSavingVoicePricing(true)
+    try {
+      const data = await tenantsApi.updateVoicePricingSettings({
+        pricing_per_minute: voicePricing,
+      })
+      if (data?.pricing_per_minute) {
+        setVoicePricing(data.pricing_per_minute)
+      }
+      message.success('Tariffario voce aggiornato')
+    } catch (error) {
+      message.error(error.response?.data?.detail || 'Errore aggiornamento tariffario voce')
+    } finally {
+      setSavingVoicePricing(false)
+    }
+  }
+
   const openModal = (tenant = null) => {
     setEditingTenant(tenant)
     form.resetFields()
@@ -48,6 +86,7 @@ function Tenants() {
         slug: tenant.slug,
         is_active: tenant.is_active,
         included_minutes: tenant.settings?.included_minutes ?? null,
+        show_costs_to_tenant_admin: tenant.settings?.show_costs_to_tenant_admin ?? false,
       })
     }
     setModalOpen(true)
@@ -63,8 +102,12 @@ function Tenants() {
       // l'oggetto esistente con solo included_minutes cambiato, non solo
       // il campo nuovo - altrimenti si perdono max_users/max_projects
       // gia' salvati.
-      const { included_minutes, ...rest } = values
-      const settings = { ...(editingTenant?.settings || {}), included_minutes: included_minutes ?? null }
+      const { included_minutes, show_costs_to_tenant_admin, ...rest } = values
+      const settings = {
+        ...(editingTenant?.settings || {}),
+        included_minutes: included_minutes ?? null,
+        show_costs_to_tenant_admin: !!show_costs_to_tenant_admin,
+      }
       const payload = { ...rest, settings }
 
       if (editingTenant) {
@@ -135,6 +178,16 @@ function Tenants() {
       ),
     },
     {
+      title: 'Costi LLM agli admin',
+      key: 'show_costs_to_tenant_admin',
+      align: 'center',
+      render: (_, record) => (
+        record.settings?.show_costs_to_tenant_admin
+          ? <Tag color="gold">Abilitati</Tag>
+          : <Tag>Disabilitati</Tag>
+      ),
+    },
+    {
       title: 'Creato',
       dataIndex: 'created_at',
       key: 'created',
@@ -190,6 +243,47 @@ function Tenants() {
         style={{ width: 250, marginBottom: 16 }}
         allowClear
       />
+
+      <Card title="Tariffario voce xAI" style={{ marginBottom: 16 }}>
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Space wrap>
+            <span>grok-voice-latest</span>
+            <InputNumber
+              min={0}
+              step={0.01}
+              precision={4}
+              value={voicePricing['grok-voice-latest']}
+              onChange={(value) => setVoicePricing((prev) => ({ ...prev, 'grok-voice-latest': value ?? 0 }))}
+            />
+            <span>USD/min</span>
+          </Space>
+          <Space wrap>
+            <span>grok-voice-think-fast-2.0</span>
+            <InputNumber
+              min={0}
+              step={0.01}
+              precision={4}
+              value={voicePricing['grok-voice-think-fast-2.0']}
+              onChange={(value) => setVoicePricing((prev) => ({ ...prev, 'grok-voice-think-fast-2.0': value ?? 0 }))}
+            />
+            <span>USD/min</span>
+          </Space>
+          <Space wrap>
+            <span>grok-voice-think-fast-1.0</span>
+            <InputNumber
+              min={0}
+              step={0.01}
+              precision={4}
+              value={voicePricing['grok-voice-think-fast-1.0']}
+              onChange={(value) => setVoicePricing((prev) => ({ ...prev, 'grok-voice-think-fast-1.0': value ?? 0 }))}
+            />
+            <span>USD/min</span>
+          </Space>
+          <Button type="primary" onClick={handleSaveVoicePricing} loading={savingVoicePricing}>
+            Salva tariffario e ricalcola costi
+          </Button>
+        </Space>
+      </Card>
 
       <Table
         scroll={{ x: 'max-content' }}
@@ -248,6 +342,14 @@ function Tenants() {
             tooltip="Quanti minuti di chiamata sono inclusi per questo tenant - gli utenti del tenant vedono quanto ne hanno usato in percentuale (pagina Chiamate). Lascia vuoto per nessun limite configurato."
           >
             <InputNumber min={0} style={{ width: '100%' }} placeholder="Es. 500 (vuoto = nessun limite configurato)" />
+          </Form.Item>
+          <Form.Item
+            name="show_costs_to_tenant_admin"
+            label="Mostra costi LLM agli admin del tenant"
+            valuePropName="checked"
+            tooltip="Se attivo, gli utenti con ruolo admin di questo tenant vedono i costi reali delle chiamate nella pagina Chiamate. Creators e power users non li vedono."
+          >
+            <Switch />
           </Form.Item>
           <Form.Item>
             <Space>

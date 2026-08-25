@@ -6,18 +6,16 @@ import {
 import {
   SearchOutlined, PhoneOutlined, FileTextOutlined, FilePdfOutlined, EyeOutlined,
   CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, PhoneFilled, UserOutlined,
-  DollarCircleOutlined
+  PieChartOutlined, DollarCircleOutlined
 } from '@ant-design/icons'
 import * as callsApi from '../api/calls'
 import * as projectsApi from '../api/projects'
-import { useAuth } from '../hooks/useAuth'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
 
 function Calls() {
   const navigate = useNavigate()
-  const { isSuperAdmin } = useAuth()
   const [calls, setCalls] = useState([])
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
@@ -45,7 +43,9 @@ function Calls() {
   const [stats, setStats] = useState({
     total: 0, today: 0, completed: 0, in_progress: 0,
     total_cost_usd: 0, today_cost_usd: 0, by_tenant: [],
-    minutes_used: 0, minutes_included: null, percent_used: null,
+    minutes_used: 0, minutes_used_current_month: 0, minutes_used_current_year: 0,
+    minutes_included: null, percent_used: null,
+    can_view_costs: false,
   })
 
   // Outbound call modal
@@ -55,11 +55,11 @@ function Calls() {
 
   useEffect(() => {
     loadProjects()
-    loadStats()
   }, [])
 
   useEffect(() => {
     loadCalls()
+    loadStats()
   }, [page, pageSize, phoneSearch, statusFilter, projectFilter, dateRange])
 
   const loadProjects = async () => {
@@ -76,7 +76,14 @@ function Calls() {
   // filtrate/visibili in questo momento.
   const loadStats = async () => {
     try {
-      const data = await callsApi.getCallsStats()
+      const params = {}
+      if (phoneSearch) params.phone_search = phoneSearch
+      if (statusFilter) params.status = statusFilter
+      if (projectFilter) params.project_id = projectFilter
+      if (dateRange && dateRange[0]) params.date_from = dateRange[0].toISOString()
+      if (dateRange && dateRange[1]) params.date_to = dateRange[1].toISOString()
+
+      const data = await callsApi.getCallsStats(params)
       setStats(data)
     } catch (error) {
       console.error('Error loading call stats:', error)
@@ -183,18 +190,21 @@ function Calls() {
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
+  const formatBillableMinutes = (minutes) => {
+    if (minutes == null) return '-'
+    const wholeMinutes = Math.floor(minutes)
+    const seconds = Math.round((minutes - wholeMinutes) * 60)
+    if (seconds === 60) return `${wholeMinutes + 1}m`
+    if (seconds === 0) return `${wholeMinutes}m`
+    return `${wholeMinutes}m${seconds.toString().padStart(2, '0')}s`
+  }
+
+  const formatIncludedMinutes = (minutes) => {
+    if (minutes == null) return null
+    return formatBillableMinutes(minutes)
+  }
+
   const columns = [
-    {
-      title: 'Telefono',
-      dataIndex: 'phone_number',
-      key: 'phone',
-      render: (phone) => (
-        <Space>
-          <PhoneOutlined />
-          <Text copyable={{ text: phone }}>{phone}</Text>
-        </Space>
-      ),
-    },
     {
       title: 'Dir.',
       key: 'direction',
@@ -211,9 +221,14 @@ function Calls() {
     },
     {
       title: 'Chiamante',
-      dataIndex: 'candidate_name',
-      key: 'candidate',
-      render: (name) => name || <Text type="secondary">-</Text>,
+      dataIndex: 'phone_number',
+      key: 'caller',
+      render: (phone) => (
+        <Space>
+          <PhoneOutlined />
+          <Text copyable={{ text: phone }}>{phone}</Text>
+        </Space>
+      ),
     },
     {
       title: 'Progetto',
@@ -250,7 +265,7 @@ function Calls() {
     // (maintainer, 20/08: "i costi reali... devono essere visibili solo dal
     // superadmin") - una colonna sempre vuota per tutti gli altri
     // sarebbe solo rumore, meglio non mostrarla proprio.
-    ...(isSuperAdmin ? [{
+    ...(stats.can_view_costs ? [{
       title: 'Costo',
       dataIndex: 'cost_usd',
       key: 'cost',
@@ -375,39 +390,47 @@ function Calls() {
           </Card>
         </Col>
         <Col xs={12} sm={6}>
-          {isSuperAdmin ? (
+          <Card>
+            <Statistic
+              title="Minuti Pacchetto Usati"
+              value={formatBillableMinutes(stats.minutes_used_current_month ?? stats.minutes_used)}
+              suffix={stats.minutes_included ? `/ ${formatIncludedMinutes(stats.minutes_included)}` : ''}
+              prefix={<PieChartOutlined />}
+              valueStyle={{ color: '#1890ff' }}
+            />
+            {stats.percent_used != null ? (
+              <Progress percent={stats.percent_used} size="small" style={{ marginTop: 8 }} />
+            ) : (
+              <Text type="secondary" style={{ fontSize: 11 }}>Nessun pacchetto configurato</Text>
+            )}
+          </Card>
+        </Col>
+        {stats.can_view_costs && (
+          <Col xs={12} sm={6}>
             <Card>
               <Statistic
-                title="Costo Totale (stima)"
+                title="Costo servizi esterni"
                 value={stats.total_cost_usd}
-                precision={4}
+                precision={2}
                 prefix={<DollarCircleOutlined />}
                 valueStyle={{ color: '#1890ff' }}
               />
-              <Text type="secondary" style={{ fontSize: 11 }}>
-                Solo chiamate xai_sip_direct - gli altri motori non sono ancora coperti
-              </Text>
             </Card>
-          ) : (
-            <Card>
-              <Statistic
-                title="Pacchetto Utilizzato"
-                value={stats.minutes_used}
-                suffix={stats.minutes_included ? `/ ${stats.minutes_included} min` : 'min'}
-                prefix={<DollarCircleOutlined />}
-                valueStyle={{ color: '#1890ff' }}
-              />
-              {stats.percent_used != null ? (
-                <Progress percent={stats.percent_used} size="small" style={{ marginTop: 8 }} />
-              ) : (
-                <Text type="secondary" style={{ fontSize: 11 }}>Nessun pacchetto configurato</Text>
-              )}
-            </Card>
-          )}
+          </Col>
+        )}
+        <Col xs={12} sm={6}>
+          <Card>
+            <Statistic
+              title="Minuti Anno Corrente"
+              value={formatBillableMinutes(stats.minutes_used_current_year)}
+              prefix={<PieChartOutlined />}
+              valueStyle={{ color: '#722ed1' }}
+            />
+          </Card>
         </Col>
       </Row>
 
-      {isSuperAdmin && stats.by_tenant?.length > 0 && (
+      {stats.by_tenant?.length > 0 && (
         <Card title="Costi per tenant" size="small" style={{ marginBottom: 24 }}>
           <Table
             size="small"
@@ -419,11 +442,11 @@ function Calls() {
               { title: 'Chiamate', dataIndex: 'calls_count', key: 'calls_count', align: 'center' },
               { title: 'Minuti fatturabili', dataIndex: 'minutes_used', key: 'minutes_used', align: 'center' },
               {
-                title: 'Costo (stima)',
+                title: 'Costo registrato',
                 dataIndex: 'cost_usd',
                 key: 'cost_usd',
                 align: 'center',
-                render: (v) => `$${v.toFixed(4)}`,
+                render: (v) => `$${v.toFixed(2)}`,
               },
             ]}
           />

@@ -24,3 +24,13 @@ export const deleteTenant = async (id) => {
   const response = await client.delete(`/api/tenants/${id}`)
   return response.data
 }
+
+export const getVoicePricingSettings = async () => {
+  const response = await client.get('/api/tenants/system/voice-pricing')
+  return response.data
+}
+
+export const updateVoicePricingSettings = async (data) => {
+  const response = await client.put('/api/tenants/system/voice-pricing', data)
+  return response.data
+}
