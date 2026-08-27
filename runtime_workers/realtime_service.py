@@ -594,7 +594,14 @@ class LegacyController:
             return 1.0
         return SequenceMatcher(None, target, norm).ratio()
 
-    async def call_tool(self, name: str, arguments: dict[str, Any], call_id: str | None = None) -> dict[str, Any]:
+    async def call_tool(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        call_id: str | None = None,
+        project_id: str | None = None,
+        tenant_id: str | None = None,
+    ) -> dict[str, Any]:
         if name == "search_knowledge_base":
             # project_id is stashed in scenario_name and tenant_id in
             # metadata by the realtime.call.incoming resolver above (see
@@ -604,29 +611,34 @@ class LegacyController:
             # this needs (same reuse the resolver itself already relies on).
             state = self.call_context.get(call_id) if call_id else None
             query = arguments.get("query", "")
-            if not state or not state.scenario_name:
+            effective_project_id = project_id or (state.scenario_name if state else None)
+            effective_tenant_id = tenant_id or (state.metadata.get("tenant_id") if state else None)
+            if not effective_project_id:
                 logging.warning("search_knowledge_base: no call context for call_id=%s query=%r", call_id, query)
                 return {"status": "error", "message": "No project context for this call"}
             from uuid import UUID as _UUID
 
             from app.services.rag.search import search_knowledge_base
 
-            tenant_id = state.metadata.get("tenant_id")
-            project_id = state.scenario_name
             try:
                 results = await search_knowledge_base(
-                    project_id=_UUID(project_id),
-                    tenant_id=_UUID(tenant_id) if tenant_id else None,
+                    project_id=_UUID(effective_project_id),
+                    tenant_id=_UUID(effective_tenant_id) if effective_tenant_id else None,
                     query=query,
                     top_k=5,
                 )
             except ValueError as e:
-                logging.warning("search_knowledge_base unavailable: project=%s query=%r error=%s", project_id, query, e)
+                logging.warning(
+                    "search_knowledge_base unavailable: project=%s query=%r error=%s",
+                    effective_project_id,
+                    query,
+                    e,
+                )
                 return {"status": "unavailable", "message": "Knowledge base not configured for this project"}
             top_score = round(results[0]["similarity"], 3) if results else None
             logging.info(
                 "search_knowledge_base: project=%s query=%r -> %d result(s), top_similarity=%s",
-                project_id, query, len(results), top_score,
+                effective_project_id, query, len(results), top_score,
             )
             if not results:
                 return {"status": "no_results"}

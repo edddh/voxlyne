@@ -792,6 +792,17 @@ class RefreshTokenResponse(BaseModel):
     expires_in: int
 
 
+class ForgotPasswordRequest(BaseModel):
+    """Forgot password request."""
+    email: str = Field(..., min_length=3)
+
+
+class ResetPasswordWithTokenRequest(BaseModel):
+    """Password reset using an emailed token."""
+    token: str = Field(..., min_length=20)
+    new_password: str = Field(..., min_length=8)
+
+
 class UserBase(BaseModel):
     """Base user model."""
     email: str = Field(..., min_length=3, max_length=255)

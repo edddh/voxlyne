@@ -63,6 +63,17 @@ SEARCH_KB_TOOL_CHAT = {
     },
 }
 
+# Keep the text simulator aligned with the production tool contract. Without
+# this, a chat model may emit a generic answer and a tool call in the same
+# turn, which makes the preview look as though it ignored the search result.
+TOOL_RESULT_WAIT_INSTRUCTIONS = (
+    "Regola inderogabile per i tool: quando una risposta richiede dati dalla "
+    "knowledge base o da un altro tool, non fornire alcuna risposta sostanziale "
+    "prima del risultato. Esegui il tool, attendi il suo output, poi rispondi "
+    "nello stesso turno usando esclusivamente quel risultato per i fatti verificabili. "
+    "Non anticipare indirizzi, orari, disponibilita' o conclusioni."
+)
+
 
 class SimMessage(BaseModel):
     role: str = Field(..., pattern="^(user|assistant)$")
@@ -85,10 +96,15 @@ class SimulateResponse(BaseModel):
     tool_calls: List[SimulateToolCall] = Field(default_factory=list)
 
 
-def _provider_for_engine(voice_engine: Optional[str]) -> str:
-    if voice_engine and "xai" in voice_engine:
-        return "xai"
-    return "openai"
+def _provider_candidates_for_engine(voice_engine: Optional[str]) -> List[str]:
+    engine = (voice_engine or "").strip().lower()
+    if "xai" in engine:
+        return ["xai", "openai"]
+    if "openai" in engine:
+        return ["openai", "xai"]
+    if "eleven" in engine:
+        return ["xai", "openai"]
+    return ["xai", "openai"]
 
 
 async def _run_search_knowledge_base(project_id: UUID, tenant_id: UUID, query: str) -> Dict[str, Any]:
@@ -120,12 +136,21 @@ async def simulate_conversation(
     if not check_tenant_access(current_user, tenant_id):
         raise HTTPException(status_code=403, detail="Access denied to this project")
 
-    provider = _provider_for_engine(project["voice_engine"])
-    api_key = await resolve_provider_api_key(tenant_id, provider)
-    if not api_key:
+    provider = None
+    api_key = None
+    for candidate in _provider_candidates_for_engine(project["voice_engine"]):
+        candidate_key = await resolve_provider_api_key(tenant_id, candidate)
+        if candidate_key:
+            provider = candidate
+            api_key = candidate_key
+            break
+    if not api_key or not provider:
         raise HTTPException(
             status_code=400,
-            detail=f"Nessuna credenziale voice/{provider} per questo tenant - impossibile simulare la conversazione.",
+            detail=(
+                "Nessuna credenziale voice/xai o voice/openai per questo tenant "
+                "- impossibile simulare la conversazione."
+            ),
         )
 
     from openai import AsyncOpenAI
@@ -148,6 +173,7 @@ async def simulate_conversation(
     )
     chat_messages: List[Dict[str, Any]] = [
         {"role": "system", "content": body.prompt_a},
+        {"role": "system", "content": TOOL_RESULT_WAIT_INSTRUCTIONS},
         {"role": "system", "content": datetime_fact},
     ]
     chat_messages += [{"role": m.role, "content": m.content} for m in body.messages]
@@ -167,27 +193,29 @@ async def simulate_conversation(
         response = await _call_model(chat_messages)
         message = response.choices[0].message
 
-        # Un solo giro di tool-calling e' sufficiente per una prova
-        # rapida (non un loop agentic completo) - se il modello chiede
-        # search_knowledge_base, lo eseguiamo e richiediamo la risposta
-        # finale una volta sola.
-        if message.tool_calls:
+        # A tool can lead to a follow-up tool call. Continue until the model
+        # produces a final answer, with a bounded loop for a predictable UI
+        # request time.
+        for _ in range(4):
+            if not message.tool_calls:
+                break
             chat_messages.append({
                 "role": "assistant",
                 "content": message.content,
                 "tool_calls": [tc.model_dump() for tc in message.tool_calls],
             })
             for tool_call in message.tool_calls:
-                if tool_call.function.name != "search_knowledge_base":
-                    continue
                 import json as _json
 
                 try:
                     args = _json.loads(tool_call.function.arguments or "{}")
                 except _json.JSONDecodeError:
                     args = {}
-                result = await _run_search_knowledge_base(project_id, tenant_id, args.get("query", ""))
-                tool_calls_log.append(SimulateToolCall(name="search_knowledge_base", arguments=args, result=result))
+                if tool_call.function.name == "search_knowledge_base":
+                    result = await _run_search_knowledge_base(project_id, tenant_id, args.get("query", ""))
+                    tool_calls_log.append(SimulateToolCall(name="search_knowledge_base", arguments=args, result=result))
+                else:
+                    result = {"status": "error", "message": f"Unsupported simulation tool: {tool_call.function.name}"}
                 chat_messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call.id,

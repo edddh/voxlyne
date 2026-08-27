@@ -82,13 +82,20 @@ def build_tools(scenario_config: dict | None = None) -> list[dict[str, Any]]:
             # gestito, non gated come gli altri sotto: sempre offerto,
             # nessuna configurazione esterna richiesta. Il gestore
             # (runtime_workers/realtime_service.py::call_tool) segna la
-            # chiamata per la finalizzazione (_finalize_call_record); non
-            # esiste un trasferimento SIP reale, quindi il modello deve
-            # comunque congedarsi e chiudere la chiamata dopo averlo
-            # chiamato, non restare in attesa.
+            # chiamata per la finalizzazione (_finalize_call_record) e, se
+            # il progetto ha un numero configurato
+            # (output_config.transfer.human_operator_number), tenta un
+            # trasferimento SIP reale via xAI refer API. Se non c'e' un
+            # numero configurato (o il trasferimento fallisce), non esiste
+            # un trasferimento reale e il modello deve congedarsi e
+            # chiudere la chiamata da solo - per questo la descrizione
+            # sotto non deve MAI dire "non posso trasferire": e' vero solo
+            # a volte, e il modello lo diceva anche quando il trasferimento
+            # stava davvero avvenendo (bug trovato il 19/08 nel primo test
+            # reale con maintainer).
             "type": "function",
             "name": "request_human_operator",
-            "description": "Call this the moment the caller explicitly asks to speak with a human operator/person instead of the AI assistant, or clearly states the AI cannot help them. After calling it, tell the caller a human will follow up (you cannot transfer the call live), say goodbye, and end the conversation - do not keep trying to help with the AI.",
+            "description": "Call this the moment the caller explicitly asks to speak with a human operator/person instead of the AI assistant, or clearly states the AI cannot help them. Immediately after calling it, say a short single sentence like 'Un attimo, la metto in contatto' and then stop talking - do not say goodbye and do not claim you cannot transfer the call: the transfer may be happening right now. If the caller is still talking to you after that, the transfer was not possible - only then tell them a human will follow up later and say goodbye.",
             "parameters": {
                 "type": "object",
                 "properties": {},

@@ -79,6 +79,13 @@ SEARCH_KB_TOOL = {
     },
 }
 
+TOOL_RESULT_WAIT_INSTRUCTIONS = (
+    "Regola inderogabile: se la richiesta richiede il tool search_knowledge_base, "
+    "non dire alcun fatto, indirizzo, orario, disponibilita' o conclusione prima "
+    "di riceverne il risultato. Chiama il tool, attendi l'output e solo dopo "
+    "rispondi usando quel risultato."
+)
+
 
 async def _handle_function_call(
     xai_ws: Any, websocket: WebSocket, event: dict, project_id: UUID, tenant_id: UUID,
@@ -186,7 +193,7 @@ async def simulate_voice(websocket: WebSocket, project_id: UUID, token: str = Qu
     if first.get("type") != "start" or not first.get("instructions"):
         await websocket.close(code=4400, reason="Expected a 'start' message with instructions")
         return
-    instructions = first["instructions"]
+    instructions = f"{first['instructions']}\n\n{TOOL_RESULT_WAIT_INSTRUCTIONS}"
 
     query = urlencode({"model": "grok-voice-latest"})
     xai_ws_url = f"{XAI_REALTIME_URL}?{query}"

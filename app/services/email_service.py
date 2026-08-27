@@ -1,6 +1,6 @@
 """
 Ascolta - Email Service
-Sends PDF reports via email after interview completion
+Transactional email sender for reports and account flows.
 """
 
 import asyncio
@@ -36,7 +36,6 @@ class EmailService:
             self.settings.email_enabled
             and self.settings.smtp_host is not None
             and self.settings.email_from is not None
-            and self.settings.email_to_default is not None
         )
 
     async def send_candidate_report(
@@ -92,7 +91,7 @@ class EmailService:
             filename = f"Colloquio_{safe_name}.pdf" if safe_name else "Colloquio.pdf"
 
             # Send email
-            self._send_email(
+            await self._send_email(
                 to_email=to_email,
                 subject=subject,
                 body=body,
@@ -144,15 +143,54 @@ class EmailService:
 
         return "\n".join(lines)
 
-    def _send_email(
+    async def send_password_reset_email(
+        self,
+        to_email: str,
+        reset_url: str,
+        full_name: Optional[str] = None,
+    ) -> bool:
+        """Send password reset email."""
+        if not self.is_enabled():
+            logger.warning("Email service not enabled or not configured")
+            return False
+
+        display_name = full_name or to_email
+        subject = "Reset password Ascolta"
+        body = self._build_password_reset_body(display_name=display_name, reset_url=reset_url)
+
+        try:
+            await self._send_email(
+                to_email=to_email,
+                subject=subject,
+                body=body,
+            )
+            logger.info(f"Password reset email sent to {to_email}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to send password reset email: {e}", exc_info=True)
+            raise EmailServiceError(f"Password reset email sending failed: {e}") from e
+
+    def _build_password_reset_body(self, display_name: str, reset_url: str) -> str:
+        """Build plain text body for password reset."""
+        return "\n".join([
+            f"Ciao {display_name},",
+            "",
+            "Abbiamo ricevuto una richiesta di reset della password per il tuo account Ascolta.",
+            "Apri questo link per impostare una nuova password:",
+            reset_url,
+            "",
+            "Se non hai richiesto tu il reset, puoi ignorare questa email.",
+        ])
+
+    async def _send_email(
         self,
         to_email: str,
         subject: str,
         body: str,
-        pdf_bytes: bytes,
-        pdf_filename: str,
+        pdf_bytes: Optional[bytes] = None,
+        pdf_filename: Optional[str] = None,
     ) -> None:
-        """Send email with PDF attachment using SMTP."""
+        """Send email with optional PDF attachment using SMTP."""
         # Create message
         msg = MIMEMultipart()
         msg["From"] = self.settings.email_from
@@ -162,14 +200,14 @@ class EmailService:
         # Attach body
         msg.attach(MIMEText(body, "plain", "utf-8"))
 
-        # Attach PDF
-        pdf_part = MIMEApplication(pdf_bytes, _subtype="pdf")
-        pdf_part.add_header(
-            "Content-Disposition",
-            "attachment",
-            filename=pdf_filename,
-        )
-        msg.attach(pdf_part)
+        if pdf_bytes is not None and pdf_filename:
+            pdf_part = MIMEApplication(pdf_bytes, _subtype="pdf")
+            pdf_part.add_header(
+                "Content-Disposition",
+                "attachment",
+                filename=pdf_filename,
+            )
+            msg.attach(pdf_part)
 
         # Send via SMTP - offloaded to a thread (18/08 fix): smtplib is a
         # blocking, synchronous library (real network I/O - TLS handshake,
@@ -185,8 +223,16 @@ class EmailService:
             raise
 
     def _send_via_smtp(self, msg: MIMEMultipart, to_email: str) -> None:
-        with smtplib.SMTP(self.settings.smtp_host, self.settings.smtp_port) as server:
-            server.starttls()
+        smtp_security = self.settings.smtp_security.lower()
+
+        if smtp_security == "ssl":
+            server_factory = smtplib.SMTP_SSL
+        else:
+            server_factory = smtplib.SMTP
+
+        with server_factory(self.settings.smtp_host, self.settings.smtp_port) as server:
+            if smtp_security == "starttls":
+                server.starttls()
             if self.settings.smtp_user and self.settings.smtp_password:
                 server.login(self.settings.smtp_user, self.settings.smtp_password)
             server.send_message(msg)

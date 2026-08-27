@@ -593,7 +593,7 @@ function ProjectConfig() {
     {
       key: 'telephony',
       label: 'Telefonia',
-      children: <TelephonyTab projectId={projectId} />,
+      children: <TelephonyTab projectId={projectId} project={project} />,
     },
     {
       key: 'knowledge-base',

@@ -847,19 +847,6 @@ function Projects() {
           </Row>
           <Form.Item noStyle shouldUpdate={(prev, curr) => prev.voice_engine !== curr.voice_engine}>
             {({ getFieldValue }) =>
-              NEW_VOICE_ENGINES.includes(getFieldValue('voice_engine')) ? (
-                <Alert
-                  type="warning"
-                  showIcon
-                  style={{ marginBottom: 16 }}
-                  message="Provider in fase di completamento"
-                  description="Questo motore vocale è stato importato da earlier-prototype (voice_core/runtime) ma non è ancora collegato alla pipeline di simulazione di test: selezionabile e salvabile, ma una chiamata in ingresso userà ancora il fallback finché l'integrazione non è completata (vedi README, Milestone 5)."
-                />
-              ) : null
-            }
-          </Form.Item>
-          <Form.Item noStyle shouldUpdate={(prev, curr) => prev.voice_engine !== curr.voice_engine}>
-            {({ getFieldValue }) =>
               getFieldValue('voice_engine') === 'vapi' ? (
                 <>
                   <Form.Item name="vapi_assistant_id" label="Vapi Assistant ID">

@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  Card, Button, Space, Input, message, Typography, Tabs, Row, Col, Spin, Alert, Tag, Divider, Switch, List, Popconfirm,
+  Card, Button, Space, Input, Select, message, Typography, Tabs, Row, Col, Spin, Alert, Tag, Divider, Switch, List, Popconfirm,
 } from 'antd'
 import { SaveOutlined, ArrowLeftOutlined, RocketOutlined, MessageOutlined, PhoneOutlined, UndoOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons'
 import * as projectsApi from '../api/projects'
 import * as agentVersionsApi from '../api/agentVersions'
+import * as elevenLabsApi from '../api/elevenlabs'
 import PromptDiff, { normalizeNewlines } from '../components/PromptDiff'
 import SimulateChat from '../components/SimulateChat'
 import SimulateVoiceCall from '../components/SimulateVoiceCall'
@@ -64,12 +65,20 @@ function ProjectEdit() {
   const [customVariables, setCustomVariables] = useState({})
   const [savedCustomVariables, setSavedCustomVariables] = useState({})
   const [savingVariables, setSavingVariables] = useState(false)
+  const [elevenLlms, setElevenLlms] = useState([])
+  const [selectedElevenLlm, setSelectedElevenLlm] = useState(null)
+  const [loadingElevenLlms, setLoadingElevenLlms] = useState(false)
+  const [savingElevenLlm, setSavingElevenLlm] = useState(false)
   const promptARef = useRef(null)
   const promptBRef = useRef(null)
 
   useEffect(() => {
     loadProject()
   }, [id])
+
+  useEffect(() => {
+    if (project?.voice_engine === 'elevenlabs_agent') loadElevenLlms()
+  }, [project?.id, project?.voice_engine])
 
   const publishedVersion = versions.find((v) => v.status === 'published')
   // Bug corretto 19/08 (maintainer: "non capisco cosa devo fare per
@@ -124,6 +133,35 @@ function ProjectEdit() {
       navigate('/projects')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadElevenLlms = async () => {
+    setLoadingElevenLlms(true)
+    try {
+      const llms = await elevenLabsApi.getProjectLlms(id)
+      setElevenLlms(llms)
+      const config = typeof project?.voice_provider_config === 'string'
+        ? JSON.parse(project.voice_provider_config || '{}')
+        : (project?.voice_provider_config || {})
+      setSelectedElevenLlm(config?.elevenlabs?.llm || 'qwen35-397b-a17b')
+    } catch (error) {
+      message.error(error.response?.data?.detail || 'Impossibile leggere i modelli ElevenLabs')
+    } finally {
+      setLoadingElevenLlms(false)
+    }
+  }
+
+  const saveElevenLlm = async () => {
+    if (!selectedElevenLlm) return
+    setSavingElevenLlm(true)
+    try {
+      await elevenLabsApi.updateProjectLlm(id, selectedElevenLlm)
+      message.success('Modello ElevenLabs aggiornato sull’agente reale')
+    } catch (error) {
+      message.error(error.response?.data?.detail || 'Impossibile aggiornare il modello ElevenLabs')
+    } finally {
+      setSavingElevenLlm(false)
     }
   }
 
@@ -647,6 +685,39 @@ function ProjectEdit() {
           </Card>
         </Col>
 
+        {project?.voice_engine === 'elevenlabs_agent' && (
+          <Col span={24}>
+            <Card title="Modello LLM ElevenLabs">
+              <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+                Elenco sincronizzato dal workspace ElevenLabs. La modifica viene applicata subito all'agente telefonico.
+              </Text>
+              <Space wrap>
+                <Select
+                  value={selectedElevenLlm}
+                  loading={loadingElevenLlms}
+                  onChange={setSelectedElevenLlm}
+                  style={{ minWidth: 300, maxWidth: '100%' }}
+                  options={elevenLlms.map((model) => ({
+                    value: model.llm,
+                    label: model.deprecation_info?.is_deprecated
+                      ? `${model.llm} (deprecato)`
+                      : model.llm,
+                    disabled: model.deprecation_info?.is_in_fallback_period,
+                  }))}
+                />
+                <Button
+                  type="primary"
+                  onClick={saveElevenLlm}
+                  loading={savingElevenLlm}
+                  disabled={!selectedElevenLlm}
+                >
+                  Applica
+                </Button>
+              </Space>
+            </Card>
+          </Col>
+        )}
+
         <Col span={24}>
           <Card
             title={
@@ -855,6 +926,7 @@ function ProjectEdit() {
         projectId={id}
         promptA={substituteCustomVariables(promptA, customVariables)}
         consentMessage={substituteCustomVariables(consentMessage, customVariables)}
+        voiceEngine={project?.voice_engine}
       />
     </div>
   )

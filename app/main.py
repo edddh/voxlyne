@@ -21,7 +21,7 @@ from app.database.db import (
     run_migrations,
 )
 from app.models.schemas import ErrorResponse, HealthResponse
-from app.routers import agent_versions, analytics, api, auth, calendar, calls, credentials, crm, health, knowledge_base, outbound, project_config, prompt_blocks, prompts, simulate_voice, simulation, telephony_provisioning, templates, tenants, users, webhook, webhook_vapi, webhook_xai
+from app.routers import agent_versions, analytics, api, auth, calendar, calls, credentials, crm, elevenlabs, health, knowledge_base, outbound, project_config, prompt_blocks, prompts, simulate_voice, simulation, telephony_provisioning, templates, tenants, users, webhook, webhook_vapi, webhook_xai
 from app.services.rag.scheduler import RagRecrawlScheduler
 from app.services.session_cleanup import SessionCleanup
 
@@ -224,6 +224,9 @@ app.include_router(webhook_vapi.router, prefix="/api", tags=["Webhook Vapi"])
 
 # xAI SIP-direct webhook router (Grok priority, 18/08)
 app.include_router(webhook_xai.router, prefix="/api", tags=["Webhook xAI"])
+
+# ElevenLabs agent tool + post-call webhook routes
+app.include_router(elevenlabs.router, tags=["ElevenLabs"])
 
 # Credentials router (M5.5: Service credentials management)
 app.include_router(credentials.router, prefix="/api", tags=["Credentials"])

@@ -1,5 +1,11 @@
 # Ascolta - Docker Compose
 # Milestone 2: Multi-Project + Structured Output (app + postgres + minio)
+#
+# IMPORTANT:
+# - This compose file is for local/containerized runs.
+# - The production service currently serving ascolta.example.invalid.com is
+#   ascolta.service behind nginx on 127.0.0.1:8091 (see docs/live-ops.md).
+# - Do not assume `docker compose up` updates the live site.
 
 version: '3.8'
 

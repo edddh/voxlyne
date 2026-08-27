@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from app.database.db import get_database
 from app.middleware.auth_middleware import CurrentUser, check_tenant_access, require_roles
 from app.services.agent_versions import list_versions, publish_version, rollback_to_version
+from app.services import elevenlabs_provisioning
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,26 @@ async def _assert_project_access(project_id: UUID, current_user: CurrentUser) ->
         raise HTTPException(status_code=404, detail="Project not found")
 
 
+async def _sync_elevenlabs_agent(project_id: UUID) -> None:
+    """Keep the direct ElevenLabs agent aligned with the published snapshot."""
+    db = get_database()
+    project = await db.fetch_one(
+        "SELECT voice_engine FROM projects WHERE id = :id",
+        {"id": str(project_id)},
+    )
+    if not project or project["voice_engine"] != "elevenlabs_agent":
+        return
+
+    try:
+        await elevenlabs_provisioning.provision_agent_for_project(project_id)
+    except Exception as exc:
+        logger.exception("ElevenLabs sync failed after publishing project=%s", project_id)
+        raise HTTPException(
+            status_code=502,
+            detail="Versione pubblicata, ma la sincronizzazione con ElevenLabs non e' riuscita. Riprova il publish.",
+        ) from exc
+
+
 # ===========================================
 # Agent versions
 # ===========================================
@@ -117,6 +138,7 @@ async def publish(
         result = await publish_version(project_id, created_by=current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    await _sync_elevenlabs_agent(project_id)
 
     versions = await list_versions(project_id)
     published = next(v for v in versions if v["id"] == result["id"])
@@ -138,6 +160,7 @@ async def rollback(
         await rollback_to_version(project_id, version_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    await _sync_elevenlabs_agent(project_id)
 
     versions = await list_versions(project_id)
     published = next((v for v in versions if v["id"] == version_id), None)

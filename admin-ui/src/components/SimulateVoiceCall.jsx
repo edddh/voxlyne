@@ -17,7 +17,8 @@ function buildWsUrl(path) {
   return `${protocol}//${window.location.host}${path}`
 }
 
-const SAMPLE_RATE = 24000
+const XAI_SAMPLE_RATE = 24000
+const ELEVEN_SAMPLE_RATE = 16000
 // Stesso limite imposto lato server (app/routers/simulate_voice.py::
 // SIMULATION_SILENCE_TIMEOUT_SECONDS) - qui solo per mostrare il conto
 // alla rovescia, il taglio effettivo lo fa il backend. maintainer, 19/08:
@@ -32,6 +33,14 @@ function floatTo16BitPCM(float32) {
     int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff
   }
   return int16
+}
+
+function int16ToFloat32(int16) {
+  const float32 = new Float32Array(int16.length)
+  for (let i = 0; i < int16.length; i++) {
+    float32[i] = int16[i] / (int16[i] < 0 ? 0x8000 : 0x7fff)
+  }
+  return float32
 }
 
 function base64FromInt16(int16) {
@@ -61,12 +70,14 @@ function int16FromBase64(base64) {
  * l'API realtime a WebSocket, quindi qui si parla davvero con quella,
  * non con un sostituto.
  */
-function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage }) {
+function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, voiceEngine }) {
   const [status, setStatus] = useState('idle') // idle | connecting | live | error | ended
   const [error, setError] = useState(null)
   const [transcript, setTranscript] = useState([])
   const [timedOut, setTimedOut] = useState(false)
   const [remainingSeconds, setRemainingSeconds] = useState(SILENCE_TIMEOUT_SECONDS)
+  const elevenConversationIdRef = useRef(null)
+  const elevenToolTraceRef = useRef(new Set())
   const wsRef = useRef(null)
   const audioContextRef = useRef(null)
   const streamRef = useRef(null)
@@ -74,7 +85,10 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage }
   const playheadRef = useRef(0)
   const transcriptEndRef = useRef(null)
   const countdownRef = useRef(null)
+  const elevenToolTracePollRef = useRef(null)
   const lastActivityRef = useRef(Date.now())
+  const isXaiVoiceSimulation = !voiceEngine || voiceEngine === 'xai_sip_direct'
+  const isElevenVoiceSimulation = voiceEngine === 'elevenlabs_agent'
 
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
@@ -111,7 +125,41 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage }
       clearInterval(countdownRef.current)
       countdownRef.current = null
     }
+    if (elevenToolTracePollRef.current) {
+      clearInterval(elevenToolTracePollRef.current)
+      elevenToolTracePollRef.current = null
+    }
   }, [])
+
+  const refreshElevenToolTrace = useCallback(async () => {
+    const conversationId = elevenConversationIdRef.current
+    if (!conversationId || !isElevenVoiceSimulation) return
+    const token = localStorage.getItem('accessToken')
+    try {
+      const response = await fetch(`/api/elevenlabs/projects/${projectId}/conversations/${encodeURIComponent(conversationId)}/tool-trace`, {
+        headers: { Authorization: token ? `Bearer ${token}` : '' },
+      })
+      if (!response.ok) return
+      const body = await response.json()
+      for (const toolCall of body.tool_calls || []) {
+        const key = toolCall.request_id || JSON.stringify(toolCall)
+        if (elevenToolTraceRef.current.has(key)) continue
+        elevenToolTraceRef.current.add(key)
+        const result = toolCall.result?.result || toolCall.result || {}
+        setTranscript((prev) => [...prev, {
+          role: 'tool',
+          name: toolCall.name || 'tool',
+          arguments: toolCall.arguments || {},
+          result: {
+            status: result.status || toolCall.status || 'ok',
+            results: result.results || [],
+          },
+        }])
+      }
+    } catch {
+      // A trace is diagnostic UI only; it must not interrupt the call.
+    }
+  }, [isElevenVoiceSimulation, projectId])
 
   const playChunk = useCallback((base64Audio) => {
     const ctx = audioContextRef.current
@@ -120,7 +168,7 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage }
     const float32 = new Float32Array(int16.length)
     for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / (int16[i] < 0 ? 0x8000 : 0x7fff)
 
-    const buffer = ctx.createBuffer(1, float32.length, SAMPLE_RATE)
+    const buffer = ctx.createBuffer(1, float32.length, ctx.sampleRate || XAI_SAMPLE_RATE)
     buffer.copyToChannel(float32, 0)
     const source = ctx.createBufferSource()
     source.buffer = buffer
@@ -138,20 +186,51 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage }
     setTranscript([])
     setTimedOut(false)
     setRemainingSeconds(SILENCE_TIMEOUT_SECONDS)
+    elevenToolTraceRef.current.clear()
     playheadRef.current = 0
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      // Avoid re-transcribing the agent audio played through speakers as user input.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      })
       streamRef.current = stream
 
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE })
+      const sampleRate = isElevenVoiceSimulation ? ELEVEN_SAMPLE_RATE : XAI_SAMPLE_RATE
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate })
       audioContextRef.current = audioContext
 
-      const token = localStorage.getItem('accessToken')
-      const ws = new WebSocket(buildWsUrl(`/ws/projects/${projectId}/simulate-voice?token=${encodeURIComponent(token)}`))
+      let ws
+      if (isElevenVoiceSimulation) {
+        const token = localStorage.getItem('accessToken')
+        const response = await fetch(`/api/elevenlabs/projects/${projectId}/signed-url`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: token ? `Bearer ${token}` : '',
+          },
+        })
+        const body = await response.json().catch(() => ({}))
+        if (!response.ok || !body?.signed_url) {
+          throw new Error(body?.detail || 'Impossibile aprire una sessione ElevenLabs')
+        }
+        elevenConversationIdRef.current = body.conversation_id || null
+        ws = new WebSocket(body.signed_url)
+      } else {
+        const token = localStorage.getItem('accessToken')
+        ws = new WebSocket(buildWsUrl(`/ws/projects/${projectId}/simulate-voice?token=${encodeURIComponent(token)}`))
+      }
       wsRef.current = ws
 
       ws.onopen = () => {
+        if (isElevenVoiceSimulation) {
+          // Eleven must use its provisioned agent configuration exactly:
+          // it contains the webhook tools, V3 voice and the production
+          // prompt. Overriding the prompt here made the browser preview
+          // differ from the real Eleven phone agent.
+          ws.send(JSON.stringify({ type: 'conversation_initiation_client_data' }))
+          return
+        }
         ws.send(JSON.stringify({ type: 'start', instructions: promptA, consent_message: consentMessage }))
       }
 
@@ -182,12 +261,47 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage }
           processor.onaudioprocess = (e) => {
             const input = e.inputBuffer.getChannelData(0)
             const int16 = floatTo16BitPCM(input)
-            if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({
-                type: 'input_audio_buffer.append',
-                audio: base64FromInt16(int16),
-              }))
+            if (ws.readyState !== WebSocket.OPEN) return
+            ws.send(JSON.stringify({
+              type: 'input_audio_buffer.append',
+              audio: base64FromInt16(int16),
+            }))
+          }
+          source.connect(processor)
+          processor.connect(audioContext.destination)
+          return
+        }
+        if (msg.type === 'conversation_initiation_metadata') {
+          elevenConversationIdRef.current = msg.conversation_initiation_metadata_event?.conversation_id
+            || msg.conversation_id
+            || elevenConversationIdRef.current
+          setStatus('live')
+          lastActivityRef.current = Date.now()
+          countdownRef.current = setInterval(() => {
+            const elapsed = Math.floor((Date.now() - lastActivityRef.current) / 1000)
+            if (elapsed >= SILENCE_TIMEOUT_SECONDS) {
+              ws.close()
+              setTimedOut(true)
+              setStatus('ended')
+              return
             }
+            setRemainingSeconds(Math.max(0, SILENCE_TIMEOUT_SECONDS - elapsed))
+          }, 1000)
+          // Eleven executes webhooks server-to-server, so no websocket
+          // event reaches the browser at dispatch time. Poll its official
+          // conversation trace while the test is live to show the real tool
+          // result before the agent's follow-up answer arrives.
+          elevenToolTracePollRef.current = setInterval(refreshElevenToolTrace, 2000)
+          refreshElevenToolTrace()
+
+          const source = audioContext.createMediaStreamSource(stream)
+          const processor = audioContext.createScriptProcessor(4096, 1, 1)
+          processorRef.current = processor
+          processor.onaudioprocess = (e) => {
+            const input = e.inputBuffer.getChannelData(0)
+            const int16 = floatTo16BitPCM(input)
+            if (ws.readyState !== WebSocket.OPEN) return
+            ws.send(JSON.stringify({ user_audio_chunk: base64FromInt16(int16) }))
           }
           source.connect(processor)
           processor.connect(audioContext.destination)
@@ -197,12 +311,59 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage }
           playChunk(msg.delta)
           return
         }
+        if (msg.type === 'audio' && msg.audio_event?.audio_base_64) {
+          playChunk(msg.audio_event.audio_base_64)
+          return
+        }
         if (msg.type === 'conversation.item.input_audio_transcription.completed') {
           appendTranscript('user', msg.transcript || '')
           return
         }
+        if (msg.type === 'user_transcript') {
+          appendTranscript('user', msg.user_transcription_event?.user_transcript || '')
+          return
+        }
         if (msg.type === 'response.output_audio_transcript.done') {
           appendTranscript('assistant', msg.transcript || '')
+          return
+        }
+        if (msg.type === 'agent_response') {
+          appendTranscript('assistant', msg.agent_response_event?.agent_response || '')
+          refreshElevenToolTrace()
+          return
+        }
+        if (msg.type === 'agent_tool_response_full_payload') {
+          const tool = msg.agent_tool_response_full_payload || {}
+          let result = tool.full_tool_result
+          try {
+            result = typeof result === 'string' ? JSON.parse(result) : result
+          } catch {
+            result = { status: tool.is_error ? 'error' : 'ok' }
+          }
+          const key = tool.tool_call_id || `${tool.tool_name}:${JSON.stringify(result)}`
+          if (!elevenToolTraceRef.current.has(key)) {
+            elevenToolTraceRef.current.add(key)
+            const nested = result?.result || result || {}
+            setTranscript((prev) => [...prev, {
+              role: 'tool',
+              name: tool.tool_name || 'tool',
+              arguments: tool.parameters || {},
+              result: {
+                status: nested.status || (tool.is_error ? 'error' : 'ok'),
+                results: nested.results || [],
+              },
+            }])
+          }
+          return
+        }
+        if (msg.type === 'agent_tool_response') {
+          // Il payload completo puo' arrivare subito dopo questo evento.
+          // Aggiorna comunque il trace, che contiene il risultato canonico.
+          refreshElevenToolTrace()
+          return
+        }
+        if (msg.type === 'ping' && msg.ping_event?.event_id && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'pong', event_id: msg.ping_event.event_id }))
           return
         }
         if (msg.type === 'ascolta.tool_call') {
@@ -227,6 +388,12 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage }
       }
 
       ws.onclose = (event) => {
+        // Eleven may publish the final webhook trace only after it closes
+        // the conversation. Keep the id through cleanup and fetch once
+        // more, so ending a test cannot hide its final tool result.
+        if (isElevenVoiceSimulation) {
+          window.setTimeout(refreshElevenToolTrace, 1200)
+        }
         if (status === 'live' || status === 'connecting') {
           if (event.code >= 4400) {
             setError(event.reason || 'Connessione rifiutata')
@@ -241,12 +408,16 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage }
       setStatus('error')
       cleanup()
     }
-  }, [projectId, promptA, consentMessage, playChunk, cleanup, status, appendTranscript])
+  }, [projectId, promptA, consentMessage, playChunk, cleanup, status, appendTranscript, isElevenVoiceSimulation, refreshElevenToolTrace])
 
   const stop = useCallback(() => {
     cleanup()
     setStatus('ended')
-  }, [cleanup])
+    if (isElevenVoiceSimulation) {
+      window.setTimeout(refreshElevenToolTrace, 1200)
+      window.setTimeout(refreshElevenToolTrace, 2600)
+    }
+  }, [cleanup, isElevenVoiceSimulation, refreshElevenToolTrace])
 
   const handleClose = () => {
     cleanup()
@@ -259,8 +430,12 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage }
       <Alert
         type="info"
         showIcon
-        message="Modello vocale reale (grok-voice-latest), non un sostituto testuale"
-        description={`Usa il microfono del browser e il prompt attuale nell'editor (anche non salvato), con accesso alla knowledge base del progetto. Non ha accesso agli altri strumenti (Cal.com, ecc.). Si chiude automaticamente dopo ${SILENCE_TIMEOUT_SECONDS} secondi di silenzio.`}
+        message={isElevenVoiceSimulation
+          ? 'Motore vocale reale ElevenLabs Agent, non un sostituto testuale'
+          : 'Motore vocale reale xAI realtime, non un sostituto testuale'}
+        description={isElevenVoiceSimulation
+          ? `Usa il microfono del browser e la configurazione pubblicata dell'agente ElevenLabs, inclusi tool e voce V3. Si chiude automaticamente dopo ${SILENCE_TIMEOUT_SECONDS} secondi di silenzio.`
+          : `Usa il microfono del browser e il prompt attuale nell'editor (anche non salvato), con accesso alla knowledge base del progetto. Non ha accesso agli altri strumenti (Cal.com, ecc.). Si chiude automaticamente dopo ${SILENCE_TIMEOUT_SECONDS} secondi di silenzio.`}
         style={{ marginBottom: 16 }}
       />
 
@@ -302,7 +477,9 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage }
                 {t.role === 'tool' ? (
                   <Text type="secondary" style={{ fontFamily: 'monospace', fontSize: 12 }}>
                     🔧 {t.name}({JSON.stringify(t.arguments)}) → {t.result?.status}
-                    {t.result?.results?.length ? ` (${t.result.results.length} risultati)` : ''}
+                    {t.result?.results?.length
+                      ? ` (${t.result.results.length} risultati)`
+                      : ''}
                   </Text>
                 ) : (
                   // List.Item e' un flex container: senza un wrapper i due

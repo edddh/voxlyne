@@ -71,6 +71,10 @@ class AuthService:
             logger.error(f"Password verification error: {e}")
             return False
 
+    def hash_password_reset_token(self, token: str) -> str:
+        """Hash a password reset token for at-rest storage."""
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
     # ===========================================
     # JWT Token Generation
     # ===========================================
@@ -367,6 +371,127 @@ class AuthService:
         except Exception as e:
             logger.error(f"Error cleaning up expired tokens: {e}")
             return 0
+
+    async def create_password_reset_token(self, user_id: UUID) -> tuple[str, datetime]:
+        """
+        Create and store a single-use password reset token.
+        """
+        db = get_database()
+        token = secrets.token_urlsafe(32)
+        token_hash = self.hash_password_reset_token(token)
+        expires_at = datetime.now(timezone.utc) + timedelta(
+            minutes=self.settings.password_reset_token_expire_minutes
+        )
+
+        async with db.transaction():
+            await db.execute(
+                "DELETE FROM password_reset_tokens WHERE user_id = :user_id",
+                {"user_id": str(user_id)},
+            )
+            await db.execute(
+                """
+                INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+                VALUES (:user_id, :token_hash, :expires_at)
+                """,
+                {
+                    "user_id": str(user_id),
+                    "token_hash": token_hash,
+                    "expires_at": expires_at,
+                },
+            )
+
+        return token, expires_at
+
+    async def get_active_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
+        """
+        Find an active user by email with an RLS-safe lookup.
+        """
+        db = get_database()
+
+        async with db.transaction():
+            await db.execute("SELECT set_config('app.is_super_admin', 'true', true)")
+            user = await db.fetch_one(
+                """
+                SELECT id, email, full_name, is_active
+                FROM users
+                WHERE email = :email
+                """,
+                {"email": email.lower()},
+            )
+
+        if not user or not user["is_active"]:
+            return None
+
+        return {
+            "id": UUID(str(user["id"])),
+            "email": user["email"],
+            "full_name": user["full_name"],
+            "is_active": user["is_active"],
+        }
+
+    async def consume_password_reset_token(self, token: str) -> Optional[UUID]:
+        """
+        Mark a password reset token as used and return its user_id.
+        """
+        db = get_database()
+        token_hash = self.hash_password_reset_token(token)
+        now = datetime.now(timezone.utc)
+
+        async with db.transaction():
+            row = await db.fetch_one(
+                """
+                SELECT user_id
+                FROM password_reset_tokens
+                WHERE token_hash = :token_hash
+                  AND used_at IS NULL
+                  AND expires_at > :now
+                FOR UPDATE
+                """,
+                {"token_hash": token_hash, "now": now},
+            )
+
+            if not row:
+                return None
+
+            await db.execute(
+                """
+                UPDATE password_reset_tokens
+                SET used_at = :used_at
+                WHERE token_hash = :token_hash
+                """,
+                {"used_at": now, "token_hash": token_hash},
+            )
+
+        return UUID(str(row["user_id"]))
+
+    async def set_user_password(self, user_id: UUID, new_password: str) -> bool:
+        """
+        Update a user's password with an RLS-safe write.
+        """
+        db = get_database()
+        password_hash = self.hash_password(new_password)
+
+        async with db.transaction():
+            await db.execute("SELECT set_config('app.is_super_admin', 'true', true)")
+            await db.execute(
+                """
+                UPDATE users
+                SET password_hash = :password_hash, updated_at = :updated_at
+                WHERE id = :user_id
+                """,
+                {
+                    "password_hash": password_hash,
+                    "updated_at": datetime.now(timezone.utc),
+                    "user_id": str(user_id),
+                },
+            )
+
+        await self.revoke_all_user_tokens(user_id)
+        await db.execute(
+            "DELETE FROM password_reset_tokens WHERE user_id = :user_id",
+            {"user_id": str(user_id)},
+        )
+        return True
 
     # ===========================================
     # User Authentication

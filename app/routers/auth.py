@@ -12,14 +12,17 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from app.config import get_settings
 from app.middleware.auth_middleware import CurrentUser, get_current_user_rls_scoped
 from app.models.schemas import (
+    ForgotPasswordRequest,
     LoginRequest,
     LoginResponse,
+    ResetPasswordWithTokenRequest,
     RefreshTokenRequest,
     RefreshTokenResponse,
     UserResponse,
     UserRole,
 )
 from app.services.auth_service import AuthService
+from app.services.email_service import EmailService, EmailServiceError
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -155,6 +158,81 @@ async def refresh_token(data: RefreshTokenRequest):
         token_type="bearer",
         expires_in=settings.jwt_access_token_expire_minutes * 60,
     )
+
+
+@router.post("/forgot-password")
+async def forgot_password(data: ForgotPasswordRequest):
+    """
+    Request a password reset email.
+
+    Always returns success for unknown users to avoid email enumeration.
+    """
+    auth_service = AuthService()
+    email_service = EmailService()
+
+    if not email_service.is_enabled():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Email service not configured",
+        )
+
+    user = await auth_service.get_active_user_by_email(data.email)
+    if not user:
+        return {
+            "success": True,
+            "message": "If the account exists, a reset email has been sent.",
+        }
+
+    token, _ = await auth_service.create_password_reset_token(user["id"])
+    base_url = (settings.password_reset_base_url or settings.webhook_base_url).rstrip("/")
+    reset_url = f"{base_url}/login?reset_token={token}"
+
+    try:
+        await email_service.send_password_reset_email(
+            to_email=user["email"],
+            reset_url=reset_url,
+            full_name=user.get("full_name"),
+        )
+    except EmailServiceError:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to send reset email",
+        ) from None
+
+    return {
+        "success": True,
+        "message": "If the account exists, a reset email has been sent.",
+    }
+
+
+@router.post("/reset-password")
+async def reset_password_with_token(data: ResetPasswordWithTokenRequest):
+    """
+    Reset password using a single-use emailed token.
+    """
+    auth_service = AuthService()
+
+    if len(data.new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be at least 8 characters",
+        )
+
+    user_id = await auth_service.consume_password_reset_token(data.token)
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token",
+        )
+
+    await auth_service.set_user_password(user_id, data.new_password)
+
+    logger.info(f"Password reset completed for user: {user_id}")
+
+    return {
+        "success": True,
+        "message": "Password reset completed. Please log in.",
+    }
 
 
 @router.post("/logout")

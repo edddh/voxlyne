@@ -26,3 +26,16 @@ export const changePassword = async (currentPassword, newPassword) => {
   })
   return response.data
 }
+
+export const requestPasswordReset = async (email) => {
+  const response = await client.post('/api/auth/forgot-password', { email })
+  return response.data
+}
+
+export const confirmPasswordReset = async (token, newPassword) => {
+  const response = await client.post('/api/auth/reset-password', {
+    token,
+    new_password: newPassword,
+  })
+  return response.data
+}

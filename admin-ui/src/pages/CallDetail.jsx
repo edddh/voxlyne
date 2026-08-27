@@ -9,12 +9,10 @@ import {
 } from '@ant-design/icons'
 import * as callsApi from '../api/calls'
 import { BRAND } from '../main'
-import { useAuth } from '../hooks/useAuth'
 
 const { Title, Text, Paragraph } = Typography
 
 function CallDetail() {
-  const { isSuperAdmin } = useAuth()
   const { id } = useParams()
   const navigate = useNavigate()
   const [call, setCall] = useState(null)
@@ -80,15 +78,38 @@ function CallDetail() {
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
+  const collapseProgressiveTranscript = (transcript) => {
+    const collapsed = []
+    for (const msg of transcript || []) {
+      const previous = collapsed[collapsed.length - 1]
+      const currentContent = (msg?.content || '').trim()
+      const previousContent = (previous?.content || '').trim()
+      if (
+        previous &&
+        previous.role === msg.role &&
+        currentContent &&
+        previousContent &&
+        (currentContent === previousContent || currentContent.startsWith(previousContent))
+      ) {
+        collapsed[collapsed.length - 1] = msg
+        continue
+      }
+      collapsed.push(msg)
+    }
+    return collapsed
+  }
+
   const renderTranscript = (transcript) => {
     if (!transcript || transcript.length === 0) {
       return <Text type="secondary">Nessuna trascrizione disponibile</Text>
     }
 
+    const cleanedTranscript = collapseProgressiveTranscript(transcript)
+
     return (
       <Timeline
         mode="left"
-        items={transcript.map((msg, idx) => {
+        items={cleanedTranscript.map((msg, idx) => {
           const isAssistant = msg.role === 'assistant'
           return {
             key: idx,
@@ -241,7 +262,7 @@ function CallDetail() {
               <Descriptions.Item label="Durata">
                 {formatDuration(call.duration_seconds)}
               </Descriptions.Item>
-              {isSuperAdmin && (
+              {call.can_view_costs && (
                 <Descriptions.Item label="Costo (stima)">
                   {call.cost_usd != null ? `$${call.cost_usd.toFixed(4)}` : <Text type="secondary">N/D</Text>}
                 </Descriptions.Item>

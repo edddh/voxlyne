@@ -5,8 +5,8 @@ export const getCalls = async (params = {}) => {
   return response.data
 }
 
-export const getCallsStats = async () => {
-  const response = await client.get('/api/v2/calls/stats')
+export const getCallsStats = async (params = {}) => {
+  const response = await client.get('/api/v2/calls/stats', { params })
   return response.data
 }
 

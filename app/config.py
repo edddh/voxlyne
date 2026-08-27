@@ -66,6 +66,10 @@ class Settings(BaseSettings):
         default="http://localhost:8000",
         description="Base URL for webhooks (ngrok or production domain)"
     )
+    password_reset_base_url: Optional[str] = Field(
+        default=None,
+        description="Base URL used to build password reset links (falls back to webhook_base_url)"
+    )
 
     # ===========================================
     # Voice AI Settings
@@ -116,11 +120,19 @@ class Settings(BaseSettings):
     # Email
     smtp_host: Optional[str] = Field(default=None, description="SMTP host")
     smtp_port: int = Field(default=587, description="SMTP port")
+    smtp_security: str = Field(
+        default="starttls",
+        description="SMTP security mode: starttls, ssl, or none"
+    )
     smtp_user: Optional[str] = Field(default=None, description="SMTP username")
     smtp_password: Optional[str] = Field(default=None, description="SMTP password")
     email_from: Optional[str] = Field(default=None, description="From email address")
     email_to_default: Optional[str] = Field(default=None, description="Default recipient")
     email_enabled: bool = Field(default=False, description="Enable email sending")
+    password_reset_token_expire_minutes: int = Field(
+        default=60,
+        description="Password reset token expiration in minutes"
+    )
 
     # ===========================================
     # Vapi.ai Configuration (M5)
@@ -346,6 +358,15 @@ class Settings(BaseSettings):
         v = v.lower()
         if v not in valid_envs:
             raise ValueError(f"app_env must be one of {valid_envs}")
+        return v
+
+    @field_validator("smtp_security")
+    @classmethod
+    def validate_smtp_security(cls, v: str) -> str:
+        valid_modes = ["starttls", "ssl", "none"]
+        v = v.lower()
+        if v not in valid_modes:
+            raise ValueError(f"smtp_security must be one of {valid_modes}")
         return v
 
     # ===========================================
