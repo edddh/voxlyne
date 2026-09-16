@@ -82,13 +82,16 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
   const audioContextRef = useRef(null)
   const streamRef = useRef(null)
   const processorRef = useRef(null)
+  const mutedMicSinkRef = useRef(null)
   const playheadRef = useRef(0)
+  const activePlaybackSourcesRef = useRef(new Set())
   const transcriptEndRef = useRef(null)
   const countdownRef = useRef(null)
   const elevenToolTracePollRef = useRef(null)
   const lastActivityRef = useRef(Date.now())
   const isXaiVoiceSimulation = !voiceEngine || voiceEngine === 'xai_sip_direct'
   const isElevenVoiceSimulation = voiceEngine === 'elevenlabs_agent'
+  const isSupportedVoiceSimulation = isXaiVoiceSimulation || isElevenVoiceSimulation
 
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
@@ -110,6 +113,8 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
   const cleanup = useCallback(() => {
     processorRef.current?.disconnect()
     processorRef.current = null
+    mutedMicSinkRef.current?.disconnect()
+    mutedMicSinkRef.current = null
     streamRef.current?.getTracks().forEach((t) => t.stop())
     streamRef.current = null
     if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
@@ -121,6 +126,8 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
     }
     wsRef.current = null
     playheadRef.current = 0
+    activePlaybackSourcesRef.current.forEach((source) => source.stop())
+    activePlaybackSourcesRef.current.clear()
     if (countdownRef.current) {
       clearInterval(countdownRef.current)
       countdownRef.current = null
@@ -176,8 +183,16 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
 
     const now = ctx.currentTime
     const startAt = Math.max(now, playheadRef.current)
+    activePlaybackSourcesRef.current.add(source)
+    source.onended = () => activePlaybackSourcesRef.current.delete(source)
     source.start(startAt)
     playheadRef.current = startAt + buffer.duration
+  }, [])
+
+  const stopAgentPlayback = useCallback(() => {
+    activePlaybackSourcesRef.current.forEach((source) => source.stop())
+    activePlaybackSourcesRef.current.clear()
+    playheadRef.current = audioContextRef.current?.currentTime || 0
   }, [])
 
   const start = useCallback(async () => {
@@ -188,6 +203,12 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
     setRemainingSeconds(SILENCE_TIMEOUT_SECONDS)
     elevenToolTraceRef.current.clear()
     playheadRef.current = 0
+
+    if (!isSupportedVoiceSimulation) {
+      setError(`La prova vocale per l'engine "${voiceEngine}" non è ancora disponibile.`)
+      setStatus('error')
+      return
+    }
 
     try {
       // Avoid re-transcribing the agent audio played through speakers as user input.
@@ -257,7 +278,10 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
           // Avvia la cattura microfono solo ora che la sessione e' pronta.
           const source = audioContext.createMediaStreamSource(stream)
           const processor = audioContext.createScriptProcessor(4096, 1, 1)
+          const mutedMicSink = audioContext.createGain()
+          mutedMicSink.gain.value = 0
           processorRef.current = processor
+          mutedMicSinkRef.current = mutedMicSink
           processor.onaudioprocess = (e) => {
             const input = e.inputBuffer.getChannelData(0)
             const int16 = floatTo16BitPCM(input)
@@ -268,7 +292,10 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
             }))
           }
           source.connect(processor)
-          processor.connect(audioContext.destination)
+          // ScriptProcessor deve restare collegato per ricevere i frame,
+          // ma il ritorno microfono e' silenziato: mai rimandarlo alle casse.
+          processor.connect(mutedMicSink)
+          mutedMicSink.connect(audioContext.destination)
           return
         }
         if (msg.type === 'conversation_initiation_metadata') {
@@ -296,7 +323,10 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
 
           const source = audioContext.createMediaStreamSource(stream)
           const processor = audioContext.createScriptProcessor(4096, 1, 1)
+          const mutedMicSink = audioContext.createGain()
+          mutedMicSink.gain.value = 0
           processorRef.current = processor
+          mutedMicSinkRef.current = mutedMicSink
           processor.onaudioprocess = (e) => {
             const input = e.inputBuffer.getChannelData(0)
             const int16 = floatTo16BitPCM(input)
@@ -304,7 +334,8 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
             ws.send(JSON.stringify({ user_audio_chunk: base64FromInt16(int16) }))
           }
           source.connect(processor)
-          processor.connect(audioContext.destination)
+          processor.connect(mutedMicSink)
+          mutedMicSink.connect(audioContext.destination)
           return
         }
         if (msg.type === 'response.output_audio.delta' && msg.delta) {
@@ -330,6 +361,13 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
         if (msg.type === 'agent_response') {
           appendTranscript('assistant', msg.agent_response_event?.agent_response || '')
           refreshElevenToolTrace()
+          return
+        }
+        if (msg.type === 'interruption') {
+          // Il server ha riconosciuto che l'utente ha iniziato a parlare.
+          // Ferma anche i chunk gia' accodati nel browser: il microfono
+          // resta sempre attivo e il barge-in segue l'agente reale.
+          stopAgentPlayback()
           return
         }
         if (msg.type === 'agent_tool_response_full_payload') {
@@ -381,11 +419,10 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
         }
       }
 
-      ws.onerror = () => {
-        setError('Errore di connessione alla simulazione vocale')
-        setStatus('error')
-        cleanup()
-      }
+      // Il browser emette spesso error prima di close: per i rifiuti del
+      // backend il motivo utile arriva su close.reason, quindi non
+      // sovrascriverlo con il messaggio generico.
+      ws.onerror = () => {}
 
       ws.onclose = (event) => {
         // Eleven may publish the final webhook trace only after it closes
@@ -399,7 +436,8 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
             setError(event.reason || 'Connessione rifiutata')
             setStatus('error')
           } else {
-            setStatus('ended')
+            setError('Errore di connessione alla simulazione vocale')
+            setStatus('error')
           }
         }
       }
@@ -408,7 +446,7 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
       setStatus('error')
       cleanup()
     }
-  }, [projectId, promptA, consentMessage, playChunk, cleanup, status, appendTranscript, isElevenVoiceSimulation, refreshElevenToolTrace])
+  }, [projectId, promptA, consentMessage, playChunk, stopAgentPlayback, cleanup, status, appendTranscript, isElevenVoiceSimulation, isSupportedVoiceSimulation, voiceEngine, refreshElevenToolTrace])
 
   const stop = useCallback(() => {
     cleanup()
@@ -430,10 +468,14 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
       <Alert
         type="info"
         showIcon
-        message={isElevenVoiceSimulation
+        message={!isSupportedVoiceSimulation
+          ? 'Prova vocale non disponibile per questo engine'
+          : isElevenVoiceSimulation
           ? 'Motore vocale reale ElevenLabs Agent, non un sostituto testuale'
           : 'Motore vocale reale xAI realtime, non un sostituto testuale'}
-        description={isElevenVoiceSimulation
+        description={!isSupportedVoiceSimulation
+          ? 'L’engine OpenAI può essere usato nelle chiamate reali, ma il simulatore browser non dispone ancora di un relay vocale OpenAI.'
+          : isElevenVoiceSimulation
           ? `Usa il microfono del browser e la configurazione pubblicata dell'agente ElevenLabs, inclusi tool e voce V3. Si chiude automaticamente dopo ${SILENCE_TIMEOUT_SECONDS} secondi di silenzio.`
           : `Usa il microfono del browser e il prompt attuale nell'editor (anche non salvato), con accesso alla knowledge base del progetto. Non ha accesso agli altri strumenti (Cal.com, ecc.). Si chiude automaticamente dopo ${SILENCE_TIMEOUT_SECONDS} secondi di silenzio.`}
         style={{ marginBottom: 16 }}

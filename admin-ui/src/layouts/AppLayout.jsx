@@ -16,7 +16,7 @@ import {
 } from '@ant-design/icons'
 import { useAuth } from '../hooks/useAuth'
 import { BRAND } from '../main'
-import logo from '../assets/ascolta-logo.png'
+import { BrandLogo } from '../components/BrandLogo'
 
 const { Header, Sider, Content } = Layout
 
@@ -212,7 +212,7 @@ function AppLayout() {
           {collapsed ? (
             <span style={{ color: BRAND.orange, fontSize: 20, fontWeight: 700 }}>AT</span>
           ) : (
-            <img src={logo} alt="Ascolta" style={{ maxWidth: '100%', height: 32, objectFit: 'contain' }} />
+            <BrandLogo alt="Ascolta" style={{ maxWidth: '100%', height: 32, objectFit: 'contain' }} />
           )}
         </div>
         <Menu

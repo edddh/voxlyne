@@ -53,7 +53,8 @@ function Users() {
     // Il campo tenant nel modale serve solo al super_admin - un admin di
     // tenant crea sempre utenti nel proprio, il backend lo assegna da solo.
     if (isSuperAdmin) {
-      getTenants({ page_size: 200 })
+      // Il backend limita la paginazione dei tenant a 100 elementi.
+      getTenants({ page_size: 100 })
         .then((data) => setTenants(data.tenants || []))
         .catch(() => setTenants([]))
     }

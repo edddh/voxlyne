@@ -6,6 +6,7 @@ import itIT from 'antd/locale/it_IT'
 import App from './App'
 import { AuthProvider } from './hooks/useAuth'
 import './index.css'
+import { applyBrandMetadata } from './components/BrandLogo'
 
 // Palette di brand Ascolta: bianco e arancione su sfondo scuro.
 // Valori esatti prelevati dal logo (Ascolta.png) — non arrotondati a occhio.
@@ -19,6 +20,8 @@ export const BRAND = {
   white: '#FFFFFF',
   textDim: 'rgba(255, 255, 255, 0.65)',
 }
+
+applyBrandMetadata()
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

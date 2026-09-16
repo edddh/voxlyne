@@ -324,10 +324,28 @@ async def provision_agent_for_project(project_id: UUID) -> dict[str, Any]:
     if not public_base_url:
         raise ValueError("WEBHOOK_BASE_URL is missing")
 
-    voice_id = str(project.get("elevenlabs_voice_id") or DEFAULT_VOICE_ID).strip()
     provider_cfg = _json_value(project.get("voice_provider_config"), {})
     eleven_cfg = provider_cfg.get("elevenlabs") if isinstance(provider_cfg.get("elevenlabs"), dict) else {}
     llm = str(eleven_cfg.get("llm") or DEFAULT_AGENT_LLM).strip()
+    existing_agent_id = (project.get("elevenlabs_agent_id") or "").strip()
+    voice_id = str(project.get("elevenlabs_voice_id") or DEFAULT_VOICE_ID).strip()
+
+    # Durante una migrazione di workspace viene usata una voce temporanea
+    # per creare l'agente. Se l'amministratore sceglie poi una voce dal
+    # dashboard ElevenLabs, il primo publish la acquisisce e non la perde.
+    if existing_agent_id and eleven_cfg.get("migration_voice_temporary"):
+        try:
+            remote_agent = await _request(creds["api_key"], "GET", f"/convai/agents/{existing_agent_id}")
+            remote_voice_id = str(
+                ((remote_agent.get("conversation_config") or {}).get("tts") or {}).get("voice_id") or ""
+            ).strip()
+            if remote_voice_id and remote_voice_id != voice_id:
+                voice_id = remote_voice_id
+                eleven_cfg.pop("migration_voice_temporary", None)
+                logger.info("Adopted manually selected ElevenLabs voice for project=%s", project_id)
+        except Exception:
+            logger.warning("Could not read manually selected ElevenLabs voice project=%s", project_id, exc_info=True)
+
     previous_tool_ids = [str(tool_id) for tool_id in (eleven_cfg.get("tool_ids") or []) if tool_id]
     tool_ids = await _create_tools(
         creds["api_key"],
@@ -338,7 +356,6 @@ async def provision_agent_for_project(project_id: UUID) -> dict[str, Any]:
     )
     conversation_config = _build_conversation_config(project, tool_ids, voice_id, llm)
 
-    existing_agent_id = (project.get("elevenlabs_agent_id") or "").strip()
     payload = {
         "name": f"{project['name']} - Eleven v3",
         "conversation_config": conversation_config,
@@ -369,6 +386,7 @@ async def provision_agent_for_project(project_id: UUID) -> dict[str, Any]:
             """
             UPDATE projects
             SET elevenlabs_agent_id = :agent_id,
+                elevenlabs_voice_id = :voice_id,
                 voice_provider_config = :voice_provider_config,
                 updated_at = NOW()
             WHERE id = :id
@@ -376,6 +394,7 @@ async def provision_agent_for_project(project_id: UUID) -> dict[str, Any]:
             {
                 "id": str(project_id),
                 "agent_id": agent_id,
+                "voice_id": voice_id,
                 "voice_provider_config": json.dumps(provider_cfg),
             },
         )

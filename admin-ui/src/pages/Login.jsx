@@ -5,7 +5,7 @@ import { UserOutlined, LockOutlined } from '@ant-design/icons'
 import { useAuth } from '../hooks/useAuth'
 import * as authApi from '../api/auth'
 import { BRAND } from '../main'
-import logo from '../assets/ascolta-logo.png'
+import { BrandLogo } from '../components/BrandLogo'
 
 const { Text } = Typography
 
@@ -123,7 +123,7 @@ function Login() {
       >
         <Space direction="vertical" size="large" style={{ width: '100%' }}>
           <div style={{ textAlign: 'center' }}>
-            <img src={logo} alt="Ascolta" style={{ maxWidth: 220, height: 'auto' }} />
+            <BrandLogo alt="Ascolta" style={{ maxWidth: 220, height: 'auto' }} />
           </div>
 
           <Form

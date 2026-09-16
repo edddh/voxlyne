@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Table, Button, Space, Input, Modal, Form, Select, message, Tag, Popconfirm, Typography, Tooltip, Switch, Card, Row, Col, Divider, Spin, Alert
 } from 'antd'
-import { PlusOutlined, EditOutlined, SearchOutlined, HistoryOutlined, SettingOutlined, ApiOutlined, CheckOutlined, InfoCircleOutlined, ThunderboltOutlined, CopyOutlined, PauseCircleOutlined, PlayCircleOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, SearchOutlined, HistoryOutlined, SettingOutlined, ApiOutlined, CheckOutlined, InfoCircleOutlined, ThunderboltOutlined, CopyOutlined, DeleteOutlined, PauseCircleOutlined, PlayCircleOutlined } from '@ant-design/icons'
 import * as projectsApi from '../api/projects'
 import * as credentialsApi from '../api/credentials'
 import * as templatesApi from '../api/templates'
@@ -16,7 +16,7 @@ const NEW_VOICE_ENGINES = ['livekit_xai', 'livekit_openai', 'xai_sip_direct', 'o
 
 function Projects() {
   const navigate = useNavigate()
-  const { isSuperAdmin } = useAuth()
+  const { isSuperAdmin, isAdmin } = useAuth()
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
@@ -182,6 +182,9 @@ function Projects() {
       await credentialsApi.createProjectCredential(editingProject.id, credData)
       message.success('Credenziali salvate')
       setCredModalOpen(false)
+      credForm.resetFields()
+      setSelectedServiceType(null)
+      setSelectedProvider(null)
       await loadCredentials(editingProject.id)
     } catch (error) {
       message.error(error.message || 'Errore salvataggio credenziali')
@@ -227,6 +230,7 @@ function Projects() {
     voice: [
       { value: 'vapi', label: 'Vapi.ai' },
       { value: 'openai_realtime', label: 'OpenAI Realtime' },
+      { value: 'xai', label: 'xAI (Grok Voice)' },
     ],
     telephony: [{ value: 'twilio', label: 'Twilio' }],
     tts: [{ value: 'elevenlabs', label: 'ElevenLabs' }],
@@ -411,7 +415,11 @@ function Projects() {
       setModalOpen(false)
       loadProjects()
     } catch (error) {
-      const msg = error.response?.data?.detail || 'Errore'
+      const msg = error.response?.data?.detail || 'Errore nella creazione del progetto'
+      if (!editingProject && error.response?.status === 409 && /slug/i.test(msg)) {
+        form.setFields([{ name: 'slug', errors: [msg] }])
+        return
+      }
       message.error(msg)
     }
   }
@@ -496,7 +504,12 @@ function Projects() {
       setFromTemplateModalOpen(false)
       loadProjects()
     } catch (error) {
-      message.error(error.response?.data?.detail || 'Errore nella creazione del progetto')
+      const msg = error.response?.data?.detail || 'Errore nella creazione del progetto'
+      if (error.response?.status === 409 && /slug/i.test(msg)) {
+        fromTemplateForm.setFields([{ name: 'slug', errors: [msg] }])
+        return
+      }
+      message.error(msg)
     } finally {
       setCreatingFromTemplate(false)
     }
@@ -755,9 +768,14 @@ function Projects() {
       <Modal
         title={editingProject ? 'Modifica Progetto' : 'Nuovo Progetto'}
         open={modalOpen}
-        onCancel={() => setModalOpen(false)}
+        onCancel={() => {
+          setModalOpen(false)
+          setEditingProject(null)
+          form.resetFields()
+        }}
         footer={null}
         width={800}
+        destroyOnClose
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item
@@ -881,7 +899,7 @@ function Projects() {
           </Form.Item>
         </Form>
 
-        {editingProject && (
+        {editingProject && isAdmin && (
           <>
             <Divider orientation="left">
               <Space>
@@ -992,6 +1010,7 @@ function Projects() {
         onCancel={() => setCredModalOpen(false)}
         footer={null}
         width={500}
+        destroyOnClose
       >
         <Form form={credForm} layout="vertical" onFinish={handleCredentialSubmit} autoComplete="off">
           <Form.Item

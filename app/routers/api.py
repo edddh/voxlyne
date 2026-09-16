@@ -10,6 +10,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
+from asyncpg.exceptions import UniqueViolationError
 
 import json
 
@@ -369,8 +370,9 @@ async def create_project(
     output_config_json = json.dumps(output_config_value) if output_config_value is not None else "{}"
 
     # Create project
-    created = await db.fetch_one(
-        """
+    try:
+        created = await db.fetch_one(
+            """
         INSERT INTO projects (
             name, slug, type, description, is_active,
             prompt_a, prompt_b, consent_message,
@@ -390,8 +392,8 @@ async def create_project(
             :tenant_id, :created_by, :created_at, :updated_at
         )
         RETURNING *
-        """,
-        {
+            """,
+            {
             "name": project_data.name,
             "slug": project_data.slug,
             "type": project_data.type.value,
@@ -415,8 +417,15 @@ async def create_project(
             "created_by": str(current_user.id),
             "created_at": now,
             "updated_at": now,
-        },
-    )
+            },
+        )
+    except UniqueViolationError as exc:
+        if "projects_slug_key" in str(exc):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Lo slug '{project_data.slug}' è già utilizzato. Scegline uno diverso.",
+            ) from exc
+        raise
 
     # Seed prompt version 1 for A and B as active (required by prompt history UI)
     await db.execute(

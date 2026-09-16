@@ -175,9 +175,12 @@ async def simulate_voice(websocket: WebSocket, project_id: UUID, token: str = Qu
         await websocket.close(code=4403, reason="Access denied")
         return
 
-    api_key = await resolve_provider_api_key(tenant_id, "xai")
+    api_key = await resolve_provider_api_key(tenant_id, "xai", project_id=project_id)
     if not api_key:
-        await websocket.close(code=4400, reason="No voice/xai credential configured for this tenant")
+        await websocket.close(
+            code=4400,
+            reason="Nessuna credenziale voice/xai o voice/openai per questo tenant o progetto",
+        )
         return
 
     # Il primo messaggio del browser deve essere {"type": "start",

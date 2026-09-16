@@ -18,7 +18,9 @@ from app.database.db import get_database
 from app.services.prompt_variables import substitute_custom_variables
 
 
-async def resolve_provider_api_key(tenant_id: Any, provider: str) -> Optional[str]:
+async def resolve_provider_api_key(
+    tenant_id: Any, provider: str, project_id: Any = None,
+) -> Optional[str]:
     """
     Strictly per-tenant, no fallback to a global env var - explicit request
     from maintainer, 18/08 (see .env: "XAI_API_KEY volutamente NON qui").
@@ -37,6 +39,13 @@ async def resolve_provider_api_key(tenant_id: Any, provider: str) -> Optional[st
     from app.services.credentials.manager import CredentialsManager
 
     manager = CredentialsManager()
+    if project_id:
+        project_creds = await manager._fetch_db_credentials(
+            entity_type="project", entity_id=project_id,
+            service_type="voice", provider=provider,
+        )
+        if project_creds:
+            return project_creds.get("api_key")
     creds = await manager._fetch_db_credentials(
         entity_type="tenant", entity_id=tenant_id, service_type="voice", provider=provider,
     )
