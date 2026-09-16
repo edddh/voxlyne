@@ -7,6 +7,7 @@ import {
 import {
   PlusOutlined, DeleteOutlined, ArrowLeftOutlined, ApiOutlined, CheckCircleOutlined, CloseCircleOutlined,
 } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import * as credentialsApi from '../api/credentials'
 import * as tenantsApi from '../api/tenants'
 
@@ -25,6 +26,7 @@ const PROVIDER_OPTIONS = {
 }
 
 function TenantCredentials() {
+  const { t, i18n } = useTranslation()
   const { tenantId } = useParams()
   const navigate = useNavigate()
 
@@ -46,7 +48,7 @@ function TenantCredentials() {
       const data = await tenantsApi.getTenant(tenantId)
       setTenant(data)
     } catch (error) {
-      message.error('Errore caricamento tenant')
+      message.error(t('tenantCredentials.loadTenantError'))
     }
   }
 
@@ -56,7 +58,7 @@ function TenantCredentials() {
       const data = await credentialsApi.getTenantCredentials(tenantId)
       setCredentials(data)
     } catch (error) {
-      message.error('Errore caricamento credenziali')
+      message.error(t('tenantCredentials.loadCredentialsError'))
     } finally {
       setLoading(false)
     }
@@ -73,7 +75,7 @@ function TenantCredentials() {
     try {
       parsedData = JSON.parse(values.data)
     } catch (e) {
-      message.error('Il campo "Dati" deve essere JSON valido, es: {"api_key": "..."}')
+      message.error(t('tenantCredentials.invalidJson'))
       return
     }
 
@@ -85,11 +87,11 @@ function TenantCredentials() {
         credential_key: values.credential_key || 'default',
         data: parsedData,
       })
-      message.success('Credenziale salvata come default per il tenant')
+      message.success(t('tenantCredentials.savedAsDefault'))
       setModalOpen(false)
       loadCredentials()
     } catch (error) {
-      message.error(error.response?.data?.detail || 'Errore salvataggio')
+      message.error(error.response?.data?.detail || t('tenantCredentials.saveError'))
     } finally {
       setSaving(false)
     }
@@ -98,10 +100,10 @@ function TenantCredentials() {
   const handleDelete = async (credentialId) => {
     try {
       await credentialsApi.deleteTenantCredential(tenantId, credentialId)
-      message.success('Credenziale eliminata')
+      message.success(t('tenantCredentials.deleted'))
       loadCredentials()
     } catch (error) {
-      message.error(error.response?.data?.detail || 'Errore eliminazione')
+      message.error(error.response?.data?.detail || t('tenantCredentials.deleteError'))
     }
   }
 
@@ -110,39 +112,39 @@ function TenantCredentials() {
     try {
       const result = await credentialsApi.testTenantCredential(tenantId, credentialId)
       if (result.success) {
-        message.success(result.message || 'Connessione riuscita')
+        message.success(result.message || t('tenantCredentials.connectionOk'))
       } else {
-        message.error(result.message || 'Connessione fallita')
+        message.error(result.message || t('tenantCredentials.connectionFailed'))
       }
     } catch (error) {
-      message.error(error.response?.data?.detail || 'Errore test connessione')
+      message.error(error.response?.data?.detail || t('tenantCredentials.testError'))
     } finally {
       setTestingId(null)
     }
   }
 
   const columns = [
-    { title: 'Categoria', dataIndex: 'service_type', key: 'service_type', render: (v) => <Tag>{v}</Tag> },
+    { title: t('tenantCredentials.category'), dataIndex: 'service_type', key: 'service_type', render: (v) => <Tag>{v}</Tag> },
     { title: 'Provider', dataIndex: 'provider', key: 'provider' },
-    { title: 'Chiave', dataIndex: 'credential_key', key: 'credential_key', render: (v) => <code>{v}</code> },
+    { title: t('tenantCredentials.key'), dataIndex: 'credential_key', key: 'credential_key', render: (v) => <code>{v}</code> },
     {
-      title: 'Stato',
+      title: t('tenantCredentials.status'),
       dataIndex: 'is_active',
       key: 'is_active',
-      render: (active) => <Tag color={active ? 'green' : 'red'}>{active ? 'Attiva' : 'Disattivata'}</Tag>,
+      render: (active) => <Tag color={active ? 'green' : 'red'}>{active ? t('tenantCredentials.active') : t('tenantCredentials.disabled')}</Tag>,
     },
     {
-      title: 'Ultimo utilizzo',
+      title: t('tenantCredentials.lastUsed'),
       dataIndex: 'last_used_at',
       key: 'last_used_at',
-      render: (v) => (v ? new Date(v).toLocaleString('it-IT') : '—'),
+      render: (v) => (v ? new Date(v).toLocaleString(i18n.language) : '—'),
     },
     {
-      title: 'Azioni',
+      title: t('tenantCredentials.actions'),
       key: 'actions',
       render: (_, record) => (
         <Space>
-          <Tooltip title="Testa connessione">
+          <Tooltip title={t('tenantCredentials.testConnection')}>
             <Button
               icon={<ApiOutlined />}
               size="small"
@@ -151,12 +153,12 @@ function TenantCredentials() {
             />
           </Tooltip>
           <Popconfirm
-            title="Eliminare questa credenziale?"
+            title={t('tenantCredentials.confirmDelete')}
             onConfirm={() => handleDelete(record.id)}
-            okText="Sì"
-            cancelText="No"
+            okText={t('promptHistory.yes')}
+            cancelText={t('promptHistory.no')}
           >
-            <Tooltip title="Elimina">
+            <Tooltip title={t('common.delete')}>
               <Button icon={<DeleteOutlined />} size="small" danger />
             </Tooltip>
           </Popconfirm>
@@ -169,25 +171,21 @@ function TenantCredentials() {
     <div>
       <Space style={{ marginBottom: 16 }}>
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/tenants')}>
-          Torna ai tenant
+          {t('tenantCredentials.backToTenants')}
         </Button>
       </Space>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
         <Title level={3} style={{ margin: 0, flexShrink: 0 }}>
-          Credenziali - {tenant?.name || tenantId}
+          {t('tenantCredentials.title')} - {tenant?.name || tenantId}
         </Title>
         <Button type="primary" icon={<PlusOutlined />} onClick={openModal}>
-          Nuova credenziale
+          {t('tenantCredentials.newCredential')}
         </Button>
       </div>
 
       <Paragraph type="secondary">
-        Queste credenziali (chiavi API LLM, voce, telefonia, CRM, calendario) sono il
-        default per <b>tutti i progetti di questo tenant</b>. Un progetto può impostare
-        una propria credenziale per lo stesso servizio/provider per sovrascrivere il
-        default del tenant; se nessuna delle due è presente si usa la variabile
-        d'ambiente globale (.env) come ultimo fallback.
+        {t('tenantCredentials.description')}
       </Paragraph>
 
       <Table
@@ -200,7 +198,7 @@ function TenantCredentials() {
       />
 
       <Modal
-        title="Nuova credenziale tenant"
+        title={t('tenantCredentials.newTenantCredential')}
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
         footer={null}
@@ -209,11 +207,11 @@ function TenantCredentials() {
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item
             name="service_type"
-            label="Categoria"
-            rules={[{ required: true, message: 'Seleziona una categoria' }]}
+            label={t('tenantCredentials.category')}
+            rules={[{ required: true, message: t('tenantCredentials.selectCategory') }]}
           >
             <Select
-              placeholder="Seleziona categoria"
+              placeholder={t('tenantCredentials.selectCategory')}
               options={Object.keys(PROVIDER_OPTIONS).map((k) => ({ value: k, label: k }))}
               onChange={() => form.setFieldValue('provider', undefined)}
             />
@@ -227,32 +225,32 @@ function TenantCredentials() {
                 <Form.Item
                   name="provider"
                   label="Provider"
-                  rules={[{ required: true, message: 'Seleziona o inserisci un provider' }]}
+                  rules={[{ required: true, message: t('tenantCredentials.selectProvider') }]}
                 >
                   <Select
-                    placeholder="Seleziona provider"
+                    placeholder={t('tenantCredentials.selectProviderPlaceholder')}
                     options={providerOptions.map((p) => ({ value: p, label: p }))}
                     showSearch
                     allowClear
                     // Provider names beyond the known list (e.g. new/custom
                     // ones) can still be typed - the backend accepts any string.
                     onSearch={() => {}}
-                    notFoundContent="Digita un nome provider personalizzato"
+                    notFoundContent={t('tenantCredentials.typeCustomProvider')}
                   />
                 </Form.Item>
               )
             }}
           </Form.Item>
 
-          <Form.Item name="credential_key" label="Chiave di riferimento" tooltip="Utile per avere più credenziali per lo stesso provider (es. 'main', 'backup')">
+          <Form.Item name="credential_key" label={t('tenantCredentials.referenceKey')} tooltip={t('tenantCredentials.referenceKeyTooltip')}>
             <Input placeholder="default" />
           </Form.Item>
 
           <Form.Item
             name="data"
-            label="Dati (JSON)"
+            label={t('tenantCredentials.dataJson')}
             tooltip='Es. per xai: {"api_key": "..."} - per livekit: {"url": "wss://...", "api_key": "...", "api_secret": "..."}'
-            rules={[{ required: true, message: 'Inserisci i dati della credenziale in formato JSON' }]}
+            rules={[{ required: true, message: t('tenantCredentials.enterDataJson') }]}
           >
             <TextArea rows={6} />
           </Form.Item>
@@ -261,15 +259,15 @@ function TenantCredentials() {
             type="info"
             showIcon
             style={{ marginBottom: 16 }}
-            message="I dati verranno cifrati prima di essere salvati nel database."
+            message={t('tenantCredentials.encryptionNotice')}
           />
 
           <Form.Item>
             <Space>
               <Button type="primary" htmlType="submit" loading={saving}>
-                Salva
+                {t('common.save')}
               </Button>
-              <Button onClick={() => setModalOpen(false)}>Annulla</Button>
+              <Button onClick={() => setModalOpen(false)}>{t('common.cancel')}</Button>
             </Space>
           </Form.Item>
         </Form>

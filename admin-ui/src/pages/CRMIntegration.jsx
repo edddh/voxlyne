@@ -3,11 +3,13 @@ import {
   Card, Button, Space, Form, Input, Switch, message, Typography, Descriptions, Tag, Alert, Divider, Row, Col
 } from 'antd'
 import { ApiOutlined, CheckCircleOutlined, CloseCircleOutlined, SaveOutlined, SyncOutlined } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import * as crmApi from '../api/crm'
 
 const { Title, Text, Paragraph } = Typography
 
 function CRMIntegration() {
+  const { t, i18n } = useTranslation()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -44,7 +46,7 @@ function CRMIntegration() {
           create_tasks: false,
         })
       } else {
-        message.error('Errore caricamento configurazione')
+        message.error(t('crm.loadError'))
       }
     } finally {
       setLoading(false)
@@ -55,10 +57,10 @@ function CRMIntegration() {
     setSaving(true)
     try {
       await crmApi.updateCRMConfig(values)
-      message.success('Configurazione salvata')
+      message.success(t('crm.saved'))
       loadConfig()
     } catch (error) {
-      message.error(error.response?.data?.detail || 'Errore salvataggio')
+      message.error(error.response?.data?.detail || t('crm.saveError'))
     } finally {
       setSaving(false)
     }
@@ -71,16 +73,16 @@ function CRMIntegration() {
       const result = await crmApi.testCRMConnection()
       setTestResult(result)
       if (result.success) {
-        message.success('Connessione riuscita!')
+        message.success(t('crm.connectionOk'))
       } else {
-        message.error('Connessione fallita')
+        message.error(t('crm.connectionFailed'))
       }
     } catch (error) {
       setTestResult({
         success: false,
-        message: error.response?.data?.detail || 'Errore test connessione',
+        message: error.response?.data?.detail || t('crm.testError'),
       })
-      message.error('Errore test connessione')
+      message.error(t('crm.testError'))
     } finally {
       setTesting(false)
     }
@@ -89,14 +91,14 @@ function CRMIntegration() {
   return (
     <div>
       <Title level={3} style={{ marginBottom: 24 }}>
-        <ApiOutlined /> Integrazione CRM (HubSpot)
+        <ApiOutlined /> {t('crm.title')}
       </Title>
 
       <Row gutter={[16, 16]}>
         <Col span={24}>
           <Alert
-            message="Integrazione HubSpot"
-            description="Configura la connessione con HubSpot per sincronizzare automaticamente contatti, deal e attività dalle interviste telefoniche. L'API key deve avere i permessi per Contacts, Deals e Tasks."
+            message={t('crm.hubspotIntegration')}
+            description={t('crm.hubspotDescription')}
             type="info"
             showIcon
             style={{ marginBottom: 16 }}
@@ -107,13 +109,13 @@ function CRMIntegration() {
           <Col span={24}>
             <Card size="small">
               <Space>
-                <Text strong>Stato:</Text>
+                <Text strong>{t('crm.status')}:</Text>
                 <Tag color="green" icon={<CheckCircleOutlined />}>
-                  Integrazione Attiva
+                  {t('crm.integrationActive')}
                 </Tag>
                 <Divider type="vertical" />
                 <Text type="secondary">
-                  Ultima sincronizzazione: {config.last_sync ? new Date(config.last_sync).toLocaleString('it-IT') : 'Mai'}
+                  {t('crm.lastSync')}: {config.last_sync ? new Date(config.last_sync).toLocaleString(i18n.language) : t('crm.never')}
                 </Text>
               </Space>
             </Card>
@@ -121,7 +123,7 @@ function CRMIntegration() {
         )}
 
         <Col span={24}>
-          <Card title="Configurazione" loading={loading}>
+          <Card title={t('crm.configuration')} loading={loading}>
             <Form
               form={form}
               layout="vertical"
@@ -129,79 +131,79 @@ function CRMIntegration() {
             >
               <Form.Item
                 name="enabled"
-                label="Abilita Integrazione"
+                label={t('crm.enableIntegration')}
                 valuePropName="checked"
               >
-                <Switch checkedChildren="Attivo" unCheckedChildren="Inattivo" />
+                <Switch checkedChildren={t('crm.active')} unCheckedChildren={t('crm.inactive')} />
               </Form.Item>
 
               <Divider />
 
               <Form.Item
                 name="api_key"
-                label="HubSpot API Key"
+                label={t('crm.hubspotApiKey')}
                 rules={[
-                  { required: true, message: 'Inserisci API key' },
+                  { required: true, message: t('crm.enterApiKey') },
                 ]}
-                extra="La tua private app API key da HubSpot (inizia con 'pat-')"
+                extra={t('crm.apiKeyExtra')}
               >
                 <Input.Password placeholder="pat-..." />
               </Form.Item>
 
               <Form.Item
                 name="portal_id"
-                label="Portal ID (Hub ID)"
+                label={t('crm.portalId')}
                 rules={[
-                  { required: true, message: 'Inserisci portal ID' },
+                  { required: true, message: t('crm.enterPortalId') },
                 ]}
-                extra="Il tuo Hub ID, visibile nelle impostazioni HubSpot"
+                extra={t('crm.portalIdExtra')}
               >
                 <Input placeholder="12345678" />
               </Form.Item>
 
-              <Divider orientation="left">Pipeline e Stage</Divider>
+              <Divider orientation="left">{t('crm.pipelineAndStage')}</Divider>
 
               <Form.Item
                 name="default_pipeline"
-                label="Pipeline Predefinita"
-                extra="ID della pipeline da usare per i deal (es: 'default')"
+                label={t('crm.defaultPipeline')}
+                extra={t('crm.defaultPipelineExtra')}
               >
                 <Input placeholder="default" />
               </Form.Item>
 
               <Form.Item
                 name="default_stage"
-                label="Stage Predefinita"
-                extra="ID dello stage iniziale (es: 'appointmentscheduled')"
+                label={t('crm.defaultStage')}
+                extra={t('crm.defaultStageExtra')}
               >
                 <Input placeholder="appointmentscheduled" />
               </Form.Item>
 
-              <Divider orientation="left">Opzioni Sincronizzazione</Divider>
+              <Divider orientation="left">{t('crm.syncOptions')}</Divider>
 
               <Form.Item
                 name="sync_contacts"
-                label="Sincronizza Contatti"
+                label={t('crm.syncContacts')}
                 valuePropName="checked"
-                extra="Crea o aggiorna contatti HubSpot da chi chiama"
+                extra={t('crm.syncContactsExtra')}
               >
                 <Switch />
               </Form.Item>
 
               <Form.Item
                 name="sync_deals"
-                label="Sincronizza Deal"
+                label={t('crm.syncDeals')}
                 valuePropName="checked"
-                extra="Crea deal per ogni chiamata completata"
+                extra={t('crm.syncDealsExtra')}
               >
                 <Switch />
               </Form.Item>
 
               <Form.Item
                 name="create_tasks"
-                label="Crea Task di Follow-up"
+                label={t('crm.createFollowupTasks')}
                 valuePropName="checked"
-                extra="Crea automaticamente task per follow-up post-chiamata"
+                extra={t('crm.createFollowupTasksExtra')}
               >
                 <Switch />
               </Form.Item>
@@ -214,14 +216,14 @@ function CRMIntegration() {
                     icon={<SaveOutlined />}
                     loading={saving}
                   >
-                    Salva Configurazione
+                    {t('crm.saveConfig')}
                   </Button>
                   <Button
                     icon={<SyncOutlined />}
                     onClick={testConnection}
                     loading={testing}
                   >
-                    Test Connessione
+                    {t('crm.testConnection')}
                   </Button>
                 </Space>
               </Form.Item>
@@ -232,7 +234,7 @@ function CRMIntegration() {
         {testResult && (
           <Col span={24}>
             <Alert
-              message={testResult.success ? 'Test Riuscito' : 'Test Fallito'}
+              message={testResult.success ? t('crm.testSucceeded') : t('crm.testFailed')}
               description={
                 <div>
                   <Paragraph>{testResult.message}</Paragraph>
@@ -253,27 +255,27 @@ function CRMIntegration() {
         )}
 
         <Col span={24}>
-          <Card title="Guida Rapida" size="small">
+          <Card title={t('crm.quickGuide')} size="small">
             <Paragraph>
-              <Text strong>Come ottenere l'API Key:</Text>
+              <Text strong>{t('crm.howToGetApiKey')}:</Text>
             </Paragraph>
             <ol>
-              <li>Accedi al tuo account HubSpot</li>
-              <li>Vai in Settings → Integrations → Private Apps</li>
-              <li>Crea una nuova Private App o usa una esistente</li>
-              <li>Assicurati che abbia i permessi: Contacts (Read/Write), Deals (Read/Write), Tasks (Read/Write)</li>
-              <li>Copia l'API key (inizia con "pat-")</li>
+              <li>{t('crm.guideStep1')}</li>
+              <li>{t('crm.guideStep2')}</li>
+              <li>{t('crm.guideStep3')}</li>
+              <li>{t('crm.guideStep4')}</li>
+              <li>{t('crm.guideStep5')}</li>
             </ol>
 
             <Divider />
 
             <Paragraph>
-              <Text strong>Come trovare Portal ID e Pipeline:</Text>
+              <Text strong>{t('crm.howToFindPortalId')}:</Text>
             </Paragraph>
             <ol>
-              <li>Il Portal ID (Hub ID) si trova in Settings → Account Setup → Account Defaults</li>
-              <li>Per trovare Pipeline e Stage IDs: Settings → Objects → Deals → Pipelines</li>
-              <li>Gli IDs sono visibili nell'URL o usando l'API di HubSpot</li>
+              <li>{t('crm.guideStep6')}</li>
+              <li>{t('crm.guideStep7')}</li>
+              <li>{t('crm.guideStep8')}</li>
             </ol>
           </Card>
         </Col>

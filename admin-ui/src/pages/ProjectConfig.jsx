@@ -4,6 +4,7 @@ import {
   Card, Tabs, Form, Input, Button, Select, message, Typography, Space, Divider, Alert, Spin, Switch, TimePicker, Checkbox
 } from 'antd'
 import { SaveOutlined, CheckCircleOutlined, ArrowLeftOutlined, ApiOutlined, LinkOutlined } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import * as projectConfigApi from '../api/projectConfig'
 import * as projectsApi from '../api/projects'
 import TelephonyTab from '../components/TelephonyTab'
@@ -20,6 +21,7 @@ const { TextArea } = Input
  * 4 tabs: SIP Address, CRM Integration, Calendar Integration, Prompt Placeholders
  */
 function ProjectConfig() {
+  const { t } = useTranslation()
   // La route e' registrata come "projects/:id/config" (App.jsx) - il
   // param si chiama "id", non "projectId". Prima di questo fix
   // useParams().projectId era sempre undefined, quindi ogni chiamata
@@ -59,7 +61,7 @@ function ProjectConfig() {
       const data = await projectsApi.getProject(projectId)
       setProject(data)
     } catch (error) {
-      message.error('Failed to load project')
+      message.error(t('projectConfig.loadProjectError'))
       navigate('/projects')
     }
   }
@@ -149,10 +151,10 @@ function ProjectConfig() {
       setSaving(true)
       const values = await sipForm.validateFields()
       await projectConfigApi.updateSIPConfig(projectId, values)
-      message.success('SIP configuration saved')
+      message.success(t('projectConfig.sipSaved'))
     } catch (error) {
       if (error.errorFields) return
-      message.error('Failed to save SIP config: ' + error.message)
+      message.error(t('projectConfig.sipSaveError') + ': ' + error.message)
     } finally {
       setSaving(false)
     }
@@ -166,10 +168,10 @@ function ProjectConfig() {
         ...values,
         enabled: crmEnabled,
       })
-      message.success('CRM configuration saved')
+      message.success(t('projectConfig.crmSaved'))
     } catch (error) {
       if (error.errorFields) return
-      message.error('Failed to save CRM config: ' + error.message)
+      message.error(t('projectConfig.crmSaveError') + ': ' + error.message)
     } finally {
       setSaving(false)
     }
@@ -182,12 +184,12 @@ function ProjectConfig() {
       const result = await projectConfigApi.testCRMConnection(projectId)
       setCrmTestResult(result)
       if (result.success) {
-        message.success('CRM connection successful!')
+        message.success(t('projectConfig.crmTestOk'))
       } else {
-        message.error('CRM connection failed: ' + result.error)
+        message.error(t('projectConfig.crmTestFailed') + ': ' + result.error)
       }
     } catch (error) {
-      message.error('Failed to test connection: ' + error.message)
+      message.error(t('projectConfig.testConnectionError') + ': ' + error.message)
     } finally {
       setTesting(false)
     }
@@ -201,10 +203,10 @@ function ProjectConfig() {
         ...values,
         enabled: calendarEnabled,
       })
-      message.success('Calendar configuration saved')
+      message.success(t('projectConfig.calendarSaved'))
     } catch (error) {
       if (error.errorFields) return
-      message.error('Failed to save Calendar config: ' + error.message)
+      message.error(t('projectConfig.calendarSaveError') + ': ' + error.message)
     } finally {
       setSaving(false)
     }
@@ -214,14 +216,14 @@ function ProjectConfig() {
     try {
       const provider = calendarForm.getFieldValue('provider')
       if (!provider) {
-        message.warning('Please select a calendar provider first')
+        message.warning(t('projectConfig.selectProviderFirst'))
         return
       }
       const { oauth_url } = await projectConfigApi.getCalendarOAuthUrl(projectId, provider)
       window.open(oauth_url, '_blank', 'width=600,height=800')
-      message.info('Complete authorization in the new window')
+      message.info(t('projectConfig.completeAuthInWindow'))
     } catch (error) {
-      message.error('Failed to get OAuth URL: ' + error.message)
+      message.error(t('projectConfig.oauthUrlError') + ': ' + error.message)
     }
   }
 
@@ -236,7 +238,7 @@ function ProjectConfig() {
         try {
           intentConfig = JSON.parse(values.intent_config)
         } catch (e) {
-          message.error('Invalid JSON in intent_config')
+          message.error(t('projectConfig.invalidIntentJson'))
           setSaving(false)
           return
         }
@@ -246,10 +248,10 @@ function ProjectConfig() {
         ...values,
         intent_config: intentConfig,
       })
-      message.success('Placeholders saved')
+      message.success(t('projectConfig.placeholdersSaved'))
     } catch (error) {
       if (error.errorFields) return
-      message.error('Failed to save placeholders: ' + error.message)
+      message.error(t('projectConfig.placeholdersSaveError') + ': ' + error.message)
     } finally {
       setSaving(false)
     }
@@ -266,12 +268,12 @@ function ProjectConfig() {
   const tabItems = [
     {
       key: 'sip',
-      label: 'SIP Address',
+      label: t('projectConfig.sipAddress'),
       children: (
         <Form form={sipForm} layout="vertical">
           <Alert
-            message="SIP Configuration"
-            description="Configure the SIP address for routing incoming calls to this project. Required for OpenAI Realtime voice calls."
+            message={t('projectConfig.sipConfiguration')}
+            description={t('projectConfig.sipConfigDescription')}
             type="info"
             showIcon
             style={{ marginBottom: 24 }}
@@ -279,8 +281,8 @@ function ProjectConfig() {
 
           <Form.Item
             name="sip_address"
-            label="SIP Address"
-            rules={[{ required: true, message: 'Please enter SIP address' }]}
+            label={t('projectConfig.sipAddress')}
+            rules={[{ required: true, message: t('projectConfig.enterSipAddress') }]}
             tooltip="Format: +39 000 000 0000 admin@example.test"
           >
             <Input placeholder="+39 000 000 0000 admin@example.test" />
@@ -288,16 +290,16 @@ function ProjectConfig() {
 
           <Form.Item
             name="sip_username"
-            label="SIP Username"
+            label={t('projectConfig.sipUsername')}
           >
-            <Input placeholder="Optional" />
+            <Input placeholder={t('projectConfig.optional')} />
           </Form.Item>
 
           <Form.Item
             name="sip_password"
-            label="SIP Password"
+            label={t('projectConfig.sipPassword')}
           >
-            <Input.Password placeholder="Leave empty to keep current password" />
+            <Input.Password placeholder={t('projectConfig.leaveEmptyPassword')} />
           </Form.Item>
 
           <Button
@@ -306,19 +308,19 @@ function ProjectConfig() {
             onClick={handleSaveSIP}
             loading={saving}
           >
-            Save SIP Configuration
+            {t('projectConfig.saveSipConfig')}
           </Button>
         </Form>
       ),
     },
     {
       key: 'crm',
-      label: 'CRM Integration',
+      label: t('projectConfig.crmIntegration'),
       children: (
         <Form form={crmForm} layout="vertical">
           <div style={{ marginBottom: 16 }}>
             <Space>
-              <Text strong>Enable CRM Integration</Text>
+              <Text strong>{t('projectConfig.enableCrmIntegration')}</Text>
               <Switch checked={crmEnabled} onChange={setCrmEnabled} />
             </Space>
           </div>
@@ -327,13 +329,13 @@ function ProjectConfig() {
             <>
               <Form.Item
                 name="provider"
-                label="CRM Provider"
+                label={t('projectConfig.crmProvider')}
                 rules={[{ required: true }]}
               >
-                <Select onChange={setCrmProvider} placeholder="Select provider">
+                <Select onChange={setCrmProvider} placeholder={t('tenantCredentials.selectProviderPlaceholder')}>
                   <Select.Option value="hubspot">HubSpot</Select.Option>
                   <Select.Option value="salesforce">Salesforce</Select.Option>
-                  <Select.Option value="webhook">Generic Webhook</Select.Option>
+                  <Select.Option value="webhook">{t('projectConfig.genericWebhook')}</Select.Option>
                 </Select>
               </Form.Item>
 
@@ -341,17 +343,17 @@ function ProjectConfig() {
                 <>
                   <Form.Item
                     name="hubspot_api_key"
-                    label="HubSpot API Key"
-                    rules={[{ required: true, message: 'Please enter API key' }]}
+                    label={t('crm.hubspotApiKey')}
+                    rules={[{ required: true, message: t('crm.enterApiKey') }]}
                   >
-                    <Input.Password placeholder="Enter API key" />
+                    <Input.Password placeholder={t('crm.enterApiKey')} />
                   </Form.Item>
 
                   <Form.Item
                     name="hubspot_portal_id"
-                    label="Portal ID"
+                    label={t('crm.portalId')}
                   >
-                    <Input placeholder="Optional" />
+                    <Input placeholder={t('projectConfig.optional')} />
                   </Form.Item>
 
                   <Space>
@@ -361,7 +363,7 @@ function ProjectConfig() {
                       onClick={handleSaveCRM}
                       loading={saving}
                     >
-                      Save Configuration
+                      {t('projectConfig.saveConfiguration')}
                     </Button>
 
                     <Button
@@ -369,14 +371,14 @@ function ProjectConfig() {
                       onClick={handleTestCRM}
                       loading={testing}
                     >
-                      Test Connection
+                      {t('crm.testConnection')}
                     </Button>
                   </Space>
 
                   {crmTestResult && (
                     <Alert
                       style={{ marginTop: 16 }}
-                      message={crmTestResult.success ? 'Connection Successful' : 'Connection Failed'}
+                      message={crmTestResult.success ? t('projectConfig.connectionSuccessful') : t('projectConfig.connectionFailedTitle')}
                       description={crmTestResult.message || crmTestResult.error}
                       type={crmTestResult.success ? 'success' : 'error'}
                       showIcon
@@ -397,9 +399,9 @@ function ProjectConfig() {
 
                   <Form.Item
                     name="webhook_secret"
-                    label="Webhook Secret"
+                    label={t('projectConfig.webhookSecret')}
                   >
-                    <Input.Password placeholder="Optional HMAC secret" />
+                    <Input.Password placeholder={t('projectConfig.optionalHmacSecret')} />
                   </Form.Item>
 
                   <Button
@@ -408,7 +410,7 @@ function ProjectConfig() {
                     onClick={handleSaveCRM}
                     loading={saving}
                   >
-                    Save Configuration
+                    {t('projectConfig.saveConfiguration')}
                   </Button>
                 </>
               )}
@@ -417,8 +419,8 @@ function ProjectConfig() {
 
           {!crmEnabled && (
             <Alert
-              message="CRM integration is disabled"
-              description="Enable to automatically sync call data to your CRM system"
+              message={t('projectConfig.crmDisabled')}
+              description={t('projectConfig.crmDisabledDescription')}
               type="info"
             />
           )}
@@ -427,12 +429,12 @@ function ProjectConfig() {
     },
     {
       key: 'calendar',
-      label: 'Calendar Integration',
+      label: t('nav.integrationsCalendar'),
       children: (
         <Form form={calendarForm} layout="vertical">
           <div style={{ marginBottom: 16 }}>
             <Space>
-              <Text strong>Enable Calendar Integration</Text>
+              <Text strong>{t('projectConfig.enableCalendarIntegration')}</Text>
               <Switch checked={calendarEnabled} onChange={setCalendarEnabled} />
             </Space>
           </div>
@@ -441,10 +443,10 @@ function ProjectConfig() {
             <>
               <Form.Item
                 name="provider"
-                label="Calendar Provider"
+                label={t('projectConfig.calendarProvider')}
                 rules={[{ required: true }]}
               >
-                <Select onChange={setCalendarProvider} placeholder="Select provider">
+                <Select onChange={setCalendarProvider} placeholder={t('tenantCredentials.selectProviderPlaceholder')}>
                   <Select.Option value="google">Google Calendar</Select.Option>
                   <Select.Option value="microsoft">Microsoft Outlook</Select.Option>
                 </Select>
@@ -453,11 +455,11 @@ function ProjectConfig() {
               {calendarProvider && (
                 <>
                   <Alert
-                    message={calendarConnected ? 'Connected' : 'Not Connected'}
+                    message={calendarConnected ? t('projectConfig.connected') : t('projectConfig.notConnected')}
                     description={
                       calendarConnected
-                        ? 'Calendar is connected and ready to use'
-                        : 'Click below to authorize calendar access'
+                        ? t('projectConfig.calendarConnectedDescription')
+                        : t('projectConfig.calendarNotConnectedDescription')
                     }
                     type={calendarConnected ? 'success' : 'warning'}
                     showIcon
@@ -471,14 +473,14 @@ function ProjectConfig() {
                     onClick={handleConnectCalendar}
                     style={{ marginBottom: 16 }}
                   >
-                    {calendarConnected ? 'Reconnect' : 'Connect'} {calendarProvider === 'google' ? 'Google' : 'Microsoft'} Calendar
+                    {calendarConnected ? t('projectConfig.reconnect') : t('projectConfig.connect')} {calendarProvider === 'google' ? 'Google' : 'Microsoft'} Calendar
                   </Button>
 
                   {calendarConnected && (
                     <>
                       <Form.Item
                         name="calendar_id"
-                        label="Calendar"
+                        label={t('projectConfig.calendar')}
                       >
                         <Input placeholder="primary" />
                       </Form.Item>
@@ -500,7 +502,7 @@ function ProjectConfig() {
                         onClick={handleSaveCalendar}
                         loading={saving}
                       >
-                        Save Configuration
+                        {t('projectConfig.saveConfiguration')}
                       </Button>
                     </>
                   )}
@@ -511,8 +513,8 @@ function ProjectConfig() {
 
           {!calendarEnabled && (
             <Alert
-              message="Calendar integration is disabled"
-              description="Enable to automatically schedule appointments from phone conversations"
+              message={t('projectConfig.calendarDisabled')}
+              description={t('projectConfig.calendarDisabledDescription')}
               type="info"
             />
           )}
@@ -521,12 +523,12 @@ function ProjectConfig() {
     },
     {
       key: 'placeholders',
-      label: 'Prompt Placeholders',
+      label: t('projectConfig.promptPlaceholders'),
       children: (
         <Form form={placeholdersForm} layout="vertical">
           <Alert
-            message="Customizable Phrases"
-            description="Configure the phrases used by the AI during conversations. These replace the default hardcoded values."
+            message={t('projectConfig.customizablePhrases')}
+            description={t('projectConfig.customizablePhrasesDescription')}
             type="info"
             showIcon
             style={{ marginBottom: 24 }}
@@ -534,8 +536,8 @@ function ProjectConfig() {
 
           <Form.Item
             name="cancel_phrase"
-            label="Cancellation Phrase"
-            tooltip="What the AI says when user requests data deletion"
+            label={t('projectConfig.cancellationPhrase')}
+            tooltip={t('projectConfig.cancellationPhraseTooltip')}
           >
             <TextArea
               rows={2}
@@ -545,8 +547,8 @@ function ProjectConfig() {
 
           <Form.Item
             name="cancellation_confirmation"
-            label="Cancellation Confirmation"
-            tooltip="Confirmation message after data deletion"
+            label={t('projectConfig.cancellationConfirmation')}
+            tooltip={t('projectConfig.cancellationConfirmationTooltip')}
           >
             <TextArea
               rows={2}
@@ -556,8 +558,8 @@ function ProjectConfig() {
 
           <Form.Item
             name="goodbye_phrase"
-            label="Goodbye Phrase"
-            tooltip="How the AI ends the conversation"
+            label={t('projectConfig.goodbyePhrase')}
+            tooltip={t('projectConfig.goodbyePhraseTooltip')}
           >
             <TextArea
               rows={2}
@@ -569,8 +571,8 @@ function ProjectConfig() {
 
           <Form.Item
             name="intent_config"
-            label="Intent Configuration (Advanced)"
-            tooltip="JSON configuration for intent detection keywords"
+            label={t('projectConfig.intentConfigAdvanced')}
+            tooltip={t('projectConfig.intentConfigTooltip')}
           >
             <TextArea
               rows={8}
@@ -585,24 +587,24 @@ function ProjectConfig() {
             onClick={handleSavePlaceholders}
             loading={saving}
           >
-            Save Placeholders
+            {t('projectConfig.savePlaceholders')}
           </Button>
         </Form>
       ),
     },
     {
       key: 'telephony',
-      label: 'Telefonia',
+      label: t('projectConfig.telephony'),
       children: <TelephonyTab projectId={projectId} project={project} />,
     },
     {
       key: 'knowledge-base',
-      label: 'Knowledge Base',
+      label: t('projectConfig.knowledgeBase'),
       children: <KnowledgeBaseTab projectId={projectId} />,
     },
     {
       key: 'pdf-email',
-      label: 'PDF & Email',
+      label: t('projectConfig.pdfEmail'),
       children: <PdfEmailTab projectId={projectId} />,
     },
     {
@@ -623,10 +625,10 @@ function ProjectConfig() {
               onClick={() => navigate('/projects')}
               style={{ marginBottom: 16 }}
             >
-              Back to Projects
+              {t('projectConfig.backToProjects')}
             </Button>
             <Title level={2} style={{ margin: 0 }}>
-              Project Configuration: {project?.name}
+              {t('projectConfig.projectConfiguration')}: {project?.name}
             </Title>
             <Text type="secondary">{project?.slug}</Text>
           </div>

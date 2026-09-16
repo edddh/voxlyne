@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Form, Input, Button, Alert, Space, message, Spin } from 'antd'
+import { useTranslation } from 'react-i18next'
 import * as projectsApi from '../api/projects'
 
 /**
@@ -27,6 +28,7 @@ import * as projectsApi from '../api/projects'
  * specifico di QUESTO progetto (quali event type Cal.com usare).
  */
 function CalcomTab({ projectId }) {
+  const { t } = useTranslation()
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -45,7 +47,7 @@ function CalcomTab({ projectId }) {
           sport_event_type_id: calcomCfg.sport_event_type_id || '',
         })
       } catch (error) {
-        message.error('Errore nel caricamento della configurazione')
+        message.error(t('pdfEmailTab.loadError'))
       } finally {
         setLoading(false)
       }
@@ -68,9 +70,9 @@ function CalcomTab({ projectId }) {
       }
       await projectsApi.updateProject(projectId, { output_config })
       setProject((prev) => ({ ...prev, output_config }))
-      message.success('Configurazione Cal.com salvata')
+      message.success(t('calcomTab.saved'))
     } catch (error) {
-      message.error(error.response?.data?.detail || 'Errore nel salvataggio')
+      message.error(error.response?.data?.detail || t('projectConfig.sipSaveError'))
     } finally {
       setSaving(false)
     }
@@ -83,38 +85,38 @@ function CalcomTab({ projectId }) {
       <Alert
         type="info"
         showIcon
-        message="Prenotazioni appuntamenti (Cal.com)"
-        description="Quali event type Cal.com usa questo progetto. La chiave API si configura a livello di tenant, nella pagina Credenziali - qui solo cosa e' specifico di questo progetto. Rigenera l'istanza runtime (Progetti, icona fulmine) dopo aver salvato."
+        message={t('calcomTab.title')}
+        description={t('calcomTab.description')}
       />
 
       <Form form={form} layout="vertical" onFinish={handleSave}>
         <Form.Item
           name="event_type_id"
-          label="Event Type ID di default"
-          tooltip="Usato quando il prompt non distingue tra tipo visita standard/sportiva"
+          label={t('calcomTab.defaultEventTypeId')}
+          tooltip={t('calcomTab.defaultEventTypeIdTooltip')}
         >
           <Input placeholder="es. 809" />
         </Form.Item>
         <Form.Item
           name="standard_event_type_id"
-          label="Event Type ID - visita standard"
-          tooltip="Usato dal tool quando il prompt chiede una visita normale (appointment_type: standard)"
+          label={t('calcomTab.standardEventTypeId')}
+          tooltip={t('calcomTab.standardEventTypeIdTooltip')}
         >
           <Input placeholder="es. 810" />
         </Form.Item>
         <Form.Item
           name="sport_event_type_id"
-          label="Event Type ID - visita sportiva/agonistica"
-          tooltip="Usato dal tool quando il prompt chiede un certificato sportivo/agonistico (appointment_type: sport)"
+          label={t('calcomTab.sportEventTypeId')}
+          tooltip={t('calcomTab.sportEventTypeIdTooltip')}
         >
           <Input placeholder="es. 811" />
         </Form.Item>
-        <Form.Item name="username" label="Username Cal.com (opzionale)">
+        <Form.Item name="username" label={t('calcomTab.calcomUsername')}>
           <Input placeholder="es. studio-demo" />
         </Form.Item>
 
         <Button type="primary" htmlType="submit" loading={saving}>
-          Salva
+          {t('common.save')}
         </Button>
       </Form>
     </Space>

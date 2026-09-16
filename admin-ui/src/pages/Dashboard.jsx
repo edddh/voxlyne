@@ -8,11 +8,13 @@ import {
   ApiOutlined,
   CalendarOutlined,
 } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import * as analyticsApi from '../api/analytics'
 
 const { Title } = Typography
 
 function Dashboard() {
+  const { t } = useTranslation()
   const [stats, setStats] = useState(null)
   const [projectStats, setProjectStats] = useState([])
   const [loading, setLoading] = useState(true)
@@ -45,24 +47,24 @@ function Dashboard() {
 
   const projectColumns = [
     {
-      title: 'Progetto',
+      title: t('dashboard.project'),
       dataIndex: 'project_name',
       key: 'project_name',
     },
     {
-      title: 'Chiamate',
+      title: t('dashboard.calls'),
       dataIndex: 'total_calls',
       key: 'total_calls',
       align: 'right',
     },
     {
-      title: 'Completate',
+      title: t('dashboard.completed'),
       dataIndex: 'completed_calls',
       key: 'completed_calls',
       align: 'right',
     },
     {
-      title: 'Completamento',
+      title: t('dashboard.completionRate'),
       dataIndex: 'completion_rate',
       key: 'completion_rate',
       align: 'right',
@@ -73,7 +75,7 @@ function Dashboard() {
       ),
     },
     {
-      title: 'Durata Media',
+      title: t('dashboard.avgDuration'),
       dataIndex: 'avg_duration_seconds',
       key: 'avg_duration',
       align: 'right',
@@ -91,13 +93,13 @@ function Dashboard() {
 
   return (
     <div>
-      <Title level={3} style={{ marginBottom: 24 }}>Dashboard</Title>
+      <Title level={3} style={{ marginBottom: 24 }}>{t('dashboard.title')}</Title>
 
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic
-              title="Chiamate Oggi"
+              title={t('dashboard.callsToday')}
               value={stats?.total_calls_today || 0}
               prefix={<PhoneOutlined />}
             />
@@ -106,7 +108,7 @@ function Dashboard() {
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic
-              title="Completate Oggi"
+              title={t('dashboard.completedToday')}
               value={stats?.completed_calls_today || 0}
               prefix={<CheckCircleOutlined />}
               valueStyle={{ color: '#52c41a' }}
@@ -116,7 +118,7 @@ function Dashboard() {
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic
-              title="Tasso di Completamento"
+              title={t('dashboard.completionRateLabel')}
               value={stats?.completion_rate || 0}
               suffix="%"
               prefix={<RiseOutlined />}
@@ -128,7 +130,7 @@ function Dashboard() {
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic
-              title="Durata Media"
+              title={t('dashboard.avgDuration')}
               value={formatDuration(stats?.avg_duration_seconds)}
               prefix={<ClockCircleOutlined />}
             />
@@ -140,7 +142,7 @@ function Dashboard() {
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic
-              title="Chiamate Settimana"
+              title={t('dashboard.callsWeek')}
               value={stats?.total_calls_week || 0}
               prefix={<PhoneOutlined />}
             />
@@ -149,7 +151,7 @@ function Dashboard() {
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic
-              title="Chiamate Mese"
+              title={t('dashboard.callsMonth')}
               value={stats?.total_calls_month || 0}
               prefix={<PhoneOutlined />}
             />
@@ -158,7 +160,7 @@ function Dashboard() {
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic
-              title="Sync CRM"
+              title={t('dashboard.crmSync')}
               value={stats?.crm_synced_count || 0}
               prefix={<ApiOutlined />}
               valueStyle={{ color: '#1890ff' }}
@@ -168,7 +170,7 @@ function Dashboard() {
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic
-              title="Appuntamenti"
+              title={t('dashboard.appointments')}
               value={stats?.appointments_scheduled_count || 0}
               prefix={<CalendarOutlined />}
               valueStyle={{ color: '#722ed1' }}
@@ -178,7 +180,7 @@ function Dashboard() {
       </Row>
 
       <Card style={{ marginTop: 24 }}>
-        <Title level={4}>Statistiche per Progetto</Title>
+        <Title level={4}>{t('dashboard.statsByProject')}</Title>
         <Table
           scroll={{ x: 'max-content' }}
           dataSource={projectStats}

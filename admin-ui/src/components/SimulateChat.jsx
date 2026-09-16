@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Modal, Input, Button, Space, Avatar, Typography, Alert, Spin } from 'antd'
 import { SendOutlined, UserOutlined, RobotOutlined, ReloadOutlined } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import { simulateConversation } from '../api/simulation'
 import { BRAND } from '../main'
 
@@ -21,6 +22,7 @@ const { Text } = Typography
  * altri strumenti (Cal.com, ecc.).
  */
 function SimulateChat({ open, onClose, projectId, promptA, openingMessage }) {
+  const { t } = useTranslation()
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -62,7 +64,7 @@ function SimulateChat({ open, onClose, projectId, promptA, openingMessage }) {
       const toolEntries = (result.tool_calls || []).map((tc) => ({ role: 'tool', ...tc }))
       setMessages([...nextMessages, ...toolEntries, { role: 'assistant', content: result.reply }])
     } catch (err) {
-      setError(err.response?.data?.detail || 'Errore nella simulazione')
+      setError(err.response?.data?.detail || t('simulateChat.simulationError'))
     } finally {
       setSending(false)
     }
@@ -70,7 +72,7 @@ function SimulateChat({ open, onClose, projectId, promptA, openingMessage }) {
 
   return (
     <Modal
-      title="Prova la conversazione"
+      title={t('simulateChat.tryConversation')}
       open={open}
       onCancel={onClose}
       footer={null}
@@ -79,8 +81,8 @@ function SimulateChat({ open, onClose, projectId, promptA, openingMessage }) {
       <Alert
         type="info"
         showIcon
-        message="Simulazione testuale del prompt attuale nell'editor (anche non salvato)"
-        description="Non e' una vera chiamata vocale, e non ha accesso alla knowledge base ne' agli altri strumenti - serve per verificare tono e contenuto delle risposte prima di pubblicare."
+        message={t('simulateChat.simulationTitle')}
+        description={t('simulateChat.simulationDescription')}
         style={{ marginBottom: 12 }}
       />
 
@@ -97,14 +99,14 @@ function SimulateChat({ open, onClose, projectId, promptA, openingMessage }) {
         }}
       >
         {messages.length === 0 && (
-          <Text type="secondary">Scrivi un messaggio come farebbe chi chiama, per vedere come risponde.</Text>
+          <Text type="secondary">{t('simulateChat.emptyStateHint')}</Text>
         )}
         <Space direction="vertical" style={{ width: '100%' }} size={12}>
           {messages.map((m, i) =>
             m.role === 'tool' ? (
               <Text key={i} type="secondary" style={{ fontFamily: 'monospace', fontSize: 12 }}>
                 🔧 {m.name}({JSON.stringify(m.arguments)}) → {m.result?.status}
-                {m.result?.results?.length ? ` (${m.result.results.length} risultati)` : ''}
+                {m.result?.results?.length ? ` (${t('simulateChat.results', { count: m.result.results.length })})` : ''}
               </Text>
             ) : (
               <div key={i} style={{ display: 'flex', gap: 8, flexDirection: m.role === 'user' ? 'row-reverse' : 'row' }}>
@@ -134,14 +136,14 @@ function SimulateChat({ open, onClose, projectId, promptA, openingMessage }) {
 
       <Space.Compact style={{ width: '100%' }}>
         <Input
-          placeholder="Scrivi come farebbe chi chiama..."
+          placeholder={t('simulateChat.inputPlaceholder')}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onPressEnter={send}
           disabled={sending}
         />
         <Button type="primary" icon={<SendOutlined />} onClick={send} loading={sending}>
-          Invia
+          {t('simulateChat.send')}
         </Button>
       </Space.Compact>
       {messages.length > 0 && (
@@ -152,7 +154,7 @@ function SimulateChat({ open, onClose, projectId, promptA, openingMessage }) {
           onClick={() => setMessages([])}
           style={{ marginTop: 8 }}
         >
-          Ricomincia
+          {t('simulateChat.restart')}
         </Button>
       )}
     </Modal>

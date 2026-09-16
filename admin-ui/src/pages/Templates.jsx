@@ -3,6 +3,7 @@ import {
   Table, Button, Space, Modal, Form, Input, Select, message, Tag, Popconfirm, Typography, Card, Divider, Checkbox
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, TeamOutlined, CheckOutlined } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import * as templatesApi from '../api/templates'
 import * as tenantsApi from '../api/tenants'
 import { BRAND } from '../main'
@@ -15,6 +16,7 @@ const { TextArea } = Input
  * Manage global templates and assign them to tenants
  */
 function Templates() {
+  const { t, i18n } = useTranslation()
   const [templates, setTemplates] = useState([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
@@ -36,7 +38,7 @@ function Templates() {
       const data = await templatesApi.listTemplates()
       setTemplates(data.templates || [])
     } catch (error) {
-      message.error('Failed to load templates: ' + error.message)
+      message.error(t('templates.loadError') + ': ' + error.message)
     } finally {
       setLoading(false)
     }
@@ -84,7 +86,7 @@ function Templates() {
   }
 
   const handleDelete = async (templateId) => {
-    message.warning('Delete template feature coming soon')
+    message.warning(t('templates.deleteComingSoon'))
     // TODO: Implement delete when needed
     // await templatesApi.deleteTemplate(templateId)
   }
@@ -107,17 +109,17 @@ function Templates() {
 
       if (editingTemplate) {
         await templatesApi.updateTemplate(editingTemplate.id, values)
-        message.success('Template updated successfully')
+        message.success(t('templates.updated'))
       } else {
         await templatesApi.createTemplate(values)
-        message.success('Template created successfully')
+        message.success(t('templates.created'))
       }
 
       setModalOpen(false)
       loadTemplates()
     } catch (error) {
       if (error.errorFields) return // Validation error
-      message.error('Failed to save template: ' + error.message)
+      message.error(t('templates.saveError') + ': ' + error.message)
     }
   }
 
@@ -136,16 +138,16 @@ function Templates() {
   const handleAssignSubmit = async () => {
     try {
       await templatesApi.assignToTenants(selectedTemplate.id, selectedTenants)
-      message.success(`Template assigned to ${selectedTenants.length} tenant(s)`)
+      message.success(t('templates.assignedTo', { count: selectedTenants.length }))
       setAssignModalOpen(false)
     } catch (error) {
-      message.error('Failed to assign template: ' + error.message)
+      message.error(t('templates.assignError') + ': ' + error.message)
     }
   }
 
   const columns = [
     {
-      title: 'Name',
+      title: t('templates.name'),
       dataIndex: 'name',
       key: 'name',
       render: (text, record) => (
@@ -156,7 +158,7 @@ function Templates() {
       ),
     },
     {
-      title: 'Category',
+      title: t('templates.category'),
       dataIndex: 'template_category',
       key: 'template_category',
       render: (category) => {
@@ -171,13 +173,13 @@ function Templates() {
       },
     },
     {
-      title: 'Type',
+      title: t('templates.type'),
       dataIndex: 'type',
       key: 'type',
       render: (type) => <Tag>{type}</Tag>,
     },
     {
-      title: 'Language',
+      title: t('templates.language'),
       dataIndex: 'language',
       key: 'language',
       render: (lang) => {
@@ -186,21 +188,21 @@ function Templates() {
       },
     },
     {
-      title: 'Active',
+      title: t('templates.active'),
       dataIndex: 'is_active',
       key: 'is_active',
       render: (isActive) => (
-        isActive ? <Tag color="success" icon={<CheckOutlined />}>Active</Tag> : <Tag>Inactive</Tag>
+        isActive ? <Tag color="success" icon={<CheckOutlined />}>{t('templates.activeTag')}</Tag> : <Tag>{t('templates.inactiveTag')}</Tag>
       ),
     },
     {
-      title: 'Created',
+      title: t('tenants.createdColumn'),
       dataIndex: 'created_at',
       key: 'created_at',
-      render: (date) => new Date(date).toLocaleDateString(),
+      render: (date) => new Date(date).toLocaleDateString(i18n.language),
     },
     {
-      title: 'Actions',
+      title: t('tenantCredentials.actions'),
       key: 'actions',
       render: (_, record) => (
         <Space>
@@ -209,7 +211,7 @@ function Templates() {
             icon={<TeamOutlined />}
             onClick={() => handleAssign(record)}
           >
-            Assign
+            {t('templates.assign')}
           </Button>
           <Button
             type="link"
@@ -217,10 +219,10 @@ function Templates() {
             onClick={() => handleEdit(record)}
           />
           <Popconfirm
-            title="Delete this template?"
-            description="This will also remove all tenant assignments."
+            title={t('templates.confirmDelete')}
+            description={t('templates.confirmDeleteDescription')}
             onConfirm={() => handleDelete(record.id)}
-            okText="Delete"
+            okText={t('common.delete')}
             okType="danger"
           >
             <Button type="link" danger icon={<DeleteOutlined />} />
@@ -234,18 +236,18 @@ function Templates() {
     <div style={{ padding: 24 }}>
       <Card>
         <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-          <Title level={2} style={{ margin: 0, flexShrink: 0 }}>Templates</Title>
+          <Title level={2} style={{ margin: 0, flexShrink: 0 }}>{t('nav.templates')}</Title>
           <Button
             type="primary"
             icon={<PlusOutlined />}
             onClick={handleCreate}
           >
-            New Template
+            {t('templates.newTemplate')}
           </Button>
         </div>
 
         <Text type="secondary">
-          Global templates that can be assigned to tenants. Tenants create live projects from assigned templates.
+          {t('templates.pageDescription')}
         </Text>
 
         <Divider />
@@ -262,27 +264,27 @@ function Templates() {
 
       {/* Create/Edit Modal */}
       <Modal
-        title={editingTemplate ? 'Edit Template' : 'New Template'}
+        title={editingTemplate ? t('templates.editTemplate') : t('templates.newTemplate')}
         open={modalOpen}
         onOk={handleSubmit}
         onCancel={() => setModalOpen(false)}
         width={800}
-        okText="Save"
+        okText={t('common.save')}
       >
         <Form form={form} layout="vertical">
           <Form.Item
             name="name"
-            label="Template Name"
-            rules={[{ required: true, message: 'Please enter template name' }]}
+            label={t('templates.templateName')}
+            rules={[{ required: true, message: t('templates.enterTemplateName') }]}
           >
-            <Input placeholder="e.g., Customer Support Template" />
+            <Input placeholder={t('templates.templateNamePlaceholder')} />
           </Form.Item>
 
           <Form.Item
             name="slug"
             label="Slug"
-            rules={[{ required: true, message: 'Please enter slug' }]}
-            tooltip="URL-friendly identifier (lowercase, no spaces)"
+            rules={[{ required: true, message: t('tenants.enterSlug') }]}
+            tooltip={t('templates.slugTooltip')}
           >
             <Input placeholder="e.g., customer-support" />
           </Form.Item>
@@ -290,7 +292,7 @@ function Templates() {
           <Space style={{ width: '100%' }} size="large">
             <Form.Item
               name="type"
-              label="Type"
+              label={t('templates.type')}
               rules={[{ required: true }]}
               style={{ width: 200 }}
             >
@@ -304,13 +306,13 @@ function Templates() {
                 <Select.Option value="lead_gen">Lead Gen</Select.Option>
                 <Select.Option value="support">Support</Select.Option>
                 <Select.Option value="survey">Survey</Select.Option>
-                <Select.Option value="other">Other</Select.Option>
+                <Select.Option value="other">{t('templates.other')}</Select.Option>
               </Select>
             </Form.Item>
 
             <Form.Item
               name="template_category"
-              label="Category"
+              label={t('templates.category')}
               rules={[{ required: true }]}
               style={{ width: 200 }}
             >
@@ -319,13 +321,13 @@ function Templates() {
                 <Select.Option value="sales">Sales</Select.Option>
                 <Select.Option value="support">Support</Select.Option>
                 <Select.Option value="survey">Survey</Select.Option>
-                <Select.Option value="other">Other</Select.Option>
+                <Select.Option value="other">{t('templates.other')}</Select.Option>
               </Select>
             </Form.Item>
 
             <Form.Item
               name="language"
-              label="Language"
+              label={t('templates.language')}
               rules={[{ required: true }]}
               style={{ width: 150 }}
             >
@@ -337,33 +339,33 @@ function Templates() {
             </Form.Item>
           </Space>
 
-          <Form.Item name="description" label="Description">
-            <TextArea rows={2} placeholder="Brief description of this template" />
+          <Form.Item name="description" label={t('templates.description')}>
+            <TextArea rows={2} placeholder={t('templates.descriptionPlaceholder')} />
           </Form.Item>
 
           <Form.Item
             name="prompt_a"
-            label="Main Prompt (Instructions)"
+            label={t('templates.mainPrompt')}
             rules={[{ required: true }]}
-            tooltip="Use {{key}} for a custom variable a project cloned from this template will fill in (defined below) - use {{system__xxx}} (e.g. {{system__caller_id}}) for a tag the voice provider itself resolves at call time, never edited here."
+            tooltip={t('templates.mainPromptTooltip', { interpolation: { prefix: '{%', suffix: '%}' } })}
           >
-            <TextArea rows={6} placeholder="AI instructions for conversation flow..." />
+            <TextArea rows={6} placeholder={t('templates.mainPromptPlaceholder')} />
           </Form.Item>
 
           <Form.Item
             name="prompt_b"
-            label="Extraction Prompt"
-            tooltip="Instructions for extracting structured data from conversation"
+            label={t('templates.extractionPrompt')}
+            tooltip={t('templates.extractionPromptTooltip')}
           >
-            <TextArea rows={4} placeholder="Extract the following fields..." />
+            <TextArea rows={4} placeholder={t('templates.extractionPromptPlaceholder')} />
           </Form.Item>
 
-          <Form.Item name="consent_message" label="Consent Message">
-            <TextArea rows={2} placeholder="GDPR consent message (optional)" />
+          <Form.Item name="consent_message" label={t('templates.consentMessage')}>
+            <TextArea rows={2} placeholder={t('templates.consentMessagePlaceholder')} />
           </Form.Item>
 
-          <Form.Item name="voice_name" label="Voice Name (OpenAI)">
-            <Select placeholder="Select voice">
+          <Form.Item name="voice_name" label={t('templates.voiceName')}>
+            <Select placeholder={t('templates.selectVoice')}>
               <Select.Option value="alloy">Alloy</Select.Option>
               <Select.Option value="echo">Echo</Select.Option>
               <Select.Option value="shimmer">Shimmer</Select.Option>
@@ -371,11 +373,10 @@ function Templates() {
           </Form.Item>
 
           <Divider orientation="left" orientationMargin={0}>
-            Custom Variables ({'{{key}}'} tags)
+            {t('templates.customVariables')} ({'{{key}}'} tags)
           </Divider>
           <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-            One row per {'{{key}}'} used above. A project created from this template will be asked to
-            fill in a value for each one at import time, and can change it again later.
+            {t('templates.customVariablesDescription', { interpolation: { prefix: '{%', suffix: '%}' } })}
           </Text>
           <Form.List name="custom_variables_schema">
             {(fields, { add, remove }) => (
@@ -403,8 +404,8 @@ function Templates() {
                           {...restField}
                           name={[name, 'key']}
                           rules={[
-                            { required: true, message: 'obbligatorio' },
-                            { pattern: /^[a-zA-Z0-9_-]+$/, message: 'solo lettere/numeri/_/-' },
+                            { required: true, message: t('templates.required') },
+                            { pattern: /^[a-zA-Z0-9_-]+$/, message: t('templates.keyPattern') },
                           ]}
                           style={{ marginBottom: 0 }}
                         >
@@ -424,37 +425,37 @@ function Templates() {
                       <Form.Item
                         {...restField}
                         name={[name, 'label']}
-                        label="Etichetta"
-                        rules={[{ required: true, message: 'obbligatoria' }]}
+                        label={t('templates.label')}
+                        rules={[{ required: true, message: t('templates.requiredFem') }]}
                         style={{ flex: 1, minWidth: 220, marginBottom: 8 }}
                       >
-                        <Input placeholder="es. Nome del Comune" />
+                        <Input placeholder={t('templates.labelPlaceholder')} />
                       </Form.Item>
                       <Form.Item
                         {...restField}
                         name={[name, 'default']}
-                        label="Valore di default / esempio"
+                        label={t('templates.defaultValue')}
                         style={{ flex: 1, minWidth: 220, marginBottom: 8 }}
                       >
-                        <Input placeholder="es. Exampleville" />
+                        <Input placeholder={t('templates.defaultValuePlaceholder')} />
                       </Form.Item>
                     </Space>
 
                     <Form.Item
                       {...restField}
                       name={[name, 'description']}
-                      label="Descrizione"
+                      label={t('templates.description')}
                       style={{ marginBottom: 0 }}
                     >
                       <TextArea
                         rows={2}
-                        placeholder="A cosa serve questa variabile, dove viene usata nel prompt..."
+                        placeholder={t('templates.variableDescriptionPlaceholder')}
                       />
                     </Form.Item>
                   </Card>
                 ))}
                 <Button type="dashed" onClick={() => add()} icon={<PlusOutlined />} block>
-                  Add variable
+                  {t('templates.addVariable')}
                 </Button>
               </>
             )}
@@ -464,14 +465,14 @@ function Templates() {
 
       {/* Assign to Tenants Modal */}
       <Modal
-        title={`Assign Template: ${selectedTemplate?.name}`}
+        title={`${t('templates.assignTemplate')}: ${selectedTemplate?.name}`}
         open={assignModalOpen}
         onOk={handleAssignSubmit}
         onCancel={() => setAssignModalOpen(false)}
-        okText="Assign"
+        okText={t('templates.assign')}
       >
         <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
-          Select tenants that should have access to this template
+          {t('templates.selectTenantsDescription')}
         </Text>
         <Checkbox.Group
           value={selectedTenants}

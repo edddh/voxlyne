@@ -8,6 +8,7 @@ import {
   CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, PhoneFilled, UserOutlined,
   PieChartOutlined, DollarCircleOutlined
 } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import * as callsApi from '../api/calls'
 import * as projectsApi from '../api/projects'
 
@@ -15,6 +16,7 @@ const { Title, Text } = Typography
 const { RangePicker } = DatePicker
 
 function Calls() {
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const [calls, setCalls] = useState([])
   const [loading, setLoading] = useState(true)
@@ -122,13 +124,13 @@ function Calls() {
         phone_number: values.phone_number,
         project_id: values.project_id,
       })
-      message.success(`Chiamata avviata: ${result.call_id}`)
+      message.success(t('calls.callStarted', { callId: result.call_id }))
       setOutboundModalOpen(false)
       outboundForm.resetFields()
       loadCalls()
       loadStats()
     } catch (error) {
-      const msg = error.response?.data?.detail || 'Errore avvio chiamata'
+      const msg = error.response?.data?.detail || t('calls.startCallError')
       message.error(msg)
     } finally {
       setOutboundLoading(false)
@@ -147,7 +149,7 @@ function Calls() {
       document.body.removeChild(a)
       window.URL.revokeObjectURL(url)
     } catch (error) {
-      message.error('Errore download PDF')
+      message.error(t('callDetail.pdfDownloadError'))
     }
   }
 
@@ -164,21 +166,21 @@ function Calls() {
       document.body.removeChild(a)
       window.URL.revokeObjectURL(url)
     } catch (error) {
-      message.error('Errore download JSON')
+      message.error(t('calls.jsonDownloadError'))
     }
   }
 
   const getStatusConfig = (status) => {
     const configs = {
-      pending_consent: { color: 'default', icon: <ClockCircleOutlined />, label: 'In attesa consenso' },
-      consented: { color: 'blue', icon: <CheckCircleOutlined />, label: 'Consenso dato' },
-      in_progress: { color: 'processing', icon: <PhoneOutlined />, label: 'In corso' },
-      completed: { color: 'green', icon: <CheckCircleOutlined />, label: 'Completata' },
-      processing: { color: 'orange', icon: <ClockCircleOutlined />, label: 'In elaborazione' },
-      processed: { color: 'success', icon: <CheckCircleOutlined />, label: 'Elaborata' },
-      declined: { color: 'red', icon: <CloseCircleOutlined />, label: 'Rifiutata' },
-      escalated: { color: 'purple', icon: <UserOutlined />, label: 'Inoltrata a operatore' },
-      cancelled: { color: 'default', icon: <CloseCircleOutlined />, label: 'Annullata' },
+      pending_consent: { color: 'default', icon: <ClockCircleOutlined />, label: t('analytics.statusPendingConsent') },
+      consented: { color: 'blue', icon: <CheckCircleOutlined />, label: t('analytics.statusConsented') },
+      in_progress: { color: 'processing', icon: <PhoneOutlined />, label: t('analytics.statusInProgress') },
+      completed: { color: 'green', icon: <CheckCircleOutlined />, label: t('analytics.statusCompleted') },
+      processing: { color: 'orange', icon: <ClockCircleOutlined />, label: t('analytics.statusProcessing') },
+      processed: { color: 'success', icon: <CheckCircleOutlined />, label: t('analytics.statusProcessed') },
+      declined: { color: 'red', icon: <CloseCircleOutlined />, label: t('analytics.statusDeclined') },
+      escalated: { color: 'purple', icon: <UserOutlined />, label: t('analytics.statusEscalated') },
+      cancelled: { color: 'default', icon: <CloseCircleOutlined />, label: t('analytics.statusCancelled') },
     }
     return configs[status] || { color: 'default', label: status }
   }
@@ -206,7 +208,7 @@ function Calls() {
 
   const columns = [
     {
-      title: 'Dir.',
+      title: t('calls.dir'),
       key: 'direction',
       align: 'center',
       width: 60,
@@ -220,7 +222,7 @@ function Calls() {
       },
     },
     {
-      title: 'Chiamante',
+      title: t('callDetail.caller'),
       dataIndex: 'phone_number',
       key: 'caller',
       render: (phone) => (
@@ -231,7 +233,7 @@ function Calls() {
       ),
     },
     {
-      title: 'Progetto',
+      title: t('dashboard.project'),
       key: 'project',
       render: (_, record) => (
         record.project_name ? (
@@ -242,7 +244,7 @@ function Calls() {
       ),
     },
     {
-      title: 'Stato',
+      title: t('tenantCredentials.status'),
       dataIndex: 'status',
       key: 'status',
       render: (status) => {
@@ -255,7 +257,7 @@ function Calls() {
       },
     },
     {
-      title: 'Durata',
+      title: t('callDetail.duration'),
       dataIndex: 'duration_seconds',
       key: 'duration',
       align: 'center',
@@ -266,14 +268,14 @@ function Calls() {
     // superadmin") - una colonna sempre vuota per tutti gli altri
     // sarebbe solo rumore, meglio non mostrarla proprio.
     ...(stats.can_view_costs ? [{
-      title: 'Costo',
+      title: t('calls.cost'),
       dataIndex: 'cost_usd',
       key: 'cost',
       align: 'center',
       render: (cost) => cost != null ? `$${cost.toFixed(4)}` : <Text type="secondary">-</Text>,
     }] : []),
     {
-      title: 'Record',
+      title: t('calls.record'),
       key: 'record',
       align: 'center',
       render: (_, record) => (
@@ -305,20 +307,20 @@ function Calls() {
       ),
     },
     {
-      title: 'Data',
+      title: t('calls.date'),
       dataIndex: 'created_at',
       key: 'created',
       render: (date) => (
         <Space direction="vertical" size={0}>
-          <Text>{new Date(date).toLocaleDateString('it-IT')}</Text>
+          <Text>{new Date(date).toLocaleDateString(i18n.language)}</Text>
           <Text type="secondary" style={{ fontSize: 11 }}>
-            {new Date(date).toLocaleTimeString('it-IT')}
+            {new Date(date).toLocaleTimeString(i18n.language)}
           </Text>
         </Space>
       ),
     },
     {
-      title: 'Azioni',
+      title: t('tenantCredentials.actions'),
       key: 'actions',
       render: (_, record) => (
         <Space>
@@ -328,7 +330,7 @@ function Calls() {
             type="primary"
             onClick={() => navigate(`/calls/${record.id}`)}
           >
-            Dettagli
+            {t('calls.details')}
           </Button>
         </Space>
       ),
@@ -338,15 +340,15 @@ function Calls() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 8 }}>
-        <Title level={3} style={{ margin: 0, flexShrink: 0 }}>Chiamate</Title>
+        <Title level={3} style={{ margin: 0, flexShrink: 0 }}>{t('nav.calls')}</Title>
         <Button
           type="primary"
           icon={<PhoneFilled />}
           onClick={() => setOutboundModalOpen(true)}
           disabled={outboundProjects.length === 0}
-          title={outboundProjects.length === 0 ? 'Nessun progetto configurato per outbound (Vapi)' : ''}
+          title={outboundProjects.length === 0 ? t('calls.noOutboundProjects') : ''}
         >
-          Nuova Chiamata Outbound
+          {t('calls.newOutboundCall')}
         </Button>
       </div>
 
@@ -354,7 +356,7 @@ function Calls() {
         <Col xs={12} sm={6}>
           <Card>
             <Statistic
-              title="Chiamate Oggi"
+              title={t('dashboard.callsToday')}
               value={stats.today}
               prefix={<PhoneOutlined />}
             />
@@ -363,7 +365,7 @@ function Calls() {
         <Col xs={12} sm={6}>
           <Card>
             <Statistic
-              title="Chiamate Totali"
+              title={t('calls.totalCalls')}
               value={stats.total}
               prefix={<PhoneOutlined />}
             />
@@ -372,7 +374,7 @@ function Calls() {
         <Col xs={12} sm={6}>
           <Card>
             <Statistic
-              title="Completate"
+              title={t('dashboard.completed')}
               value={stats.completed}
               prefix={<CheckCircleOutlined />}
               valueStyle={{ color: '#52c41a' }}
@@ -382,7 +384,7 @@ function Calls() {
         <Col xs={12} sm={6}>
           <Card>
             <Statistic
-              title="In Corso"
+              title={t('calls.inProgress')}
               value={stats.in_progress}
               prefix={<PhoneOutlined />}
               valueStyle={{ color: '#faad14' }}
@@ -392,7 +394,7 @@ function Calls() {
         <Col xs={12} sm={6}>
           <Card>
             <Statistic
-              title="Minuti Pacchetto Usati"
+              title={t('calls.packageMinutesUsed')}
               value={formatBillableMinutes(stats.minutes_used_current_month ?? stats.minutes_used)}
               suffix={stats.minutes_included ? `/ ${formatIncludedMinutes(stats.minutes_included)}` : ''}
               prefix={<PieChartOutlined />}
@@ -401,7 +403,7 @@ function Calls() {
             {stats.percent_used != null ? (
               <Progress percent={stats.percent_used} size="small" style={{ marginTop: 8 }} />
             ) : (
-              <Text type="secondary" style={{ fontSize: 11 }}>Nessun pacchetto configurato</Text>
+              <Text type="secondary" style={{ fontSize: 11 }}>{t('calls.noPackageConfigured')}</Text>
             )}
           </Card>
         </Col>
@@ -409,7 +411,7 @@ function Calls() {
           <Col xs={12} sm={6}>
             <Card>
               <Statistic
-                title="Costo servizi esterni"
+                title={t('calls.externalServicesCost')}
                 value={stats.total_cost_usd}
                 precision={2}
                 prefix={<DollarCircleOutlined />}
@@ -421,7 +423,7 @@ function Calls() {
         <Col xs={12} sm={6}>
           <Card>
             <Statistic
-              title="Minuti Anno Corrente"
+              title={t('calls.currentYearMinutes')}
               value={formatBillableMinutes(stats.minutes_used_current_year)}
               prefix={<PieChartOutlined />}
               valueStyle={{ color: '#722ed1' }}
@@ -431,7 +433,7 @@ function Calls() {
       </Row>
 
       {stats.by_tenant?.length > 0 && (
-        <Card title="Costi per tenant" size="small" style={{ marginBottom: 24 }}>
+        <Card title={t('calls.costsByTenant')} size="small" style={{ marginBottom: 24 }}>
           <Table
             size="small"
             pagination={false}
@@ -439,10 +441,10 @@ function Calls() {
             rowKey="tenant_id"
             columns={[
               { title: 'Tenant', dataIndex: 'tenant_name', key: 'tenant_name' },
-              { title: 'Chiamate', dataIndex: 'calls_count', key: 'calls_count', align: 'center' },
-              { title: 'Minuti fatturabili', dataIndex: 'minutes_used', key: 'minutes_used', align: 'center' },
+              { title: t('dashboard.calls'), dataIndex: 'calls_count', key: 'calls_count', align: 'center' },
+              { title: t('calls.billableMinutes'), dataIndex: 'minutes_used', key: 'minutes_used', align: 'center' },
               {
-                title: 'Costo registrato',
+                title: t('calls.recordedCost'),
                 dataIndex: 'cost_usd',
                 key: 'cost_usd',
                 align: 'center',
@@ -457,7 +459,7 @@ function Calls() {
         <Row gutter={[16, 16]}>
           <Col xs={24} sm={12} md={6}>
             <Input
-              placeholder="Cerca telefono..."
+              placeholder={t('calls.searchPhone')}
               prefix={<SearchOutlined />}
               value={phoneSearch}
               onChange={(e) => setPhoneSearch(e.target.value)}
@@ -466,27 +468,27 @@ function Calls() {
           </Col>
           <Col xs={12} sm={12} md={5}>
             <Select
-              placeholder="Stato"
+              placeholder={t('tenantCredentials.status')}
               style={{ width: '100%' }}
               allowClear
               value={statusFilter}
               onChange={setStatusFilter}
               options={[
-                { value: 'pending_consent', label: 'In attesa consenso' },
-                { value: 'consented', label: 'Consenso dato' },
-                { value: 'in_progress', label: 'In corso' },
-                { value: 'completed', label: 'Completata' },
-                { value: 'processing', label: 'In elaborazione' },
-                { value: 'processed', label: 'Elaborata' },
-                { value: 'declined', label: 'Rifiutata' },
-                { value: 'escalated', label: 'Inoltrata a operatore' },
-                { value: 'cancelled', label: 'Annullata' },
+                { value: 'pending_consent', label: t('analytics.statusPendingConsent') },
+                { value: 'consented', label: t('analytics.statusConsented') },
+                { value: 'in_progress', label: t('analytics.statusInProgress') },
+                { value: 'completed', label: t('analytics.statusCompleted') },
+                { value: 'processing', label: t('analytics.statusProcessing') },
+                { value: 'processed', label: t('analytics.statusProcessed') },
+                { value: 'declined', label: t('analytics.statusDeclined') },
+                { value: 'escalated', label: t('analytics.statusEscalated') },
+                { value: 'cancelled', label: t('analytics.statusCancelled') },
               ]}
             />
           </Col>
           <Col xs={12} sm={12} md={5}>
             <Select
-              placeholder="Progetto"
+              placeholder={t('dashboard.project')}
               style={{ width: '100%' }}
               allowClear
               value={projectFilter}
@@ -500,7 +502,7 @@ function Calls() {
               value={dateRange}
               onChange={setDateRange}
               format="DD/MM/YYYY"
-              placeholder={['Data inizio', 'Data fine']}
+              placeholder={[t('calls.startDate'), t('calls.endDate')]}
             />
           </Col>
         </Row>
@@ -521,13 +523,13 @@ function Calls() {
             setPageSize(ps)
           },
           showSizeChanger: true,
-          showTotal: (t) => `Totale: ${t} chiamate`,
+          showTotal: (total_) => t('calls.totalCount', { count: total_ }),
         }}
       />
 
       {/* M5: Outbound Call Modal */}
       <Modal
-        title="Nuova Chiamata Outbound"
+        title={t('calls.newOutboundCall')}
         open={outboundModalOpen}
         onCancel={() => { setOutboundModalOpen(false); outboundForm.resetFields() }}
         footer={null}
@@ -536,21 +538,21 @@ function Calls() {
         <Form form={outboundForm} layout="vertical" onFinish={handleOutboundCall}>
           <Form.Item
             name="phone_number"
-            label="Numero di Telefono"
+            label={t('calls.phoneNumber')}
             rules={[
-              { required: true, message: 'Inserisci numero di telefono' },
-              { pattern: /^\+?[0-9\s\-()]+$/, message: 'Formato numero non valido' },
+              { required: true, message: t('calls.enterPhoneNumber') },
+              { pattern: /^\+?[0-9\s\-()]+$/, message: t('calls.invalidNumberFormat') },
             ]}
           >
             <Input placeholder="+49 151 23456789" prefix={<PhoneOutlined />} />
           </Form.Item>
           <Form.Item
             name="project_id"
-            label="Progetto"
-            rules={[{ required: true, message: 'Seleziona un progetto' }]}
+            label={t('dashboard.project')}
+            rules={[{ required: true, message: t('calls.selectProject') }]}
           >
             <Select
-              placeholder="Seleziona progetto outbound..."
+              placeholder={t('calls.selectOutboundProject')}
               options={outboundProjects.map(p => ({
                 value: p.id,
                 label: `${p.name} (${p.language || 'it'})`,
@@ -560,10 +562,10 @@ function Calls() {
           <Form.Item>
             <Space>
               <Button type="primary" htmlType="submit" loading={outboundLoading} icon={<PhoneFilled />}>
-                Avvia Chiamata
+                {t('calls.startCall')}
               </Button>
               <Button onClick={() => { setOutboundModalOpen(false); outboundForm.resetFields() }}>
-                Annulla
+                {t('common.cancel')}
               </Button>
             </Space>
           </Form.Item>

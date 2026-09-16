@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { Modal, Button, Space, Typography, Alert, Tag, List } from 'antd'
 import { AudioOutlined, PhoneOutlined, StopOutlined } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import { BRAND } from '../main'
 
 const { Text } = Typography
@@ -71,6 +72,7 @@ function int16FromBase64(base64) {
  * non con un sostituto.
  */
 function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, voiceEngine }) {
+  const { t: translate } = useTranslation()
   const [status, setStatus] = useState('idle') // idle | connecting | live | error | ended
   const [error, setError] = useState(null)
   const [transcript, setTranscript] = useState([])
@@ -205,7 +207,7 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
     playheadRef.current = 0
 
     if (!isSupportedVoiceSimulation) {
-      setError(`La prova vocale per l'engine "${voiceEngine}" non è ancora disponibile.`)
+      setError(translate('simulateVoice.engineNotAvailable', { engine: voiceEngine }))
       setStatus('error')
       return
     }
@@ -233,7 +235,7 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
         })
         const body = await response.json().catch(() => ({}))
         if (!response.ok || !body?.signed_url) {
-          throw new Error(body?.detail || 'Impossibile aprire una sessione ElevenLabs')
+          throw new Error(body?.detail || translate('simulateVoice.cannotOpenElevenSession'))
         }
         elevenConversationIdRef.current = body.conversation_id || null
         ws = new WebSocket(body.signed_url)
@@ -433,16 +435,16 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
         }
         if (status === 'live' || status === 'connecting') {
           if (event.code >= 4400) {
-            setError(event.reason || 'Connessione rifiutata')
+            setError(event.reason || translate('simulateVoice.connectionRefused'))
             setStatus('error')
           } else {
-            setError('Errore di connessione alla simulazione vocale')
+            setError(translate('simulateVoice.simulationConnectionError'))
             setStatus('error')
           }
         }
       }
     } catch (err) {
-      setError(err.message || 'Impossibile accedere al microfono')
+      setError(err.message || translate('simulateVoice.micAccessError'))
       setStatus('error')
       cleanup()
     }
@@ -464,47 +466,47 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
   }
 
   return (
-    <Modal title="Prova la chiamata vocale" open={open} onCancel={handleClose} footer={null} width="min(520px, 92vw)">
+    <Modal title={translate('simulateVoice.tryVoiceCall')} open={open} onCancel={handleClose} footer={null} width="min(520px, 92vw)">
       <Alert
         type="info"
         showIcon
         message={!isSupportedVoiceSimulation
-          ? 'Prova vocale non disponibile per questo engine'
+          ? translate('simulateVoice.voiceTestUnavailable')
           : isElevenVoiceSimulation
-          ? 'Motore vocale reale ElevenLabs Agent, non un sostituto testuale'
-          : 'Motore vocale reale xAI realtime, non un sostituto testuale'}
+          ? translate('simulateVoice.realElevenEngine')
+          : translate('simulateVoice.realXaiEngine')}
         description={!isSupportedVoiceSimulation
-          ? 'L’engine OpenAI può essere usato nelle chiamate reali, ma il simulatore browser non dispone ancora di un relay vocale OpenAI.'
+          ? translate('simulateVoice.openaiEngineNote')
           : isElevenVoiceSimulation
-          ? `Usa il microfono del browser e la configurazione pubblicata dell'agente ElevenLabs, inclusi tool e voce V3. Si chiude automaticamente dopo ${SILENCE_TIMEOUT_SECONDS} secondi di silenzio.`
-          : `Usa il microfono del browser e il prompt attuale nell'editor (anche non salvato), con accesso alla knowledge base del progetto. Non ha accesso agli altri strumenti (Cal.com, ecc.). Si chiude automaticamente dopo ${SILENCE_TIMEOUT_SECONDS} secondi di silenzio.`}
+          ? translate('simulateVoice.elevenDescription', { seconds: SILENCE_TIMEOUT_SECONDS })
+          : translate('simulateVoice.xaiDescription', { seconds: SILENCE_TIMEOUT_SECONDS })}
         style={{ marginBottom: 16 }}
       />
 
       <div style={{ textAlign: 'center', marginBottom: 16 }}>
         {status === 'idle' && (
           <Button type="primary" size="large" icon={<PhoneOutlined />} onClick={start}>
-            Avvia chiamata di prova
+            {translate('simulateVoice.startTestCall')}
           </Button>
         )}
-        {status === 'connecting' && <Tag icon={<AudioOutlined />} color="processing">Connessione in corso...</Tag>}
+        {status === 'connecting' && <Tag icon={<AudioOutlined />} color="processing">{translate('simulateVoice.connecting')}</Tag>}
         {status === 'live' && (
           <Space direction="vertical" align="center">
-            <Tag icon={<AudioOutlined />} color="green">In chiamata - parla pure</Tag>
-            <Text type="secondary">Timeout inattività tra: {remainingSeconds}s</Text>
-            <Button danger icon={<StopOutlined />} onClick={stop}>Termina</Button>
+            <Tag icon={<AudioOutlined />} color="green">{translate('simulateVoice.inCallSpeak')}</Tag>
+            <Text type="secondary">{translate('simulateVoice.inactivityTimeout', { seconds: remainingSeconds })}</Text>
+            <Button danger icon={<StopOutlined />} onClick={stop}>{translate('simulateVoice.end')}</Button>
           </Space>
         )}
         {status === 'ended' && (
           <Space direction="vertical" align="center">
-            <Tag>{timedOut ? `Chiamata terminata - ${SILENCE_TIMEOUT_SECONDS}s di silenzio` : 'Chiamata terminata'}</Tag>
-            <Button icon={<PhoneOutlined />} onClick={start}>Richiama</Button>
+            <Tag>{timedOut ? translate('simulateVoice.callEndedSilence', { seconds: SILENCE_TIMEOUT_SECONDS }) : translate('simulateVoice.callEnded')}</Tag>
+            <Button icon={<PhoneOutlined />} onClick={start}>{translate('simulateVoice.callBack')}</Button>
           </Space>
         )}
         {status === 'error' && (
           <Space direction="vertical" align="center">
             <Alert type="error" message={error} />
-            <Button icon={<PhoneOutlined />} onClick={start}>Riprova</Button>
+            <Button icon={<PhoneOutlined />} onClick={start}>{translate('simulateVoice.retry')}</Button>
           </Space>
         )}
       </div>
@@ -520,7 +522,7 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
                   <Text type="secondary" style={{ fontFamily: 'monospace', fontSize: 12 }}>
                     🔧 {t.name}({JSON.stringify(t.arguments)}) → {t.result?.status}
                     {t.result?.results?.length
-                      ? ` (${t.result.results.length} risultati)`
+                      ? ` (${translate('simulateChat.results', { count: t.result.results.length })})`
                       : ''}
                   </Text>
                 ) : (
@@ -531,7 +533,7 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
                   // spezzato" + "i label a sinistra non hanno spazio").
                   <div style={{ display: 'flex', gap: 6, width: '100%' }}>
                     <Text type="secondary" strong style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-                      {t.role === 'user' ? 'Tu:' : 'Agente:'}
+                      {t.role === 'user' ? translate('simulateVoice.you') : translate('simulateVoice.agent')}
                     </Text>
                     <Text style={{ minWidth: 0 }}>{t.content}</Text>
                   </div>

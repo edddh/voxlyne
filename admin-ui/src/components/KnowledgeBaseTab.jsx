@@ -6,6 +6,7 @@ import {
 import {
   PlusOutlined, UploadOutlined, DeleteOutlined, SyncOutlined, SearchOutlined, LinkOutlined, FileOutlined, EditOutlined,
 } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import * as kb from '../api/knowledgeBase'
 
 const { Text } = Typography
@@ -23,6 +24,7 @@ const STATUS_COLORS = { pending: 'default', processing: 'processing', indexed: '
  * knowledge base here, Exampleville is just the first one that does.
  */
 function KnowledgeBaseTab({ projectId }) {
+  const { t } = useTranslation()
   const [sources, setSources] = useState([])
   const [loading, setLoading] = useState(true)
   const [urlModalOpen, setUrlModalOpen] = useState(false)
@@ -41,7 +43,7 @@ function KnowledgeBaseTab({ projectId }) {
       const data = await kb.listSources(projectId)
       setSources(data)
     } catch (error) {
-      message.error('Errore nel caricamento delle fonti')
+      message.error(t('knowledgeBase.loadError'))
     } finally {
       setLoading(false)
     }
@@ -66,12 +68,12 @@ function KnowledgeBaseTab({ projectId }) {
     setSubmitting(true)
     try {
       await kb.addUrlSource(projectId, values)
-      message.success('Crawl avviato')
+      message.success(t('knowledgeBase.crawlStarted'))
       setUrlModalOpen(false)
       urlForm.resetFields()
       load()
     } catch (error) {
-      message.error(error.response?.data?.detail || "Errore nell'avvio del crawl")
+      message.error(error.response?.data?.detail || t('knowledgeBase.crawlStartError'))
     } finally {
       setSubmitting(false)
     }
@@ -80,27 +82,27 @@ function KnowledgeBaseTab({ projectId }) {
   const handleUpload = async (file) => {
     try {
       await kb.addUploadSource(projectId, file)
-      message.success('File caricato, indicizzazione avviata')
+      message.success(t('knowledgeBase.fileUploaded'))
       load()
     } catch (error) {
-      message.error(error.response?.data?.detail || 'Errore nel caricamento del file')
+      message.error(error.response?.data?.detail || t('knowledgeBase.uploadError'))
     }
     return false // prevent antd's default auto-upload
   }
 
   const handleDelete = async (sourceId) => {
     await kb.deleteSource(projectId, sourceId)
-    message.success('Fonte eliminata')
+    message.success(t('knowledgeBase.sourceDeleted'))
     load()
   }
 
   const handleReindex = async (sourceId) => {
     try {
       await kb.reindexSource(projectId, sourceId)
-      message.success('Reindicizzazione avviata')
+      message.success(t('knowledgeBase.reindexStarted'))
       load()
     } catch (error) {
-      message.error(error.response?.data?.detail || 'Errore nella reindicizzazione')
+      message.error(error.response?.data?.detail || t('knowledgeBase.reindexError'))
     }
   }
 
@@ -116,11 +118,11 @@ function KnowledgeBaseTab({ projectId }) {
     setSavingSchedule(true)
     try {
       await kb.updateSchedule(projectId, scheduleModalSource.id, values)
-      message.success('Pianificazione aggiornata')
+      message.success(t('knowledgeBase.scheduleUpdated'))
       setScheduleModalSource(null)
       load()
     } catch (error) {
-      message.error(error.response?.data?.detail || 'Errore nel salvataggio della pianificazione')
+      message.error(error.response?.data?.detail || t('knowledgeBase.scheduleSaveError'))
     } finally {
       setSavingSchedule(false)
     }
@@ -133,7 +135,7 @@ function KnowledgeBaseTab({ projectId }) {
       const data = await kb.searchKnowledgeBase(projectId, searchQuery)
       setSearchResults(data.results)
     } catch (error) {
-      message.error(error.response?.data?.detail || 'Ricerca non disponibile (credenziale llm/openai mancante per il tenant?)')
+      message.error(error.response?.data?.detail || t('knowledgeBase.searchUnavailable'))
     } finally {
       setSearching(false)
     }
@@ -141,7 +143,7 @@ function KnowledgeBaseTab({ projectId }) {
 
   const columns = [
     {
-      title: 'Fonte',
+      title: t('knowledgeBase.source'),
       key: 'source',
       render: (_, r) => (
         <Space>
@@ -151,40 +153,40 @@ function KnowledgeBaseTab({ projectId }) {
       ),
     },
     {
-      title: 'Stato',
+      title: t('tenantCredentials.status'),
       key: 'status',
       render: (_, r) => (
         <Space>
           <Tag color={STATUS_COLORS[r.status]}>{r.status}</Tag>
           {r.status === 'processing' && (
-            <Text type="secondary">{r.pages_crawled} pagine analizzate finora</Text>
+            <Text type="secondary">{t('knowledgeBase.pagesAnalyzedSoFar', { count: r.pages_crawled })}</Text>
           )}
         </Space>
       ),
     },
-    { title: 'Pagine indicizzate', dataIndex: 'pages_crawled' },
-    { title: 'Chunk indicizzati', dataIndex: 'chunk_count' },
+    { title: t('knowledgeBase.indexedPages'), dataIndex: 'pages_crawled' },
+    { title: t('knowledgeBase.indexedChunks'), dataIndex: 'chunk_count' },
     {
-      title: 'Ricrawl automatico',
+      title: t('knowledgeBase.autoRecrawl'),
       dataIndex: 'recrawl_interval_hours',
-      render: (v) => (v ? `ogni ${v}h` : v === 0 ? '—' : (v === null ? 'manuale' : `ogni ${v}h`)),
+      render: (v) => (v ? t('knowledgeBase.everyHours', { hours: v }) : v === 0 ? '—' : (v === null ? t('knowledgeBase.manual') : t('knowledgeBase.everyHours', { hours: v }))),
     },
     {
-      title: 'Azioni',
+      title: t('tenantCredentials.actions'),
       key: 'actions',
       render: (_, r) => (
         <Space>
           {r.source_type === 'url' && (
             <>
               <Button size="small" icon={<SyncOutlined />} onClick={() => handleReindex(r.id)}>
-                Reindicizza
+                {t('knowledgeBase.reindex')}
               </Button>
               <Button size="small" icon={<EditOutlined />} onClick={() => openScheduleModal(r)}>
-                Pianificazione
+                {t('knowledgeBase.schedule')}
               </Button>
             </>
           )}
-          <Popconfirm title="Eliminare questa fonte e i suoi chunk?" onConfirm={() => handleDelete(r.id)}>
+          <Popconfirm title={t('knowledgeBase.confirmDeleteSource')} onConfirm={() => handleDelete(r.id)}>
             <Button size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>
@@ -197,19 +199,19 @@ function KnowledgeBaseTab({ projectId }) {
       <Alert
         type="info"
         showIcon
-        message="Knowledge base del progetto"
-        description="L'agente vocale consulta queste fonti durante la chiamata (tool search_knowledge_base) per rispondere a domande specifiche - orari, procedure, notizie, regolamenti. Aggiungi un URL da crawlare (rileva automaticamente i siti costruiti sul template kPortal/AGID, con API di contenuto dedicata) oppure carica un documento."
+        message={t('knowledgeBase.title')}
+        description={t('knowledgeBase.description')}
       />
 
       <Space>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setUrlModalOpen(true)}>
-          Aggiungi URL da crawlare
+          {t('knowledgeBase.addUrlToCrawl')}
         </Button>
         <Upload beforeUpload={handleUpload} showUploadList={false} accept=".pdf,.docx,.txt,.md,.html">
-          <Button icon={<UploadOutlined />}>Carica documento</Button>
+          <Button icon={<UploadOutlined />}>{t('knowledgeBase.uploadDocument')}</Button>
         </Upload>
         <Button icon={<SearchOutlined />} onClick={() => setSearchOpen(true)}>
-          Prova la ricerca
+          {t('knowledgeBase.trySearch')}
         </Button>
       </Space>
 
@@ -219,77 +221,77 @@ function KnowledgeBaseTab({ projectId }) {
         dataSource={sources}
         loading={loading}
         pagination={false}
-        locale={{ emptyText: 'Nessuna fonte configurata' }}
+        locale={{ emptyText: t('knowledgeBase.noSourcesConfigured') }}
       />
 
       <Modal
-        title="Aggiungi URL da crawlare"
+        title={t('knowledgeBase.addUrlToCrawl')}
         open={urlModalOpen}
         onCancel={() => setUrlModalOpen(false)}
         onOk={() => urlForm.submit()}
         confirmLoading={submitting}
       >
         <Form form={urlForm} layout="vertical" onFinish={handleAddUrl} initialValues={{ max_pages: 20 }}>
-          <Form.Item name="url" label="URL di partenza" rules={[{ required: true, type: 'url' }]}>
+          <Form.Item name="url" label={t('knowledgeBase.startUrl')} rules={[{ required: true, type: 'url' }]}>
             <Input placeholder="https://www.comune.exampleville.it" />
           </Form.Item>
-          <Form.Item name="max_pages" label="Numero massimo di pagine per crawl" tooltip="Quante pagine indicizzare al massimo ad ogni esecuzione">
+          <Form.Item name="max_pages" label={t('knowledgeBase.maxPagesPerCrawl')} tooltip={t('knowledgeBase.maxPagesTooltip')}>
             <InputNumber min={1} max={200} style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item
             name="recrawl_interval_hours"
-            label="Ricrawl automatico ogni (ore)"
-            tooltip="Lascia vuoto per un'indicizzazione una tantum - potrai comunque rilanciarla a mano con 'Reindicizza'"
+            label={t('knowledgeBase.autoRecrawlEvery')}
+            tooltip={t('knowledgeBase.autoRecrawlTooltip')}
           >
-            <InputNumber min={1} style={{ width: '100%' }} placeholder="es. 24 = una volta al giorno" />
+            <InputNumber min={1} style={{ width: '100%' }} placeholder={t('knowledgeBase.hoursPlaceholder')} />
           </Form.Item>
         </Form>
       </Modal>
 
       <Modal
-        title="Modifica pianificazione crawl"
+        title={t('knowledgeBase.editSchedule')}
         open={!!scheduleModalSource}
         onCancel={() => setScheduleModalSource(null)}
         onOk={() => scheduleForm.submit()}
         confirmLoading={savingSchedule}
       >
         <Form form={scheduleForm} layout="vertical" onFinish={handleSaveSchedule}>
-          <Form.Item name="max_pages" label="Numero massimo di pagine per crawl">
+          <Form.Item name="max_pages" label={t('knowledgeBase.maxPagesPerCrawl')}>
             <InputNumber min={1} max={3000} style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item
             name="recrawl_interval_hours"
-            label="Ricrawl automatico ogni (ore)"
-            tooltip="Lascia vuoto per disattivare il ricrawl automatico"
+            label={t('knowledgeBase.autoRecrawlEvery')}
+            tooltip={t('knowledgeBase.autoRecrawlDisableTooltip')}
           >
-            <InputNumber min={1} style={{ width: '100%' }} placeholder="es. 24 = una volta al giorno" />
+            <InputNumber min={1} style={{ width: '100%' }} placeholder={t('knowledgeBase.hoursPlaceholder')} />
           </Form.Item>
         </Form>
       </Modal>
 
       <Modal
-        title="Prova la ricerca nella knowledge base"
+        title={t('knowledgeBase.trySearchTitle')}
         open={searchOpen}
         onCancel={() => setSearchOpen(false)}
         footer={null}
       >
         <Space.Compact style={{ width: '100%', marginBottom: 16 }}>
           <Input
-            placeholder="Es. orari apertura uffici anagrafe"
+            placeholder={t('knowledgeBase.searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onPressEnter={handleSearch}
           />
-          <Button type="primary" loading={searching} onClick={handleSearch}>Cerca</Button>
+          <Button type="primary" loading={searching} onClick={handleSearch}>{t('knowledgeBase.search')}</Button>
         </Space.Compact>
         {searchResults && (
           <List
             dataSource={searchResults}
-            locale={{ emptyText: 'Nessun risultato' }}
+            locale={{ emptyText: t('knowledgeBase.noResults') }}
             renderItem={(item) => (
               <List.Item>
                 <div style={{ width: '100%' }}>
-                  <Text type="secondary">similarità {item.similarity.toFixed(3)}{item.origin_url ? ` · ${item.origin_url}` : ''}</Text>
+                  <Text type="secondary">{t('knowledgeBase.similarity')} {item.similarity.toFixed(3)}{item.origin_url ? ` · ${item.origin_url}` : ''}</Text>
                   <div>{item.content.slice(0, 300)}{item.content.length > 300 ? '…' : ''}</div>
                 </div>
               </List.Item>

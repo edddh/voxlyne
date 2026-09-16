@@ -7,12 +7,14 @@ import {
   ArrowLeftOutlined, PhoneOutlined, FilePdfOutlined, FileTextOutlined, DownloadOutlined,
   CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, UserOutlined
 } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import * as callsApi from '../api/calls'
 import { BRAND } from '../main'
 
 const { Title, Text, Paragraph } = Typography
 
 function CallDetail() {
+  const { t, i18n } = useTranslation()
   const { id } = useParams()
   const navigate = useNavigate()
   const [call, setCall] = useState(null)
@@ -35,7 +37,7 @@ function CallDetail() {
       const data = await callsApi.getCall(id)
       setCall({ ...data.call, transcript: data.transcript, record: data.record })
     } catch (error) {
-      message.error('Errore caricamento chiamata')
+      message.error(t('callDetail.loadError'))
       navigate('/calls')
     } finally {
       setLoading(false)
@@ -52,21 +54,21 @@ function CallDetail() {
       a.click()
       window.URL.revokeObjectURL(url)
     } catch (error) {
-      message.error('Errore download PDF')
+      message.error(t('callDetail.pdfDownloadError'))
     }
   }
 
   const getStatusConfig = (status) => {
     const configs = {
-      pending_consent: { color: 'default', icon: <ClockCircleOutlined />, label: 'In attesa consenso' },
-      consented: { color: 'blue', icon: <CheckCircleOutlined />, label: 'Consenso dato' },
-      in_progress: { color: 'processing', icon: <PhoneOutlined />, label: 'In corso' },
-      completed: { color: 'green', icon: <CheckCircleOutlined />, label: 'Completata' },
-      processing: { color: 'orange', icon: <ClockCircleOutlined />, label: 'In elaborazione' },
-      processed: { color: 'success', icon: <CheckCircleOutlined />, label: 'Elaborata' },
-      declined: { color: 'red', icon: <CloseCircleOutlined />, label: 'Rifiutata' },
-      escalated: { color: 'purple', icon: <UserOutlined />, label: 'Inoltrata a operatore' },
-      cancelled: { color: 'default', icon: <CloseCircleOutlined />, label: 'Annullata' },
+      pending_consent: { color: 'default', icon: <ClockCircleOutlined />, label: t('analytics.statusPendingConsent') },
+      consented: { color: 'blue', icon: <CheckCircleOutlined />, label: t('analytics.statusConsented') },
+      in_progress: { color: 'processing', icon: <PhoneOutlined />, label: t('analytics.statusInProgress') },
+      completed: { color: 'green', icon: <CheckCircleOutlined />, label: t('analytics.statusCompleted') },
+      processing: { color: 'orange', icon: <ClockCircleOutlined />, label: t('analytics.statusProcessing') },
+      processed: { color: 'success', icon: <CheckCircleOutlined />, label: t('analytics.statusProcessed') },
+      declined: { color: 'red', icon: <CloseCircleOutlined />, label: t('analytics.statusDeclined') },
+      escalated: { color: 'purple', icon: <UserOutlined />, label: t('analytics.statusEscalated') },
+      cancelled: { color: 'default', icon: <CloseCircleOutlined />, label: t('analytics.statusCancelled') },
     }
     return configs[status] || { color: 'default', label: status }
   }
@@ -101,7 +103,7 @@ function CallDetail() {
 
   const renderTranscript = (transcript) => {
     if (!transcript || transcript.length === 0) {
-      return <Text type="secondary">Nessuna trascrizione disponibile</Text>
+      return <Text type="secondary">{t('callDetail.noTranscript')}</Text>
     }
 
     const cleanedTranscript = collapseProgressiveTranscript(transcript)
@@ -116,7 +118,7 @@ function CallDetail() {
             color: isAssistant ? 'blue' : 'green',
             label: (
               <Text type="secondary" style={{ fontSize: 12 }}>
-                {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('it-IT') : `#${idx + 1}`}
+                {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString(i18n.language) : `#${idx + 1}`}
               </Text>
             ),
             children: (
@@ -134,7 +136,7 @@ function CallDetail() {
               }}>
                 <Space direction="vertical" size={0} style={{ width: '100%' }}>
                   <Text strong style={{ color: isAssistant ? '#1890ff' : '#52c41a' }}>
-                    {isAssistant ? '🤖 AI Assistant' : '👤 Chiamante'}
+                    {isAssistant ? `🤖 ${t('callDetail.aiAssistant')}` : `👤 ${t('callDetail.caller')}`}
                   </Text>
                   <Paragraph style={{ marginTop: 8, marginBottom: 0 }}>
                     {msg.content}
@@ -150,7 +152,7 @@ function CallDetail() {
 
   const renderRecord = (record) => {
     if (!record || Object.keys(record).length === 0) {
-      return <Text type="secondary">Nessun record disponibile</Text>
+      return <Text type="secondary">{t('callDetail.noRecord')}</Text>
     }
 
     return (
@@ -187,7 +189,7 @@ function CallDetail() {
       key: 'transcript',
       label: (
         <span>
-          <FileTextOutlined /> Trascrizione
+          <FileTextOutlined /> {t('callDetail.transcript')}
         </span>
       ),
       children: renderTranscript(call.transcript),
@@ -208,10 +210,10 @@ function CallDetail() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <Space>
           <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/calls')}>
-            Indietro
+            {t('callDetail.back')}
           </Button>
           <Title level={3} style={{ margin: 0 }}>
-            Dettaglio Chiamata
+            {t('callDetail.title')}
           </Title>
         </Space>
         <Space>
@@ -221,7 +223,7 @@ function CallDetail() {
               icon={<DownloadOutlined />}
               onClick={downloadPdf}
             >
-              Scarica PDF
+              {t('callDetail.downloadPdf')}
             </Button>
           )}
         </Space>
@@ -229,20 +231,20 @@ function CallDetail() {
 
       <Row gutter={[16, 16]}>
         <Col span={24}>
-          <Card title="Informazioni Generali">
+          <Card title={t('callDetail.generalInfo')}>
             <Descriptions column={2} bordered>
-              <Descriptions.Item label="Telefono">
+              <Descriptions.Item label={t('callDetail.phone')}>
                 <Space>
                   <PhoneOutlined />
                   <Text copyable={{ text: call.phone_number }}>{call.phone_number}</Text>
                 </Space>
               </Descriptions.Item>
-              <Descriptions.Item label="Stato">
+              <Descriptions.Item label={t('tenantCredentials.status')}>
                 <Tag color={statusConfig.color} icon={statusConfig.icon}>
                   {statusConfig.label}
                 </Tag>
               </Descriptions.Item>
-              <Descriptions.Item label="Chiamante">
+              <Descriptions.Item label={t('callDetail.caller')}>
                 {call.candidate_name || <Text type="secondary">-</Text>}
               </Descriptions.Item>
               <Descriptions.Item label="Email">
@@ -252,40 +254,40 @@ function CallDetail() {
                   <Text type="secondary">-</Text>
                 )}
               </Descriptions.Item>
-              <Descriptions.Item label="Progetto">
+              <Descriptions.Item label={t('dashboard.project')}>
                 {call.project_name ? (
                   <Tag>{call.project_name}</Tag>
                 ) : (
                   <Text type="secondary">-</Text>
                 )}
               </Descriptions.Item>
-              <Descriptions.Item label="Durata">
+              <Descriptions.Item label={t('callDetail.duration')}>
                 {formatDuration(call.duration_seconds)}
               </Descriptions.Item>
               {call.can_view_costs && (
-                <Descriptions.Item label="Costo (stima)">
-                  {call.cost_usd != null ? `$${call.cost_usd.toFixed(4)}` : <Text type="secondary">N/D</Text>}
+                <Descriptions.Item label={t('callDetail.estimatedCost')}>
+                  {call.cost_usd != null ? `$${call.cost_usd.toFixed(4)}` : <Text type="secondary">{t('callDetail.notAvailable')}</Text>}
                 </Descriptions.Item>
               )}
-              <Descriptions.Item label="Data Creazione">
-                {new Date(call.created_at).toLocaleString('it-IT')}
+              <Descriptions.Item label={t('callDetail.createdDate')}>
+                {new Date(call.created_at).toLocaleString(i18n.language)}
               </Descriptions.Item>
-              <Descriptions.Item label="Ultima Modifica">
-                {new Date(call.updated_at).toLocaleString('it-IT')}
+              <Descriptions.Item label={t('callDetail.lastModified')}>
+                {new Date(call.updated_at).toLocaleString(i18n.language)}
               </Descriptions.Item>
               {call.consent_timestamp && (
-                <Descriptions.Item label="Consenso Dato">
-                  {new Date(call.consent_timestamp).toLocaleString('it-IT')}
+                <Descriptions.Item label={t('callDetail.consentGiven')}>
+                  {new Date(call.consent_timestamp).toLocaleString(i18n.language)}
                 </Descriptions.Item>
               )}
               {call.started_at && (
-                <Descriptions.Item label="Chiamata Iniziata">
-                  {new Date(call.started_at).toLocaleString('it-IT')}
+                <Descriptions.Item label={t('callDetail.callStarted')}>
+                  {new Date(call.started_at).toLocaleString(i18n.language)}
                 </Descriptions.Item>
               )}
               {call.ended_at && (
-                <Descriptions.Item label="Chiamata Terminata">
-                  {new Date(call.ended_at).toLocaleString('it-IT')}
+                <Descriptions.Item label={t('callDetail.callEnded')}>
+                  {new Date(call.ended_at).toLocaleString(i18n.language)}
                 </Descriptions.Item>
               )}
             </Descriptions>

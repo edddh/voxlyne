@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { Layout, Menu, Dropdown, Avatar, Space, Button, Grid } from 'antd'
+import { useTranslation } from 'react-i18next'
 import {
   DashboardOutlined,
   UserOutlined,
@@ -13,10 +14,12 @@ import {
   CalendarOutlined,
   ProfileOutlined,
   RiseOutlined,
+  GlobalOutlined,
 } from '@ant-design/icons'
 import { useAuth } from '../hooks/useAuth'
 import { BRAND } from '../main'
 import { BrandLogo } from '../components/BrandLogo'
+import { SUPPORTED_LANGUAGES } from '../i18n'
 
 const { Header, Sider, Content } = Layout
 
@@ -37,6 +40,7 @@ function MenuToggleIcon() {
 }
 
 function AppLayout() {
+  const { t, i18n } = useTranslation()
   const screens = Grid.useBreakpoint()
   // antd riporta i breakpoint come oggetto con chiavi progressive
   // (xs/sm/md/lg/xl/xxl); finche' non arriva la prima misurazione reale
@@ -73,27 +77,27 @@ function AppLayout() {
     ['admin', 'super_admin', 'power_user'].includes(user?.role) && {
       key: '/',
       icon: <DashboardOutlined />,
-      label: 'Dashboard',
+      label: t('nav.dashboard'),
     },
     {
       key: '/calls',
       icon: <PhoneOutlined />,
-      label: 'Chiamate',
+      label: t('nav.calls'),
     },
     ['admin', 'super_admin', 'power_user'].includes(user?.role) && {
       key: '/analytics',
       icon: <RiseOutlined />,
-      label: 'Analytics',
+      label: t('nav.analytics'),
     },
     {
       key: '/projects',
       icon: <ProjectOutlined />,
-      label: 'Progetti',
+      label: t('nav.projects'),
     },
     isAdmin && {
       key: '/users',
       icon: <UserOutlined />,
-      label: 'Utenti',
+      label: t('nav.users'),
     },
     // Il super_admin gestisce le credenziali di ogni tenant dalla lista
     // Tenant (icona per riga) - qui serve solo per l'admin del proprio
@@ -102,32 +106,32 @@ function AppLayout() {
     user?.role === 'admin' && {
       key: `/tenants/${user.tenant_id}/credentials`,
       icon: <ApiOutlined />,
-      label: 'Credenziali',
+      label: t('nav.credentials'),
     },
     isSuperAdmin && {
       key: '/tenants',
       icon: <TeamOutlined />,
-      label: 'Tenant',
+      label: t('nav.tenants'),
     },
     isSuperAdmin && {
       key: '/templates',
       icon: <ProfileOutlined />,
-      label: 'Template',
+      label: t('nav.templates'),
     },
     {
       key: 'integrations',
       icon: <ApiOutlined />,
-      label: 'Integrazioni',
+      label: t('nav.integrations'),
       children: [
         {
           key: '/integrations/crm',
           icon: <ApiOutlined />,
-          label: 'CRM (HubSpot)',
+          label: t('nav.integrationsCrm'),
         },
         {
           key: '/integrations/calendar',
           icon: <CalendarOutlined />,
-          label: 'Calendario',
+          label: t('nav.integrationsCalendar'),
         },
       ],
     },
@@ -144,7 +148,7 @@ function AppLayout() {
         // account + cambio password, quello che il backend supporta gia'.
         key: 'profile',
         icon: <UserOutlined />,
-        label: 'Profilo',
+        label: t('userMenu.profile'),
         onClick: () => navigate('/profile'),
       },
       {
@@ -153,19 +157,28 @@ function AppLayout() {
       {
         key: 'logout',
         icon: <LogoutOutlined />,
-        label: 'Esci',
+        label: t('userMenu.logout'),
         danger: true,
         onClick: logout,
       },
     ],
   }
 
+  const languageMenu = {
+    selectedKeys: [i18n.language?.split('-')[0] || 'it'],
+    items: SUPPORTED_LANGUAGES.map((lang) => ({
+      key: lang.code,
+      label: lang.label,
+    })),
+    onClick: ({ key }) => i18n.changeLanguage(key),
+  }
+
   const roleLabels = {
-    super_admin: 'Super Admin',
-    admin: 'Admin',
-    creator: 'Creator',
-    power_user: 'Power User',
-    user: 'User',
+    super_admin: t('roles.super_admin'),
+    admin: t('roles.admin'),
+    creator: t('roles.creator'),
+    power_user: t('roles.power_user'),
+    user: t('roles.user'),
   }
 
   return (
@@ -247,6 +260,9 @@ function AppLayout() {
             onClick={() => setCollapsed(!collapsed)}
           />
           <Space>
+            <Dropdown menu={languageMenu} placement="bottomRight">
+              <Button type="text" icon={<GlobalOutlined />} title={t('language.label')} />
+            </Dropdown>
             <Dropdown menu={userMenu} placement="bottomRight">
               <Space style={{ cursor: 'pointer' }}>
                 <Avatar style={{ backgroundColor: BRAND.orange, color: BRAND.bg, fontWeight: 700 }}>

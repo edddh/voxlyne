@@ -4,11 +4,13 @@ import {
   Table, Button, Space, Input, InputNumber, Modal, Form, message, Tag, Popconfirm, Typography, Tooltip, Switch, Card
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, KeyOutlined } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import * as tenantsApi from '../api/tenants'
 
 const { Title } = Typography
 
 function Tenants() {
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const [tenants, setTenants] = useState([])
   const [loading, setLoading] = useState(true)
@@ -43,7 +45,7 @@ function Tenants() {
       setTenants(data.tenants)
       setTotal(data.total)
     } catch (error) {
-      message.error('Errore caricamento tenant')
+      message.error(t('tenants.loadError'))
     } finally {
       setLoading(false)
     }
@@ -56,7 +58,7 @@ function Tenants() {
         setVoicePricing(data.pricing_per_minute)
       }
     } catch (error) {
-      message.error('Errore caricamento tariffario voce')
+      message.error(t('tenants.loadPricingError'))
     }
   }
 
@@ -69,9 +71,9 @@ function Tenants() {
       if (data?.pricing_per_minute) {
         setVoicePricing(data.pricing_per_minute)
       }
-      message.success('Tariffario voce aggiornato')
+      message.success(t('tenants.pricingUpdated'))
     } catch (error) {
-      message.error(error.response?.data?.detail || 'Errore aggiornamento tariffario voce')
+      message.error(error.response?.data?.detail || t('tenants.pricingUpdateError'))
     } finally {
       setSavingVoicePricing(false)
     }
@@ -112,15 +114,15 @@ function Tenants() {
 
       if (editingTenant) {
         await tenantsApi.updateTenant(editingTenant.id, payload)
-        message.success('Tenant aggiornato')
+        message.success(t('tenants.updated'))
       } else {
         await tenantsApi.createTenant(payload)
-        message.success('Tenant creato')
+        message.success(t('tenants.created'))
       }
       setModalOpen(false)
       loadTenants()
     } catch (error) {
-      const msg = error.response?.data?.detail || 'Errore'
+      const msg = error.response?.data?.detail || t('common.error')
       message.error(msg)
     }
   }
@@ -128,16 +130,16 @@ function Tenants() {
   const handleDelete = async (id) => {
     try {
       await tenantsApi.deleteTenant(id)
-      message.success('Tenant disattivato')
+      message.success(t('tenants.deactivated'))
       loadTenants()
     } catch (error) {
-      message.error(error.response?.data?.detail || 'Errore')
+      message.error(error.response?.data?.detail || t('common.error'))
     }
   }
 
   const columns = [
     {
-      title: 'Nome',
+      title: t('tenants.name'),
       dataIndex: 'name',
       key: 'name',
     },
@@ -148,60 +150,60 @@ function Tenants() {
       render: (slug) => <code>{slug}</code>,
     },
     {
-      title: 'Stato',
+      title: t('tenantCredentials.status'),
       dataIndex: 'is_active',
       key: 'is_active',
       render: (active) => (
-        <Tag color={active ? 'green' : 'red'}>{active ? 'Attivo' : 'Inattivo'}</Tag>
+        <Tag color={active ? 'green' : 'red'}>{active ? t('tenants.activeStatus') : t('tenants.inactiveStatus')}</Tag>
       ),
     },
     {
-      title: 'Utenti',
+      title: t('nav.users'),
       dataIndex: 'user_count',
       key: 'users',
       align: 'center',
     },
     {
-      title: 'Progetti',
+      title: t('nav.projects'),
       dataIndex: 'project_count',
       key: 'projects',
       align: 'center',
     },
     {
-      title: 'Pacchetto',
+      title: t('tenants.package'),
       key: 'included_minutes',
       align: 'center',
       render: (_, record) => (
         record.settings?.included_minutes
           ? `${record.settings.included_minutes} min`
-          : <Tag>Non configurato</Tag>
+          : <Tag>{t('tenants.notConfigured')}</Tag>
       ),
     },
     {
-      title: 'Costi LLM agli admin',
+      title: t('tenants.llmCostsToAdmins'),
       key: 'show_costs_to_tenant_admin',
       align: 'center',
       render: (_, record) => (
         record.settings?.show_costs_to_tenant_admin
-          ? <Tag color="gold">Abilitati</Tag>
-          : <Tag>Disabilitati</Tag>
+          ? <Tag color="gold">{t('tenants.enabled')}</Tag>
+          : <Tag>{t('tenants.disabled')}</Tag>
       ),
     },
     {
-      title: 'Creato',
+      title: t('tenants.createdColumn'),
       dataIndex: 'created_at',
       key: 'created',
-      render: (date) => new Date(date).toLocaleDateString('it-IT'),
+      render: (date) => new Date(date).toLocaleDateString(i18n.language),
     },
     {
-      title: 'Azioni',
+      title: t('tenantCredentials.actions'),
       key: 'actions',
       render: (_, record) => (
         <Space>
-          <Tooltip title="Modifica">
+          <Tooltip title={t('common.edit')}>
             <Button icon={<EditOutlined />} size="small" onClick={() => openModal(record)} />
           </Tooltip>
-          <Tooltip title="Credenziali (API key LLM/voce/telefonia per questo tenant)">
+          <Tooltip title={t('tenants.credentialsTooltip')}>
             <Button
               icon={<KeyOutlined />}
               size="small"
@@ -210,13 +212,13 @@ function Tenants() {
           </Tooltip>
           {record.slug !== 'default' && (
             <Popconfirm
-              title="Disattivare questo tenant?"
-              description="Tutti gli utenti e progetti verranno disattivati."
+              title={t('tenants.confirmDeactivate')}
+              description={t('tenants.confirmDeactivateDescription')}
               onConfirm={() => handleDelete(record.id)}
-              okText="Sì"
-              cancelText="No"
+              okText={t('promptHistory.yes')}
+              cancelText={t('promptHistory.no')}
             >
-              <Tooltip title="Disattiva">
+              <Tooltip title={t('tenants.deactivate')}>
                 <Button icon={<DeleteOutlined />} size="small" danger />
               </Tooltip>
             </Popconfirm>
@@ -229,14 +231,14 @@ function Tenants() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
-        <Title level={3} style={{ margin: 0, flexShrink: 0 }}>Tenant</Title>
+        <Title level={3} style={{ margin: 0, flexShrink: 0 }}>{t('nav.tenants')}</Title>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>
-          Nuovo Tenant
+          {t('tenants.newTenant')}
         </Button>
       </div>
 
       <Input
-        placeholder="Cerca tenant..."
+        placeholder={t('tenants.searchPlaceholder')}
         prefix={<SearchOutlined />}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
@@ -244,7 +246,7 @@ function Tenants() {
         allowClear
       />
 
-      <Card title="Tariffario voce xAI" style={{ marginBottom: 16 }}>
+      <Card title={t('tenants.voicePricing')} style={{ marginBottom: 16 }}>
         <Space direction="vertical" size={12} style={{ width: '100%' }}>
           <Space wrap>
             <span>grok-voice-latest</span>
@@ -280,7 +282,7 @@ function Tenants() {
             <span>USD/min</span>
           </Space>
           <Button type="primary" onClick={handleSaveVoicePricing} loading={savingVoicePricing}>
-            Salva tariffario e ricalcola costi
+            {t('tenants.savePricing')}
           </Button>
         </Space>
       </Card>
@@ -300,12 +302,12 @@ function Tenants() {
             setPageSize(ps)
           },
           showSizeChanger: true,
-          showTotal: (t) => `Totale: ${t} tenant`,
+          showTotal: (total_) => t('tenants.totalCount', { count: total_ }),
         }}
       />
 
       <Modal
-        title={editingTenant ? 'Modifica Tenant' : 'Nuovo Tenant'}
+        title={editingTenant ? t('tenants.editTenant') : t('tenants.newTenant')}
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
         footer={null}
@@ -313,8 +315,8 @@ function Tenants() {
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item
             name="name"
-            label="Nome"
-            rules={[{ required: true, message: 'Inserisci nome' }]}
+            label={t('tenants.name')}
+            rules={[{ required: true, message: t('tenants.enterName') }]}
           >
             <Input />
           </Form.Item>
@@ -322,41 +324,41 @@ function Tenants() {
             name="slug"
             label="Slug"
             rules={[
-              { required: true, message: 'Inserisci slug' },
-              { pattern: /^[a-z0-9-]+$/, message: 'Solo lettere minuscole, numeri e trattini' },
+              { required: true, message: t('tenants.enterSlug') },
+              { pattern: /^[a-z0-9-]+$/, message: t('tenants.slugPattern') },
             ]}
           >
             <Input disabled={!!editingTenant} placeholder="es: acme-corp" />
           </Form.Item>
           {editingTenant && (
-            <Form.Item name="is_active" label="Stato">
+            <Form.Item name="is_active" label={t('tenantCredentials.status')}>
               <select className="ant-select" style={{ width: '100%', padding: 8 }}>
-                <option value={true}>Attivo</option>
-                <option value={false}>Inattivo</option>
+                <option value={true}>{t('tenants.activeStatus')}</option>
+                <option value={false}>{t('tenants.inactiveStatus')}</option>
               </select>
             </Form.Item>
           )}
           <Form.Item
             name="included_minutes"
-            label="Minuti inclusi nel pacchetto"
-            tooltip="Quanti minuti di chiamata sono inclusi per questo tenant - gli utenti del tenant vedono quanto ne hanno usato in percentuale (pagina Chiamate). Lascia vuoto per nessun limite configurato."
+            label={t('tenants.includedMinutes')}
+            tooltip={t('tenants.includedMinutesTooltip')}
           >
-            <InputNumber min={0} style={{ width: '100%' }} placeholder="Es. 500 (vuoto = nessun limite configurato)" />
+            <InputNumber min={0} style={{ width: '100%' }} placeholder={t('tenants.includedMinutesPlaceholder')} />
           </Form.Item>
           <Form.Item
             name="show_costs_to_tenant_admin"
-            label="Mostra costi LLM agli admin del tenant"
+            label={t('tenants.showLlmCosts')}
             valuePropName="checked"
-            tooltip="Se attivo, gli utenti con ruolo admin di questo tenant vedono i costi reali delle chiamate nella pagina Chiamate. Creators e power users non li vedono."
+            tooltip={t('tenants.showLlmCostsTooltip')}
           >
             <Switch />
           </Form.Item>
           <Form.Item>
             <Space>
               <Button type="primary" htmlType="submit">
-                {editingTenant ? 'Salva' : 'Crea'}
+                {editingTenant ? t('common.save') : t('tenants.createButton')}
               </Button>
-              <Button onClick={() => setModalOpen(false)}>Annulla</Button>
+              <Button onClick={() => setModalOpen(false)}>{t('common.cancel')}</Button>
             </Space>
           </Form.Item>
         </Form>

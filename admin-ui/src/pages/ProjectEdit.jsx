@@ -4,6 +4,7 @@ import {
   Card, Button, Space, Input, Select, message, Typography, Tabs, Row, Col, Spin, Alert, Tag, Divider, Switch, List, Popconfirm,
 } from 'antd'
 import { SaveOutlined, ArrowLeftOutlined, RocketOutlined, MessageOutlined, PhoneOutlined, UndoOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import * as projectsApi from '../api/projects'
 import * as agentVersionsApi from '../api/agentVersions'
 import * as elevenLabsApi from '../api/elevenlabs'
@@ -36,6 +37,7 @@ const { TextArea } = Input
  * cambierebbe nulla per una chiamata gia' in corso di risoluzione.
  */
 function ProjectEdit() {
+  const { t, i18n } = useTranslation()
   const { id } = useParams()
   const navigate = useNavigate()
   const [project, setProject] = useState(null)
@@ -129,7 +131,7 @@ function ProjectEdit() {
         // Nessuna versione pubblicata ancora - normale per un progetto nuovo.
       }
     } catch (error) {
-      message.error('Errore caricamento progetto')
+      message.error(t('projectEdit.loadProjectError'))
       navigate('/projects')
     } finally {
       setLoading(false)
@@ -146,7 +148,7 @@ function ProjectEdit() {
         : (project?.voice_provider_config || {})
       setSelectedElevenLlm(config?.elevenlabs?.llm || 'qwen35-397b-a17b')
     } catch (error) {
-      message.error(error.response?.data?.detail || 'Impossibile leggere i modelli ElevenLabs')
+      message.error(error.response?.data?.detail || t('projectEdit.elevenLlmReadError'))
     } finally {
       setLoadingElevenLlms(false)
     }
@@ -157,9 +159,9 @@ function ProjectEdit() {
     setSavingElevenLlm(true)
     try {
       await elevenLabsApi.updateProjectLlm(id, selectedElevenLlm)
-      message.success('Modello ElevenLabs aggiornato sull’agente reale')
+      message.success(t('projectEdit.elevenLlmUpdated'))
     } catch (error) {
-      message.error(error.response?.data?.detail || 'Impossibile aggiornare il modello ElevenLabs')
+      message.error(error.response?.data?.detail || t('projectEdit.elevenLlmUpdateError'))
     } finally {
       setSavingElevenLlm(false)
     }
@@ -209,14 +211,14 @@ function ProjectEdit() {
     try {
       const content = type === 'A' ? promptA : promptB
       if (!content.trim()) {
-        message.warning('Il prompt non può essere vuoto')
+        message.warning(t('projectEdit.promptCannotBeEmpty'))
         return
       }
 
       const field = type === 'A' ? 'prompt_a' : 'prompt_b'
       await projectsApi.updateProject(id, { [field]: content })
 
-      message.success('Bozza salvata - pubblica per renderla attiva nelle chiamate')
+      message.success(t('projectEdit.draftSaved'))
 
       if (type === 'A') {
         setSavedPromptA(content)
@@ -227,7 +229,7 @@ function ProjectEdit() {
       }
       setProject((prev) => ({ ...prev, [field]: content }))
     } catch (error) {
-      message.error(error.response?.data?.detail || 'Errore salvataggio')
+      message.error(error.response?.data?.detail || t('projectConfig.sipSaveError'))
     } finally {
       setSaving(false)
     }
@@ -237,11 +239,11 @@ function ProjectEdit() {
     setSavingConsent(true)
     try {
       await projectsApi.updateProject(id, { consent_message: consentMessage })
-      message.success('Frase di apertura salvata - pubblica per renderla attiva nelle chiamate')
+      message.success(t('projectEdit.openingSaved'))
       setSavedConsentMessage(consentMessage)
       setProject((prev) => ({ ...prev, consent_message: consentMessage }))
     } catch (error) {
-      message.error(error.response?.data?.detail || 'Errore salvataggio')
+      message.error(error.response?.data?.detail || t('projectConfig.sipSaveError'))
     } finally {
       setSavingConsent(false)
     }
@@ -287,12 +289,12 @@ function ProjectEdit() {
         custom_variables: customVariables,
         custom_variables_schema: customVariablesSchema,
       })
-      message.success('Variabili salvate - pubblica per renderle attive nelle chiamate')
+      message.success(t('projectEdit.variablesSaved'))
       setSavedCustomVariables(customVariables)
       setSavedCustomVariablesSchema(customVariablesSchema)
       setProject((prev) => ({ ...prev, custom_variables: customVariables, custom_variables_schema: customVariablesSchema }))
     } catch (error) {
-      message.error(error.response?.data?.detail || 'Errore salvataggio')
+      message.error(error.response?.data?.detail || t('projectConfig.sipSaveError'))
     } finally {
       setSavingVariables(false)
     }
@@ -322,9 +324,9 @@ function ProjectEdit() {
       setHasChangesA(false)
       setHasChangesB(false)
       setProject((prev) => ({ ...prev, ...payload }))
-      message.success(`Bozza ripristinata alla versione pubblicata (v${publishedVersion.version_number})`)
+      message.success(t('projectEdit.draftReverted', { version: publishedVersion.version_number }))
     } catch (error) {
-      message.error(error.response?.data?.detail || 'Errore nel ripristino')
+      message.error(error.response?.data?.detail || t('projectEdit.revertError'))
     } finally {
       setReverting(false)
     }
@@ -334,11 +336,11 @@ function ProjectEdit() {
     setPublishing(true)
     try {
       await agentVersionsApi.publishVersion(id)
-      message.success('Pubblicato - attivo per le prossime chiamate')
+      message.success(t('projectEdit.published'))
       const versionsList = await agentVersionsApi.listAgentVersions(id)
       setVersions(versionsList)
     } catch (error) {
-      message.error(error.response?.data?.detail || 'Errore pubblicazione')
+      message.error(error.response?.data?.detail || t('projectEdit.publishError'))
     } finally {
       setPublishing(false)
     }
@@ -357,24 +359,24 @@ function ProjectEdit() {
       key: 'A',
       label: (
         <Space>
-          <span>Prompt A (Conversazione)</span>
-          {hasChangesA && <Tag color="orange">Non salvato</Tag>}
+          <span>{t('projectEdit.promptAConversation')}</span>
+          {hasChangesA && <Tag color="orange">{t('projectEdit.unsaved')}</Tag>}
         </Space>
       ),
       children: (
         <div>
           <Alert
-            message="Prompt di Conversazione"
-            description="Questo prompt guida l'AI durante la chiamata telefonica. Include istruzioni su come condurre la conversazione, le domande o informazioni da fornire e come gestire le risposte di chi chiama."
+            message={t('projectEdit.conversationPromptTitle')}
+            description={t('projectEdit.conversationPromptDescription')}
             type="info"
             showIcon
             style={{ marginBottom: 16 }}
           />
           <div style={{ marginBottom: 12 }}>
-            <Text type="secondary" style={{ fontSize: 12, marginRight: 8 }}>Inserisci variabile:</Text>
+            <Text type="secondary" style={{ fontSize: 12, marginRight: 8 }}>{t('projectEdit.insertVariable')}:</Text>
             {customVariablesSchema.length === 0 ? (
               <Text type="secondary" style={{ fontSize: 12, fontStyle: 'italic' }}>
-                nessuna ancora - scrivi {'{{nome}}'} nel prompt e sotto compare "Aggiungi come variabile"
+                {t('projectEdit.noVariablesYet', { interpolation: { prefix: '{%', suffix: '%}' } })}
               </Text>
             ) : (
               <Space wrap size={4}>
@@ -403,7 +405,7 @@ function ProjectEdit() {
                 provider voce. Spiegati qui invece di lasciarli intuire. */}
             <div style={{ marginTop: 8 }}>
               <Text type="secondary" style={{ fontSize: 12 }}>
-                Gia' disponibili, non serve configurarli:
+                {t('projectEdit.alreadyAvailable')}
               </Text>
               <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <Space size={6} align="start">
@@ -415,7 +417,7 @@ function ProjectEdit() {
                     {'{{system__caller_id}}'}
                   </Tag>
                   <Text type="secondary" style={{ fontSize: 12 }}>
-                    il numero di chi sta chiamando - lo passa il provider vocale, Ascolta non lo tocca
+                    {t('projectEdit.callerIdExplanation')}
                   </Text>
                 </Space>
                 <Space size={6} align="start">
@@ -429,14 +431,14 @@ function ProjectEdit() {
                     onClick={() =>
                       insertAtCursor(
                         'A',
-                        "Usa current_datetime come unica fonte di verita' per data, ora e giorno della settimana correnti a Roma."
+                        t('projectEdit.currentDatetimeSentence')
                       )
                     }
                   >
                     current_datetime
                   </Tag>
                   <Text type="secondary" style={{ fontSize: 12 }}>
-                    strumento che il modello chiama da solo per sapere data/ora correnti - basta nominarlo nel prompt in una frase, non va scritto tra {'{{ }}'}
+                    {t('projectEdit.currentDatetimeExplanation', { interpolation: { prefix: '{%', suffix: '%}' } })}
                   </Text>
                 </Space>
               </div>
@@ -447,7 +449,7 @@ function ProjectEdit() {
             value={promptA}
             onChange={(e) => handlePromptChange('A', e.target.value)}
             rows={20}
-            placeholder="Inserisci il prompt di conversazione..."
+            placeholder={t('projectEdit.conversationPromptPlaceholder')}
             style={{ fontFamily: 'monospace', fontSize: 13 }}
           />
           {undefinedTagsIn(promptA).length > 0 && (
@@ -455,17 +457,16 @@ function ProjectEdit() {
               style={{ marginTop: 12 }}
               type="warning"
               showIcon
-              message="Tag senza un valore"
+              message={t('projectEdit.tagWithoutValue')}
               description={
                 <Space direction="vertical" size={8}>
                   <Text>
-                    Questi {'{{tag}}'} compaiono nel prompt ma non hanno una variabile definita - restano cosi',
-                    visibili letteralmente a chi chiama, finche' non li aggiungi (o li togli dal prompt).
+                    {t('projectEdit.tagWithoutValueDescription', { interpolation: { prefix: '{%', suffix: '%}' } })}
                   </Text>
                   <Space wrap size={4}>
-                    {undefinedTagsIn(promptA).map((t) => (
-                      <Button key={t} size="small" icon={<PlusOutlined />} onClick={() => addTagAsVariable(t)}>
-                        {`Aggiungi {{${t}}} come variabile`}
+                    {undefinedTagsIn(promptA).map((tag) => (
+                      <Button key={tag} size="small" icon={<PlusOutlined />} onClick={() => addTagAsVariable(tag)}>
+                        {t('projectEdit.addTagAsVariable', { tag: `{{${tag}}}` })}
                       </Button>
                     ))}
                   </Space>
@@ -476,21 +477,21 @@ function ProjectEdit() {
           {publishedVersion && normalizeNewlines(promptA) !== normalizeNewlines(publishedVersion.prompt_a) && (
             <div style={{ marginTop: 16 }}>
               <Text type="secondary" style={{ display: 'block', marginBottom: 6 }}>
-                Differenze rispetto alla versione pubblicata (v{publishedVersion.version_number}):
+                {t('projectEdit.differencesFromPublished', { version: publishedVersion.version_number })}
               </Text>
               <PromptDiff published={publishedVersion.prompt_a || ''} draft={promptA} />
             </div>
           )}
           <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
             <Text type="secondary">
-              {promptA.length} caratteri • ~{Math.ceil(promptA.length / 4)} token
+              {t('projectEdit.charactersTokens', { chars: promptA.length, tokens: Math.ceil(promptA.length / 4) })}
             </Text>
             <Space wrap>
               <Button icon={<PhoneOutlined />} onClick={() => setSimulateVoiceOpen(true)}>
-                Prova chiamata vocale
+                {t('projectEdit.tryVoiceCall')}
               </Button>
               <Button icon={<MessageOutlined />} onClick={() => setSimulateOpen(true)}>
-                Prova conversazione testuale
+                {t('projectEdit.tryTextConversation')}
               </Button>
               <Button
                 type="primary"
@@ -499,7 +500,7 @@ function ProjectEdit() {
                 loading={saving}
                 disabled={!hasChangesA}
               >
-                Salva bozza
+                {t('projectEdit.saveDraft')}
               </Button>
             </Space>
           </div>
@@ -510,22 +511,22 @@ function ProjectEdit() {
       key: 'B',
       label: (
         <Space>
-          <span>Prompt B (Estrazione)</span>
-          {hasChangesB && <Tag color="orange">Non salvato</Tag>}
+          <span>{t('projectEdit.promptBExtraction')}</span>
+          {hasChangesB && <Tag color="orange">{t('projectEdit.unsaved')}</Tag>}
         </Space>
       ),
       children: (
         <div>
           <Alert
-            message="Prompt di Estrazione"
-            description="Questo prompt viene usato per estrarre informazioni strutturate dalla trascrizione della chiamata. Definisce il formato JSON di output e i campi da estrarre."
+            message={t('projectEdit.extractionPromptTitle')}
+            description={t('projectEdit.extractionPromptDescription')}
             type="info"
             showIcon
             style={{ marginBottom: 16 }}
           />
           {customVariablesSchema.length > 0 && (
             <div style={{ marginBottom: 8 }}>
-              <Text type="secondary" style={{ fontSize: 12, marginRight: 8 }}>Inserisci variabile:</Text>
+              <Text type="secondary" style={{ fontSize: 12, marginRight: 8 }}>{t('projectEdit.insertVariable')}:</Text>
               <Space wrap size={4}>
                 {customVariablesSchema.map((field) => (
                   <Tag
@@ -544,7 +545,7 @@ function ProjectEdit() {
             value={promptB}
             onChange={(e) => handlePromptChange('B', e.target.value)}
             rows={20}
-            placeholder="Inserisci il prompt di estrazione..."
+            placeholder={t('projectEdit.extractionPromptPlaceholder')}
             style={{ fontFamily: 'monospace', fontSize: 13 }}
           />
           {undefinedTagsIn(promptB).length > 0 && (
@@ -552,14 +553,14 @@ function ProjectEdit() {
               style={{ marginTop: 12 }}
               type="warning"
               showIcon
-              message="Tag senza un valore"
+              message={t('projectEdit.tagWithoutValue')}
               description={
                 <Space direction="vertical" size={8}>
-                  <Text>Questi {'{{tag}}'} compaiono nel prompt ma non hanno una variabile definita.</Text>
+                  <Text>{t('projectEdit.tagWithoutValueDescriptionShort', { interpolation: { prefix: '{%', suffix: '%}' } })}</Text>
                   <Space wrap size={4}>
-                    {undefinedTagsIn(promptB).map((t) => (
-                      <Button key={t} size="small" icon={<PlusOutlined />} onClick={() => addTagAsVariable(t)}>
-                        {`Aggiungi {{${t}}} come variabile`}
+                    {undefinedTagsIn(promptB).map((tag) => (
+                      <Button key={tag} size="small" icon={<PlusOutlined />} onClick={() => addTagAsVariable(tag)}>
+                        {t('projectEdit.addTagAsVariable', { tag: `{{${tag}}}` })}
                       </Button>
                     ))}
                   </Space>
@@ -570,14 +571,14 @@ function ProjectEdit() {
           {publishedVersion && normalizeNewlines(promptB) !== normalizeNewlines(publishedVersion.prompt_b) && (
             <div style={{ marginTop: 16 }}>
               <Text type="secondary" style={{ display: 'block', marginBottom: 6 }}>
-                Differenze rispetto alla versione pubblicata (v{publishedVersion.version_number}):
+                {t('projectEdit.differencesFromPublished', { version: publishedVersion.version_number })}
               </Text>
               <PromptDiff published={publishedVersion.prompt_b || ''} draft={promptB} />
             </div>
           )}
           <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
             <Text type="secondary">
-              {promptB.length} caratteri • ~{Math.ceil(promptB.length / 4)} token
+              {t('projectEdit.charactersTokens', { chars: promptB.length, tokens: Math.ceil(promptB.length / 4) })}
             </Text>
             <Button
               type="primary"
@@ -586,7 +587,7 @@ function ProjectEdit() {
               loading={saving}
               disabled={!hasChangesB}
             >
-              Salva bozza
+              {t('projectEdit.saveDraft')}
             </Button>
           </div>
         </div>
@@ -599,11 +600,11 @@ function ProjectEdit() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 8 }}>
         <Space wrap>
           <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/projects')}>
-            Indietro
+            {t('callDetail.back')}
           </Button>
           <Title level={3} style={{ margin: 0, flexShrink: 0 }}>{project?.name}</Title>
           <Tag color={project?.is_active ? 'green' : 'red'}>
-            {project?.is_active ? 'Attivo' : 'Inattivo'}
+            {project?.is_active ? t('tenants.activeStatus') : t('tenants.inactiveStatus')}
           </Tag>
         </Space>
       </div>
@@ -615,8 +616,11 @@ function ProjectEdit() {
             showIcon
             message={
               publishedVersion
-                ? `Versione pubblicata: v${publishedVersion.version_number}${publishedVersion.published_at ? ' · ' + new Date(publishedVersion.published_at).toLocaleString('it-IT') : ''}`
-                : 'Nessuna versione ancora pubblicata - questo progetto non risponde ancora a nessuna simulazione di test'
+                ? t('projectEdit.publishedVersionLabel', {
+                    version: publishedVersion.version_number,
+                    date: publishedVersion.published_at ? ' · ' + new Date(publishedVersion.published_at).toLocaleString(i18n.language) : '',
+                  })
+                : t('projectEdit.noVersionPublished')
             }
             // I bottoni erano nello slot "action" di Alert (di fianco al
             // testo) - su schermo stretto quello spazio si comprimeva
@@ -629,18 +633,18 @@ function ProjectEdit() {
               <Space direction="vertical" size={12} style={{ width: '100%' }}>
                 <Text>
                   {hasUnsavedEdits
-                    ? 'Passo 1 di 2: hai modifiche non ancora salvate nelle schede qui sotto. Premi "Salva bozza" nella scheda che hai modificato, poi torna qui per pubblicarle.'
+                    ? t('projectEdit.step1of2')
                     : draftDiffersFromPublished
-                    ? 'Passo 2 di 2: la bozza salvata e\' pronta ma non ancora attiva. Le chiamate reali continuano a usare la versione pubblicata sopra finche\' non premi "Pubblica".'
-                    : 'La bozza corrisponde esattamente alla versione pubblicata - quello che vedi qui e\' quello che sente chi chiama, nessuna azione necessaria.'}
+                    ? t('projectEdit.step2of2')
+                    : t('projectEdit.draftMatchesPublished')}
                 </Text>
                 <Space wrap>
                 <Popconfirm
-                  title="Ripristinare la versione pubblicata?"
-                  description="La bozza (salvata o no) torna uguale a quello che sente davvero chi chiama adesso - le modifiche fatte qui vanno perse."
+                  title={t('projectEdit.confirmRevertTitle')}
+                  description={t('projectEdit.confirmRevertDescription')}
                   onConfirm={handleRevert}
-                  okText="Ripristina"
-                  cancelText="Annulla"
+                  okText={t('projectEdit.restore')}
+                  cancelText={t('common.cancel')}
                   disabled={!editorDiffersFromPublished}
                   // maintainer: "è più largo della larghezza del cellulare,
                   // mi costringe a scrollare" - il popup non aveva un
@@ -654,7 +658,7 @@ function ProjectEdit() {
                     loading={reverting}
                     disabled={!editorDiffersFromPublished}
                   >
-                    Ripristina pubblicata
+                    {t('projectEdit.restorePublished')}
                   </Button>
                 </Popconfirm>
                 <Button
@@ -664,7 +668,7 @@ function ProjectEdit() {
                   loading={publishing}
                   disabled={!draftDiffersFromPublished || hasUnsavedEdits}
                 >
-                  Pubblica
+                  {t('projectEdit.publish')}
                 </Button>
                 </Space>
               </Space>
@@ -679,7 +683,7 @@ function ProjectEdit() {
             </Paragraph>
             {project?.description && (
               <Paragraph type="secondary">
-                <strong>Descrizione:</strong> {project.description}
+                <strong>{t('templates.description')}:</strong> {project.description}
               </Paragraph>
             )}
           </Card>
@@ -687,9 +691,9 @@ function ProjectEdit() {
 
         {project?.voice_engine === 'elevenlabs_agent' && (
           <Col span={24}>
-            <Card title="Modello LLM ElevenLabs">
+            <Card title={t('projectEdit.elevenLlmModel')}>
               <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-                Elenco sincronizzato dal workspace ElevenLabs. La modifica viene applicata subito all'agente telefonico.
+                {t('projectEdit.elevenLlmDescription')}
               </Text>
               <Space wrap>
                 <Select
@@ -700,7 +704,7 @@ function ProjectEdit() {
                   options={elevenLlms.map((model) => ({
                     value: model.llm,
                     label: model.deprecation_info?.is_deprecated
-                      ? `${model.llm} (deprecato)`
+                      ? `${model.llm} (${t('projectEdit.deprecated')})`
                       : model.llm,
                     disabled: model.deprecation_info?.is_in_fallback_period,
                   }))}
@@ -711,7 +715,7 @@ function ProjectEdit() {
                   loading={savingElevenLlm}
                   disabled={!selectedElevenLlm}
                 >
-                  Applica
+                  {t('projectEdit.apply')}
                 </Button>
               </Space>
             </Card>
@@ -722,14 +726,14 @@ function ProjectEdit() {
           <Card
             title={
               <Space>
-                <span>Frase di apertura</span>
-                {hasChangesConsent && <Tag color="orange">Non salvato</Tag>}
+                <span>{t('projectEdit.openingLine')}</span>
+                {hasChangesConsent && <Tag color="orange">{t('projectEdit.unsaved')}</Tag>}
               </Space>
             }
           >
             <Alert
-              message="Cosa sente chi chiama per primo"
-              description="La prima frase pronunciata dall'agente all'inizio della chiamata, prima che chi chiama dica qualsiasi cosa. Fa parte della stessa bozza/pubblicazione dei prompt qui sotto."
+              message={t('projectEdit.firstHeardTitle')}
+              description={t('projectEdit.firstHeardDescription')}
               type="info"
               showIcon
               style={{ marginBottom: 16 }}
@@ -738,7 +742,7 @@ function ProjectEdit() {
               value={consentMessage}
               onChange={(e) => setConsentMessage(e.target.value)}
               rows={2}
-              placeholder="Es. Salve, come posso aiutarla?"
+              placeholder={t('projectEdit.openingLinePlaceholder')}
             />
             <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
               <Button
@@ -748,7 +752,7 @@ function ProjectEdit() {
                 loading={savingConsent}
                 disabled={!hasChangesConsent}
               >
-                Salva bozza
+                {t('projectEdit.saveDraft')}
               </Button>
             </div>
           </Card>
@@ -759,14 +763,14 @@ function ProjectEdit() {
             <Card
               title={
                 <Space>
-                  <span>Variabili del progetto</span>
-                  {hasChangesVariables && <Tag color="orange">Non salvato</Tag>}
+                  <span>{t('projectEdit.projectVariables')}</span>
+                  {hasChangesVariables && <Tag color="orange">{t('projectEdit.unsaved')}</Tag>}
                 </Space>
               }
             >
               <Alert
-                message="Valori per i tag {{...}} usati nel prompt"
-                description="Alcuni arrivano dal template da cui e' nato questo progetto, altri li aggiungi tu (avviso sotto l'editor quando scrivi un {{tag}} nuovo). Cambiare un valore qui non modifica il testo del prompt - conta al momento della pubblicazione."
+                message={t('projectEdit.variableValuesTitle', { interpolation: { prefix: '{%', suffix: '%}' } })}
+                description={t('projectEdit.variableValuesDescription', { interpolation: { prefix: '{%', suffix: '%}' } })}
                 type="info"
                 showIcon
                 style={{ marginBottom: 16 }}
@@ -787,15 +791,15 @@ function ProjectEdit() {
                 >
                   <Row gutter={[16, 8]}>
                     <Col xs={24} sm={12}>
-                      <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>Etichetta</Text>
+                      <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>{t('templates.label')}</Text>
                       <Input
                         value={field.label || ''}
                         onChange={(e) => updateVariableField(field.key, 'label', e.target.value)}
-                        placeholder="es. Nome del Comune"
+                        placeholder={t('templates.labelPlaceholder')}
                       />
                     </Col>
                     <Col xs={24} sm={12}>
-                      <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>Valore</Text>
+                      <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>{t('projectEdit.value')}</Text>
                       <Input
                         value={customVariables[field.key] || ''}
                         onChange={(e) => setCustomVariables((prev) => ({ ...prev, [field.key]: e.target.value }))}
@@ -816,7 +820,7 @@ function ProjectEdit() {
                   loading={savingVariables}
                   disabled={!hasChangesVariables}
                 >
-                  Salva variabili
+                  {t('projectEdit.saveVariables')}
                 </Button>
               </div>
             </Card>
@@ -824,7 +828,7 @@ function ProjectEdit() {
         )}
 
         <Col span={24}>
-          <Card title="Editor Prompt">
+          <Card title={t('projectEdit.promptEditor')}>
             <Tabs items={promptItems} />
           </Card>
         </Col>
@@ -832,8 +836,8 @@ function ProjectEdit() {
         {versions.length > 0 && (
           <Col span={24}>
             <Card
-              title="Versioni pubblicate"
-              extra={<Button size="small" onClick={() => navigate(`/projects/${id}/history`)}>Storico completo</Button>}
+              title={t('projectEdit.publishedVersions')}
+              extra={<Button size="small" onClick={() => navigate(`/projects/${id}/history`)}>{t('projectEdit.fullHistory')}</Button>}
             >
               <List
                 size="small"
@@ -844,7 +848,7 @@ function ProjectEdit() {
                       <Tag color={v.status === 'published' ? 'green' : 'default'}>v{v.version_number}</Tag>
                       <Text>{v.status}</Text>
                       {v.published_at && (
-                        <Text type="secondary">{new Date(v.published_at).toLocaleString('it-IT')}</Text>
+                        <Text type="secondary">{new Date(v.published_at).toLocaleString(i18n.language)}</Text>
                       )}
                     </Space>
                   </List.Item>
@@ -855,38 +859,38 @@ function ProjectEdit() {
         )}
 
         <Col span={24}>
-          <Card title="Configurazione Output">
+          <Card title={t('projectEdit.outputConfiguration')}>
             <Row gutter={[16, 16]}>
               <Col xs={12} sm={6}>
-                <Card size="small" title="Email PDF">
+                <Card size="small" title={t('projectEdit.emailPdf')}>
                   <Switch
                     checked={project?.config?.send_email || false}
                     disabled
                   />
                   <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
-                    Invia PDF via email dopo la chiamata
+                    {t('projectEdit.emailPdfDescription')}
                   </Text>
                 </Card>
               </Col>
               <Col xs={12} sm={6}>
-                <Card size="small" title="Sync CRM">
+                <Card size="small" title={t('projectEdit.crmSync')}>
                   <Switch
                     checked={project?.config?.sync_crm || false}
                     disabled
                   />
                   <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
-                    Sincronizza con HubSpot
+                    {t('projectEdit.crmSyncDescription')}
                   </Text>
                 </Card>
               </Col>
               <Col xs={12} sm={6}>
-                <Card size="small" title="Calendario">
+                <Card size="small" title={t('projectConfig.calendar')}>
                   <Switch
                     checked={project?.config?.create_event || false}
                     disabled
                   />
                   <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
-                    Crea evento calendario
+                    {t('projectEdit.calendarDescription')}
                   </Text>
                 </Card>
               </Col>
@@ -897,14 +901,14 @@ function ProjectEdit() {
                     disabled
                   />
                   <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
-                    Notifica webhook
+                    {t('projectEdit.webhookDescription')}
                   </Text>
                 </Card>
               </Col>
             </Row>
             <Divider />
             <Text type="secondary">
-              Le configurazioni di output si gestiscono dalla scheda Impostazioni del progetto.
+              {t('projectEdit.outputConfigNote')}
             </Text>
           </Card>
         </Col>

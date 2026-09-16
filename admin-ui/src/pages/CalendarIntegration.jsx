@@ -5,12 +5,14 @@ import {
 import {
   CalendarOutlined, CheckCircleOutlined, GoogleOutlined, WindowsOutlined, SaveOutlined, SyncOutlined, LinkOutlined
 } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import * as calendarApi from '../api/calendar'
 
 const { Title, Text, Paragraph } = Typography
 const { TextArea } = Input
 
 function CalendarIntegration() {
+  const { t, i18n } = useTranslation()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [config, setConfig] = useState(null)
@@ -67,7 +69,7 @@ function CalendarIntegration() {
           default_timezone: 'Europe/Rome',
         })
       } else {
-        message.error('Errore caricamento configurazione')
+        message.error(t('calendar.loadError'))
       }
     } finally {
       setLoading(false)
@@ -78,10 +80,10 @@ function CalendarIntegration() {
     setSaving(true)
     try {
       await calendarApi.updateCalendarConfig('google', values)
-      message.success('Configurazione Google salvata')
+      message.success(t('calendar.googleSaved'))
       loadConfig()
     } catch (error) {
-      message.error(error.response?.data?.detail || 'Errore salvataggio')
+      message.error(error.response?.data?.detail || t('calendar.saveError'))
     } finally {
       setSaving(false)
     }
@@ -91,10 +93,10 @@ function CalendarIntegration() {
     setSaving(true)
     try {
       await calendarApi.updateCalendarConfig('microsoft', values)
-      message.success('Configurazione Microsoft salvata')
+      message.success(t('calendar.microsoftSaved'))
       loadConfig()
     } catch (error) {
-      message.error(error.response?.data?.detail || 'Errore salvataggio')
+      message.error(error.response?.data?.detail || t('calendar.saveError'))
     } finally {
       setSaving(false)
     }
@@ -104,17 +106,17 @@ function CalendarIntegration() {
     try {
       const { auth_url } = await calendarApi.getOAuthUrl(provider)
       window.open(auth_url, '_blank', 'width=600,height=700')
-      message.info('Completa l\'autenticazione nella finestra popup')
+      message.info(t('calendar.completeAuth'))
     } catch (error) {
-      message.error('Errore generazione URL OAuth')
+      message.error(t('calendar.oauthUrlError'))
     }
   }
 
   const googleTabContent = (
     <Card loading={loading}>
       <Alert
-        message="Integrazione Google Calendar"
-        description="Crea automaticamente eventi nel calendario Google per ogni chiamata. Richiede un progetto Google Cloud con Google Calendar API abilitata."
+        message={t('calendar.googleIntegration')}
+        description={t('calendar.googleDescription')}
         type="info"
         showIcon
         style={{ marginBottom: 16 }}
@@ -122,8 +124,11 @@ function CalendarIntegration() {
 
       {config?.google?.connected && (
         <Alert
-          message="Connessione Attiva"
-          description={`Account: ${config.google.email || 'Connesso'} • Ultimo sync: ${config.google.last_sync ? new Date(config.google.last_sync).toLocaleString('it-IT') : 'Mai'}`}
+          message={t('calendar.connectionActive')}
+          description={t('calendar.connectionActiveDetail', {
+            account: config.google.email || t('calendar.connected'),
+            lastSync: config.google.last_sync ? new Date(config.google.last_sync).toLocaleString(i18n.language) : t('crm.never'),
+          })}
           type="success"
           showIcon
           style={{ marginBottom: 16 }}
@@ -137,10 +142,10 @@ function CalendarIntegration() {
       >
         <Form.Item
           name="enabled"
-          label="Abilita Google Calendar"
+          label={t('calendar.enableGoogle')}
           valuePropName="checked"
         >
-          <Switch checkedChildren="Attivo" unCheckedChildren="Inattivo" />
+          <Switch checkedChildren={t('crm.active')} unCheckedChildren={t('crm.inactive')} />
         </Form.Item>
 
         <Divider />
@@ -148,8 +153,8 @@ function CalendarIntegration() {
         <Form.Item
           name="client_id"
           label="Client ID"
-          rules={[{ required: true, message: 'Inserisci client ID' }]}
-          extra="Client ID dalla Google Cloud Console"
+          rules={[{ required: true, message: t('calendar.enterClientId') }]}
+          extra={t('calendar.googleClientIdExtra')}
         >
           <Input placeholder="123456789-xxx.apps.googleusercontent.com" />
         </Form.Item>
@@ -157,25 +162,25 @@ function CalendarIntegration() {
         <Form.Item
           name="client_secret"
           label="Client Secret"
-          rules={[{ required: true, message: 'Inserisci client secret' }]}
-          extra="Client Secret dalla Google Cloud Console"
+          rules={[{ required: true, message: t('calendar.enterClientSecret') }]}
+          extra={t('calendar.googleClientSecretExtra')}
         >
           <Input.Password placeholder="GOCSPX-..." />
         </Form.Item>
 
-        <Divider orientation="left">Impostazioni Calendario</Divider>
+        <Divider orientation="left">{t('calendar.calendarSettings')}</Divider>
 
         <Form.Item
           name="calendar_id"
           label="Calendar ID"
-          extra="ID del calendario da usare (default: 'primary' per calendario principale)"
+          extra={t('calendar.calendarIdExtra')}
         >
           <Input placeholder="primary" />
         </Form.Item>
 
         <Form.Item
           name="event_duration"
-          label="Durata Evento (minuti)"
+          label={t('calendar.eventDuration')}
         >
           <Input type="number" placeholder="60" />
         </Form.Item>
@@ -200,13 +205,13 @@ function CalendarIntegration() {
               icon={<SaveOutlined />}
               loading={saving}
             >
-              Salva Configurazione
+              {t('crm.saveConfig')}
             </Button>
             <Button
               icon={<LinkOutlined />}
               onClick={() => handleOAuthConnect('google')}
             >
-              Connetti Account Google
+              {t('calendar.connectGoogleAccount')}
             </Button>
           </Space>
         </Form.Item>
@@ -214,18 +219,18 @@ function CalendarIntegration() {
 
       <Divider />
 
-      <Card title="Guida Rapida Google" size="small" type="inner">
+      <Card title={t('calendar.googleQuickGuide')} size="small" type="inner">
         <Paragraph>
-          <Text strong>Setup Google Cloud:</Text>
+          <Text strong>{t('calendar.googleSetup')}:</Text>
         </Paragraph>
         <ol>
-          <li>Vai su <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer">Google Cloud Console</a></li>
-          <li>Crea un nuovo progetto o seleziona uno esistente</li>
-          <li>Abilita "Google Calendar API"</li>
-          <li>Vai in "Credentials" → "Create Credentials" → "OAuth 2.0 Client ID"</li>
-          <li>Tipo applicazione: Web application</li>
-          <li>Authorized redirect URIs: <code>{window.location.origin}/api/calendar/google/callback</code></li>
-          <li>Copia Client ID e Client Secret</li>
+          <li><a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer">{t('calendar.goTo')} Google Cloud Console</a></li>
+          <li>{t('calendar.googleStep2')}</li>
+          <li>{t('calendar.googleStep3')}</li>
+          <li>{t('calendar.googleStep4')}</li>
+          <li>{t('calendar.googleStep5')}</li>
+          <li>{t('calendar.authorizedRedirectUris')}: <code>{window.location.origin}/api/calendar/google/callback</code></li>
+          <li>{t('calendar.copyClientIdSecret')}</li>
         </ol>
       </Card>
     </Card>
@@ -234,8 +239,8 @@ function CalendarIntegration() {
   const microsoftTabContent = (
     <Card loading={loading}>
       <Alert
-        message="Integrazione Microsoft Outlook"
-        description="Crea automaticamente eventi nel calendario Microsoft Outlook/365 per ogni chiamata. Richiede un'app registrata in Azure AD."
+        message={t('calendar.microsoftIntegration')}
+        description={t('calendar.microsoftDescription')}
         type="info"
         showIcon
         style={{ marginBottom: 16 }}
@@ -243,8 +248,11 @@ function CalendarIntegration() {
 
       {config?.microsoft?.connected && (
         <Alert
-          message="Connessione Attiva"
-          description={`Account: ${config.microsoft.email || 'Connesso'} • Ultimo sync: ${config.microsoft.last_sync ? new Date(config.microsoft.last_sync).toLocaleString('it-IT') : 'Mai'}`}
+          message={t('calendar.connectionActive')}
+          description={t('calendar.connectionActiveDetail', {
+            account: config.microsoft.email || t('calendar.connected'),
+            lastSync: config.microsoft.last_sync ? new Date(config.microsoft.last_sync).toLocaleString(i18n.language) : t('crm.never'),
+          })}
           type="success"
           showIcon
           style={{ marginBottom: 16 }}
@@ -258,19 +266,19 @@ function CalendarIntegration() {
       >
         <Form.Item
           name="enabled"
-          label="Abilita Microsoft Calendar"
+          label={t('calendar.enableMicrosoft')}
           valuePropName="checked"
         >
-          <Switch checkedChildren="Attivo" unCheckedChildren="Inattivo" />
+          <Switch checkedChildren={t('crm.active')} unCheckedChildren={t('crm.inactive')} />
         </Form.Item>
 
         <Divider />
 
         <Form.Item
           name="client_id"
-          label="Application (client) ID"
-          rules={[{ required: true, message: 'Inserisci client ID' }]}
-          extra="Application ID da Azure AD"
+          label={t('calendar.applicationClientId')}
+          rules={[{ required: true, message: t('calendar.enterClientId') }]}
+          extra={t('calendar.msApplicationIdExtra')}
         >
           <Input placeholder="12345678-1234-1234-1234-123456789012" />
         </Form.Item>
@@ -278,34 +286,34 @@ function CalendarIntegration() {
         <Form.Item
           name="client_secret"
           label="Client Secret"
-          rules={[{ required: true, message: 'Inserisci client secret' }]}
-          extra="Client Secret (value) da Azure AD"
+          rules={[{ required: true, message: t('calendar.enterClientSecret') }]}
+          extra={t('calendar.msClientSecretExtra')}
         >
           <Input.Password />
         </Form.Item>
 
         <Form.Item
           name="tenant_id"
-          label="Directory (tenant) ID"
-          rules={[{ required: true, message: 'Inserisci tenant ID' }]}
-          extra="Tenant ID da Azure AD (usa 'common' per multi-tenant)"
+          label={t('calendar.directoryTenantId')}
+          rules={[{ required: true, message: t('calendar.enterTenantId') }]}
+          extra={t('calendar.msTenantIdExtra')}
         >
           <Input placeholder="common" />
         </Form.Item>
 
-        <Divider orientation="left">Impostazioni Calendario</Divider>
+        <Divider orientation="left">{t('calendar.calendarSettings')}</Divider>
 
         <Form.Item
           name="calendar_id"
           label="Calendar ID"
-          extra="ID del calendario (lascia vuoto per calendario predefinito)"
+          extra={t('calendar.msCalendarIdExtra')}
         >
           <Input placeholder="" />
         </Form.Item>
 
         <Form.Item
           name="event_duration"
-          label="Durata Evento (minuti)"
+          label={t('calendar.eventDuration')}
         >
           <Input type="number" placeholder="60" />
         </Form.Item>
@@ -330,13 +338,13 @@ function CalendarIntegration() {
               icon={<SaveOutlined />}
               loading={saving}
             >
-              Salva Configurazione
+              {t('crm.saveConfig')}
             </Button>
             <Button
               icon={<LinkOutlined />}
               onClick={() => handleOAuthConnect('microsoft')}
             >
-              Connetti Account Microsoft
+              {t('calendar.connectMicrosoftAccount')}
             </Button>
           </Space>
         </Form.Item>
@@ -344,20 +352,20 @@ function CalendarIntegration() {
 
       <Divider />
 
-      <Card title="Guida Rapida Microsoft" size="small" type="inner">
+      <Card title={t('calendar.microsoftQuickGuide')} size="small" type="inner">
         <Paragraph>
-          <Text strong>Setup Azure AD:</Text>
+          <Text strong>{t('calendar.azureSetup')}:</Text>
         </Paragraph>
         <ol>
-          <li>Vai su <a href="https://portal.azure.com" target="_blank" rel="noopener noreferrer">Azure Portal</a></li>
-          <li>Apri "Azure Active Directory" → "App registrations"</li>
-          <li>Clicca "New registration"</li>
-          <li>Nome: "Ascolta Calendar"</li>
-          <li>Supported account types: Scegli in base alle tue esigenze</li>
-          <li>Redirect URI (Web): <code>{window.location.origin}/api/calendar/microsoft/callback</code></li>
-          <li>Dopo la creazione, vai in "Certificates & secrets" → crea un Client Secret</li>
-          <li>Vai in "API permissions" → "Add permission" → "Microsoft Graph" → "Delegated" → aggiungi: Calendars.ReadWrite, offline_access</li>
-          <li>Copia Application ID, Tenant ID e Client Secret value</li>
+          <li><a href="https://portal.azure.com" target="_blank" rel="noopener noreferrer">{t('calendar.goTo')} Azure Portal</a></li>
+          <li>{t('calendar.msStep2')}</li>
+          <li>{t('calendar.msStep3')}</li>
+          <li>{t('calendar.msStep4')}</li>
+          <li>{t('calendar.msStep5')}</li>
+          <li>{t('calendar.redirectUriWeb')}: <code>{window.location.origin}/api/calendar/microsoft/callback</code></li>
+          <li>{t('calendar.msStep7')}</li>
+          <li>{t('calendar.msStep8')}</li>
+          <li>{t('calendar.msStep9')}</li>
         </ol>
       </Card>
     </Card>
@@ -387,7 +395,7 @@ function CalendarIntegration() {
   return (
     <div>
       <Title level={3} style={{ marginBottom: 24 }}>
-        <CalendarOutlined /> Integrazione Calendario
+        <CalendarOutlined /> {t('calendar.title')}
       </Title>
 
       <Tabs

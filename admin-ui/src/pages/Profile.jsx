@@ -1,17 +1,11 @@
 import { useState, useEffect } from 'react'
-import { Card, Descriptions, Tag, Form, Input, Button, message, Typography, Space, Row, Col } from 'antd'
-import { LockOutlined } from '@ant-design/icons'
+import { Card, Descriptions, Tag, Form, Input, Button, message, Typography, Space, Row, Col, Select } from 'antd'
+import { LockOutlined, GlobalOutlined } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import * as authApi from '../api/auth'
+import { SUPPORTED_LANGUAGES } from '../i18n'
 
 const { Title } = Typography
-
-const ROLE_LABELS = {
-  super_admin: 'Super Admin',
-  admin: 'Admin',
-  creator: 'Creator',
-  power_user: 'Power User',
-  user: 'User',
-}
 
 /**
  * Profilo - "Profilo"/"Impostazioni" in alto a destra puntavano entrambi
@@ -22,6 +16,14 @@ const ROLE_LABELS = {
  * dati account + cambio password (gia' pronto, mai collegato a una UI).
  */
 function Profile() {
+  const { t, i18n } = useTranslation()
+  const ROLE_LABELS = {
+    super_admin: t('roles.super_admin'),
+    admin: t('roles.admin'),
+    creator: t('roles.creator'),
+    power_user: t('roles.power_user'),
+    user: t('roles.user'),
+  }
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [changingPassword, setChangingPassword] = useState(false)
@@ -30,7 +32,7 @@ function Profile() {
   useEffect(() => {
     authApi.getCurrentUser()
       .then(setUser)
-      .catch(() => message.error('Errore caricamento profilo'))
+      .catch(() => message.error(t('profile.loadError')))
       .finally(() => setLoading(false))
   }, [])
 
@@ -38,10 +40,10 @@ function Profile() {
     setChangingPassword(true)
     try {
       await authApi.changePassword(values.current_password, values.new_password)
-      message.success('Password cambiata')
+      message.success(t('profile.passwordChanged'))
       form.resetFields()
     } catch (error) {
-      message.error(error.response?.data?.detail || 'Errore nel cambio password')
+      message.error(error.response?.data?.detail || t('profile.passwordChangeError'))
     } finally {
       setChangingPassword(false)
     }
@@ -49,16 +51,16 @@ function Profile() {
 
   return (
     <div>
-      <Title level={3} style={{ marginBottom: 24 }}>Profilo</Title>
+      <Title level={3} style={{ marginBottom: 24 }}>{t('userMenu.profile')}</Title>
 
       <Row gutter={[24, 24]}>
         <Col xs={24} lg={12}>
-          <Card title="Il tuo account" loading={loading}>
+          <Card title={t('profile.yourAccount')} loading={loading}>
             {user && (
               <Descriptions column={1} bordered size="small">
-                <Descriptions.Item label="Nome">{user.full_name || '-'}</Descriptions.Item>
+                <Descriptions.Item label={t('users.fullName')}>{user.full_name || '-'}</Descriptions.Item>
                 <Descriptions.Item label="Email">{user.email}</Descriptions.Item>
-                <Descriptions.Item label="Ruolo">
+                <Descriptions.Item label={t('users.role')}>
                   <Tag color={user.role === 'super_admin' ? 'gold' : 'blue'}>
                     {ROLE_LABELS[user.role] || user.role}
                   </Tag>
@@ -66,11 +68,11 @@ function Profile() {
                 {user.tenant_name && (
                   <Descriptions.Item label="Tenant">{user.tenant_name}</Descriptions.Item>
                 )}
-                <Descriptions.Item label="Ultimo accesso">
-                  {user.last_login_at ? new Date(user.last_login_at).toLocaleString('it-IT') : '-'}
+                <Descriptions.Item label={t('users.lastLogin')}>
+                  {user.last_login_at ? new Date(user.last_login_at).toLocaleString(i18n.language) : '-'}
                 </Descriptions.Item>
-                <Descriptions.Item label="Account creato">
-                  {new Date(user.created_at).toLocaleString('it-IT')}
+                <Descriptions.Item label={t('profile.accountCreated')}>
+                  {new Date(user.created_at).toLocaleString(i18n.language)}
                 </Descriptions.Item>
               </Descriptions>
             )}
@@ -78,35 +80,35 @@ function Profile() {
         </Col>
 
         <Col xs={24} lg={12}>
-          <Card title="Cambia password">
+          <Card title={t('profile.changePassword')}>
             <Form form={form} layout="vertical" onFinish={handleChangePassword}>
               <Form.Item
                 name="current_password"
-                label="Password attuale"
-                rules={[{ required: true, message: 'Inserisci la password attuale' }]}
+                label={t('profile.currentPassword')}
+                rules={[{ required: true, message: t('profile.enterCurrentPassword') }]}
               >
                 <Input.Password prefix={<LockOutlined />} autoComplete="current-password" />
               </Form.Item>
               <Form.Item
                 name="new_password"
-                label="Nuova password"
+                label={t('users.newPassword')}
                 rules={[
-                  { required: true, message: 'Inserisci la nuova password' },
-                  { min: 8, message: 'Almeno 8 caratteri' },
+                  { required: true, message: t('login.enterNewPassword') },
+                  { min: 8, message: t('profile.min8chars') },
                 ]}
               >
                 <Input.Password prefix={<LockOutlined />} autoComplete="new-password" />
               </Form.Item>
               <Form.Item
                 name="confirm_password"
-                label="Conferma nuova password"
+                label={t('login.confirmPasswordPlaceholder')}
                 dependencies={['new_password']}
                 rules={[
-                  { required: true, message: 'Conferma la nuova password' },
+                  { required: true, message: t('login.confirmNewPassword') },
                   ({ getFieldValue }) => ({
                     validator(_, value) {
                       if (!value || getFieldValue('new_password') === value) return Promise.resolve()
-                      return Promise.reject(new Error('Le password non coincidono'))
+                      return Promise.reject(new Error(t('login.passwordsDontMatch')))
                     },
                   }),
                 ]}
@@ -116,11 +118,23 @@ function Profile() {
               <Form.Item>
                 <Space>
                   <Button type="primary" htmlType="submit" loading={changingPassword}>
-                    Cambia password
+                    {t('profile.changePassword')}
                   </Button>
                 </Space>
               </Form.Item>
             </Form>
+          </Card>
+        </Col>
+
+        <Col xs={24} lg={12}>
+          <Card title={t('language.label')}>
+            <Select
+              value={i18n.language?.split('-')[0] || 'it'}
+              onChange={(value) => i18n.changeLanguage(value)}
+              style={{ width: '100%', maxWidth: 280 }}
+              suffixIcon={<GlobalOutlined />}
+              options={SUPPORTED_LANGUAGES.map((lang) => ({ value: lang.code, label: lang.label }))}
+            />
           </Card>
         </Col>
       </Row>

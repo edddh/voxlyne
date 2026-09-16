@@ -5,6 +5,7 @@ import {
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, KeyOutlined, SearchOutlined
 } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import * as usersApi from '../api/users'
 import { getTenants } from '../api/tenants'
 import { useAuth } from '../hooks/useAuth'
@@ -20,15 +21,15 @@ const roleColors = {
   user: 'default',
 }
 
-const roleLabels = {
-  super_admin: 'Super Admin',
-  admin: 'Admin',
-  creator: 'Creator',
-  power_user: 'Power User',
-  user: 'User',
-}
-
 function Users() {
+  const { t, i18n } = useTranslation()
+  const roleLabels = {
+    super_admin: t('roles.super_admin'),
+    admin: t('roles.admin'),
+    creator: t('roles.creator'),
+    power_user: t('roles.power_user'),
+    user: t('roles.user'),
+  }
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
@@ -70,7 +71,7 @@ function Users() {
       setUsers(data.users)
       setTotal(data.total)
     } catch (error) {
-      message.error('Errore caricamento utenti')
+      message.error(t('users.loadError'))
     } finally {
       setLoading(false)
     }
@@ -94,15 +95,15 @@ function Users() {
     try {
       if (editingUser) {
         await usersApi.updateUser(editingUser.id, values)
-        message.success('Utente aggiornato')
+        message.success(t('users.updated'))
       } else {
         await usersApi.createUser(values)
-        message.success('Utente creato')
+        message.success(t('users.created'))
       }
       setModalOpen(false)
       loadUsers()
     } catch (error) {
-      const msg = error.response?.data?.detail || 'Errore'
+      const msg = error.response?.data?.detail || t('common.error')
       message.error(msg)
     }
   }
@@ -110,27 +111,27 @@ function Users() {
   const handleDelete = async (id) => {
     try {
       await usersApi.deleteUser(id)
-      message.success('Utente disattivato')
+      message.success(t('users.deactivated'))
       loadUsers()
     } catch (error) {
-      message.error('Errore disattivazione')
+      message.error(t('users.deactivateError'))
     }
   }
 
   const handleResetPassword = async (values) => {
     try {
       await usersApi.resetUserPassword(selectedUserId, values.new_password)
-      message.success('Password reimpostata')
+      message.success(t('users.passwordReset'))
       setPasswordModalOpen(false)
       passwordForm.resetFields()
     } catch (error) {
-      message.error('Errore reset password')
+      message.error(t('users.passwordResetError'))
     }
   }
 
   const columns = [
     {
-      title: 'Utente',
+      title: t('users.userColumn'),
       key: 'user',
       render: (_, record) => (
         <Space>
@@ -145,17 +146,17 @@ function Users() {
       ),
     },
     {
-      title: 'Ruolo',
+      title: t('users.role'),
       dataIndex: 'role',
       key: 'role',
       render: (role) => <Tag color={roleColors[role]}>{roleLabels[role]}</Tag>,
     },
     {
-      title: 'Stato',
+      title: t('tenantCredentials.status'),
       dataIndex: 'is_active',
       key: 'is_active',
       render: (active) => (
-        <Tag color={active ? 'green' : 'red'}>{active ? 'Attivo' : 'Inattivo'}</Tag>
+        <Tag color={active ? 'green' : 'red'}>{active ? t('tenants.activeStatus') : t('tenants.inactiveStatus')}</Tag>
       ),
     },
     isSuperAdmin && {
@@ -165,20 +166,20 @@ function Users() {
       render: (name) => name || '-',
     },
     {
-      title: 'Ultimo Accesso',
+      title: t('users.lastLogin'),
       dataIndex: 'last_login_at',
       key: 'last_login',
-      render: (date) => date ? new Date(date).toLocaleString('it-IT') : 'Mai',
+      render: (date) => date ? new Date(date).toLocaleString(i18n.language) : t('crm.never'),
     },
     {
-      title: 'Azioni',
+      title: t('tenantCredentials.actions'),
       key: 'actions',
       render: (_, record) => (
         <Space>
-          <Tooltip title="Modifica">
+          <Tooltip title={t('common.edit')}>
             <Button icon={<EditOutlined />} size="small" onClick={() => openModal(record)} />
           </Tooltip>
-          <Tooltip title="Reset Password">
+          <Tooltip title={t('users.resetPassword')}>
             <Button
               icon={<KeyOutlined />}
               size="small"
@@ -189,12 +190,12 @@ function Users() {
             />
           </Tooltip>
           <Popconfirm
-            title="Disattivare questo utente?"
+            title={t('users.confirmDeactivate')}
             onConfirm={() => handleDelete(record.id)}
-            okText="Sì"
-            cancelText="No"
+            okText={t('promptHistory.yes')}
+            cancelText={t('promptHistory.no')}
           >
-            <Tooltip title="Disattiva">
+            <Tooltip title={t('tenants.deactivate')}>
               <Button icon={<DeleteOutlined />} size="small" danger />
             </Tooltip>
           </Popconfirm>
@@ -206,15 +207,15 @@ function Users() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
-        <Title level={3} style={{ margin: 0, flexShrink: 0 }}>Utenti</Title>
+        <Title level={3} style={{ margin: 0, flexShrink: 0 }}>{t('nav.users')}</Title>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>
-          Nuovo Utente
+          {t('users.newUser')}
         </Button>
       </div>
 
       <Space style={{ marginBottom: 16 }}>
         <Input
-          placeholder="Cerca email o nome..."
+          placeholder={t('users.searchPlaceholder')}
           prefix={<SearchOutlined />}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -222,7 +223,7 @@ function Users() {
           allowClear
         />
         <Select
-          placeholder="Filtra ruolo"
+          placeholder={t('users.filterRole')}
           value={roleFilter}
           onChange={setRoleFilter}
           style={{ width: 150 }}
@@ -249,12 +250,12 @@ function Users() {
             setPageSize(ps)
           },
           showSizeChanger: true,
-          showTotal: (t) => `Totale: ${t} utenti`,
+          showTotal: (total_) => t('users.totalCount', { count: total_ }),
         }}
       />
 
       <Modal
-        title={editingUser ? 'Modifica Utente' : 'Nuovo Utente'}
+        title={editingUser ? t('users.editUser') : t('users.newUser')}
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
         footer={null}
@@ -264,13 +265,13 @@ function Users() {
             name="email"
             label="Email"
             rules={[
-              { required: true, message: 'Inserisci email' },
-              { type: 'email', message: 'Email non valida' },
+              { required: true, message: t('login.enterEmail') },
+              { type: 'email', message: t('login.invalidEmail') },
             ]}
           >
             <Input disabled={!!editingUser} />
           </Form.Item>
-          <Form.Item name="full_name" label="Nome Completo">
+          <Form.Item name="full_name" label={t('users.fullName')}>
             <Input />
           </Form.Item>
           {!editingUser && (
@@ -278,8 +279,8 @@ function Users() {
               name="password"
               label="Password"
               rules={[
-                { required: true, message: 'Inserisci password' },
-                { min: 8, message: 'Minimo 8 caratteri' },
+                { required: true, message: t('login.enterPassword') },
+                { min: 8, message: t('users.min8chars') },
               ]}
             >
               <Input.Password />
@@ -289,23 +290,23 @@ function Users() {
             <Form.Item
               name="tenant_id"
               label="Tenant"
-              rules={[{ required: true, message: 'Seleziona il tenant di questo utente' }]}
-              tooltip="Senza tenant l'utente non appartiene a nessun cliente: non potrà vedere progetti, chiamate o altri utenti."
+              rules={[{ required: true, message: t('users.selectTenant') }]}
+              tooltip={t('users.tenantTooltip')}
             >
               <Select
-                placeholder="Seleziona tenant"
+                placeholder={t('users.selectTenantPlaceholder')}
                 showSearch
                 optionFilterProp="children"
               >
-                {tenants.map((t) => (
-                  <Option key={t.id} value={t.id}>{t.name}</Option>
+                {tenants.map((tn) => (
+                  <Option key={tn.id} value={tn.id}>{tn.name}</Option>
                 ))}
               </Select>
             </Form.Item>
           )}
           <Form.Item
             name="role"
-            label="Ruolo"
+            label={t('users.role')}
             rules={[{ required: true }]}
             initialValue="user"
           >
@@ -318,26 +319,26 @@ function Users() {
             </Select>
           </Form.Item>
           {editingUser && (
-            <Form.Item name="is_active" label="Stato" valuePropName="checked">
+            <Form.Item name="is_active" label={t('tenantCredentials.status')} valuePropName="checked">
               <Select>
-                <Option value={true}>Attivo</Option>
-                <Option value={false}>Inattivo</Option>
+                <Option value={true}>{t('tenants.activeStatus')}</Option>
+                <Option value={false}>{t('tenants.inactiveStatus')}</Option>
               </Select>
             </Form.Item>
           )}
           <Form.Item>
             <Space>
               <Button type="primary" htmlType="submit">
-                {editingUser ? 'Salva' : 'Crea'}
+                {editingUser ? t('common.save') : t('tenants.createButton')}
               </Button>
-              <Button onClick={() => setModalOpen(false)}>Annulla</Button>
+              <Button onClick={() => setModalOpen(false)}>{t('common.cancel')}</Button>
             </Space>
           </Form.Item>
         </Form>
       </Modal>
 
       <Modal
-        title="Reset Password"
+        title={t('users.resetPassword')}
         open={passwordModalOpen}
         onCancel={() => {
           setPasswordModalOpen(false)
@@ -348,18 +349,18 @@ function Users() {
         <Form form={passwordForm} layout="vertical" onFinish={handleResetPassword}>
           <Form.Item
             name="new_password"
-            label="Nuova Password"
+            label={t('users.newPassword')}
             rules={[
-              { required: true, message: 'Inserisci password' },
-              { min: 8, message: 'Minimo 8 caratteri' },
+              { required: true, message: t('login.enterPassword') },
+              { min: 8, message: t('users.min8chars') },
             ]}
           >
             <Input.Password />
           </Form.Item>
           <Form.Item>
             <Space>
-              <Button type="primary" htmlType="submit">Conferma</Button>
-              <Button onClick={() => setPasswordModalOpen(false)}>Annulla</Button>
+              <Button type="primary" htmlType="submit">{t('users.confirm')}</Button>
+              <Button onClick={() => setPasswordModalOpen(false)}>{t('common.cancel')}</Button>
             </Space>
           </Form.Item>
         </Form>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Form, Input, Button, Alert, Typography, Space, Descriptions, Tag, Divider, message, Table, Popconfirm } from 'antd'
 import { PhoneOutlined, DisconnectOutlined } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import { connectNumber, disconnectNumber, listConnectedNumbers } from '../api/telephony'
 
 const { Text, Paragraph } = Typography
@@ -16,6 +17,7 @@ const { Text, Paragraph } = Typography
  * per reindirizzare da zadarma o equivalente".
  */
 function TelephonyTab({ projectId, project }) {
+  const { t } = useTranslation()
   const [form] = Form.useForm()
   const [connecting, setConnecting] = useState(false)
   const [result, setResult] = useState(null)
@@ -27,7 +29,7 @@ function TelephonyTab({ projectId, project }) {
       const data = await listConnectedNumbers(projectId)
       setNumbers(data.filter((n) => n.is_active))
     } catch (error) {
-      message.error('Errore nel caricamento dei numeri collegati')
+      message.error(t('telephonyTab.loadError'))
     } finally {
       setLoadingNumbers(false)
     }
@@ -41,11 +43,11 @@ function TelephonyTab({ projectId, project }) {
     try {
       const data = await connectNumber(projectId, values)
       setResult(data)
-      message.success(`Numero ${values.phone_number} collegato a questo progetto`)
+      message.success(t('telephonyTab.numberConnected', { number: values.phone_number }))
       form.resetFields()
       loadNumbers()
     } catch (error) {
-      message.error(error.response?.data?.detail || 'Errore durante il collegamento del numero')
+      message.error(error.response?.data?.detail || t('telephonyTab.connectError'))
     } finally {
       setConnecting(false)
     }
@@ -54,10 +56,10 @@ function TelephonyTab({ projectId, project }) {
   const handleDisconnect = async (phoneNumber) => {
     try {
       await disconnectNumber(projectId, phoneNumber)
-      message.success(`Numero ${phoneNumber} scollegato (deregistrato da xAI)`)
+      message.success(t('telephonyTab.numberDisconnected', { number: phoneNumber }))
       loadNumbers()
     } catch (error) {
-      message.error(error.response?.data?.detail || 'Errore durante lo scollegamento')
+      message.error(error.response?.data?.detail || t('telephonyTab.disconnectError'))
     }
   }
 
@@ -69,7 +71,7 @@ function TelephonyTab({ projectId, project }) {
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <div>
-        <Text strong>Numeri collegati a questo progetto</Text>
+        <Text strong>{t('telephonyTab.connectedNumbers')}</Text>
         <Table
           style={{ marginTop: 8 }}
           rowKey="id"
@@ -77,20 +79,20 @@ function TelephonyTab({ projectId, project }) {
           loading={loadingNumbers}
           dataSource={numbers}
           pagination={false}
-          locale={{ emptyText: 'Nessun numero collegato' }}
+          locale={{ emptyText: t('telephonyTab.noConnectedNumbers') }}
           columns={[
-            { title: 'Numero', dataIndex: 'identifier' },
-            { title: 'Tipo', dataIndex: 'identifier_type' },
+            { title: t('telephonyTab.number'), dataIndex: 'identifier' },
+            { title: t('telephonyTab.type'), dataIndex: 'identifier_type' },
             {
-              title: 'Azioni',
+              title: t('tenantCredentials.actions'),
               key: 'actions',
               render: (_, r) => (
                 <Popconfirm
-                  title={`Scollegare ${r.identifier}?`}
-                  description="Deregistra il numero da xAI - il numero smettera' di rispondere finche' non lo ricolleghi."
+                  title={t('telephonyTab.confirmDisconnect', { number: r.identifier })}
+                  description={t('telephonyTab.confirmDisconnectDescription')}
                   onConfirm={() => handleDisconnect(r.identifier)}
                 >
-                  <Button size="small" danger icon={<DisconnectOutlined />}>Scollega</Button>
+                  <Button size="small" danger icon={<DisconnectOutlined />}>{t('telephonyTab.disconnect')}</Button>
                 </Popconfirm>
               ),
             },
@@ -103,36 +105,36 @@ function TelephonyTab({ projectId, project }) {
       <Alert
         type="info"
         showIcon
-        message="Collega un nuovo numero reale a questo progetto"
+        message={t('telephonyTab.connectNewNumber')}
         description={
           isEleven
-            ? 'Provisiona o aggiorna l’agente Eleven v3 Conversational di questo progetto e prepara lo switch Zadarma verso il SIP trunk ElevenLabs, con istruzioni di rollback.'
-            : 'Registra il numero presso xAI (Grok voice) e configura l’instradamento SIP lato Zadarma (se le credenziali API sono configurate per questo tenant), oppure mostra le istruzioni manuali per farlo a mano.'
+            ? t('telephonyTab.elevenDescription')
+            : t('telephonyTab.xaiDescription')
         }
       />
 
       <Form form={form} layout="vertical" onFinish={handleConnect}>
         <Form.Item
           name="phone_number"
-          label="Numero di telefono"
-          rules={[{ required: true, message: 'Inserisci il numero in formato E.164' }]}
-          tooltip="Formato E.164, es. +39 000 000 0000"
+          label={t('telephonyTab.phoneNumber')}
+          rules={[{ required: true, message: t('telephonyTab.enterE164Number') }]}
+          tooltip={t('telephonyTab.e164Tooltip')}
         >
           <Input prefix={<PhoneOutlined />} placeholder="+39 000 000 0000" />
         </Form.Item>
-        <Form.Item name="name" label="Etichetta (opzionale)">
-          <Input placeholder="Usa lo slug del progetto se lasciato vuoto" />
+        <Form.Item name="name" label={t('telephonyTab.labelOptional')}>
+          <Input placeholder={t('telephonyTab.labelPlaceholder')} />
         </Form.Item>
         <Button type="primary" htmlType="submit" loading={connecting}>
-          {isEleven ? 'Prepara collegamento Eleven' : 'Collega numero'}
+          {isEleven ? t('telephonyTab.prepareElevenConnection') : t('telephonyTab.connectNumber')}
         </Button>
       </Form>
 
       {result && (
         <>
           <Divider />
-          <Descriptions column={1} bordered size="small" title="Risultato">
-            <Descriptions.Item label="Numero">{result.phone_number}</Descriptions.Item>
+          <Descriptions column={1} bordered size="small" title={t('telephonyTab.result')}>
+            <Descriptions.Item label={t('telephonyTab.number')}>{result.phone_number}</Descriptions.Item>
             {!isEleven && result.webhook_url && (
               <Descriptions.Item label="Webhook">{result.webhook_url}</Descriptions.Item>
             )}
@@ -140,13 +142,13 @@ function TelephonyTab({ projectId, project }) {
               <Tag color="green">{providerResult?.status || 'ok'}</Tag> {providerResult?.sip_uri}
             </Descriptions.Item>
             <Descriptions.Item label="Zadarma">
-              {result.zadarma.status === 'automated' && <Tag color="green">automatizzato</Tag>}
-              {result.zadarma.status === 'manual_required' && <Tag color="orange">istruzioni manuali</Tag>}
-              {result.zadarma.status === 'failed' && <Tag color="red">fallito</Tag>}
-              {result.zadarma.status === 'not_attempted' && <Tag>non tentato</Tag>}
+              {result.zadarma.status === 'automated' && <Tag color="green">{t('telephonyTab.automated')}</Tag>}
+              {result.zadarma.status === 'manual_required' && <Tag color="orange">{t('telephonyTab.manualInstructions')}</Tag>}
+              {result.zadarma.status === 'failed' && <Tag color="red">{t('telephonyTab.failed')}</Tag>}
+              {result.zadarma.status === 'not_attempted' && <Tag>{t('telephonyTab.notAttempted')}</Tag>}
             </Descriptions.Item>
             {result.rollback?.previous_target_sip_uri && (
-              <Descriptions.Item label="Rollback SIP">{result.rollback.previous_target_sip_uri}</Descriptions.Item>
+              <Descriptions.Item label={t('telephonyTab.sipRollback')}>{result.rollback.previous_target_sip_uri}</Descriptions.Item>
             )}
           </Descriptions>
 
@@ -154,7 +156,7 @@ function TelephonyTab({ projectId, project }) {
             <Alert
               type="warning"
               showIcon
-              message="Passi manuali richiesti lato Zadarma (o provider equivalente)"
+              message={t('telephonyTab.manualStepsRequired')}
               description={<Paragraph style={{ whiteSpace: 'pre-line', marginBottom: 0 }}>{result.zadarma.steps}</Paragraph>}
             />
           )}

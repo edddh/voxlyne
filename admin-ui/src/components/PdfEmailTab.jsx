@@ -1,11 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Form, Switch, Select, Button, Alert, Space, message, Spin } from 'antd'
+import { useTranslation } from 'react-i18next'
 import * as projectsApi from '../api/projects'
-
-const TEMPLATE_OPTIONS = [
-  { value: 'candidate', label: 'Scheda candidato (colloquio/recruiting)' },
-  { value: 'generic', label: 'Generico (qualsiasi progetto)' },
-]
 
 /**
  * Controls output_config.pdf on the project (app/services/pdf_generator.py,
@@ -19,6 +15,11 @@ const TEMPLATE_OPTIONS = [
  * that was silently unused until now, not a new field.
  */
 function PdfEmailTab({ projectId }) {
+  const { t } = useTranslation()
+  const TEMPLATE_OPTIONS = [
+    { value: 'candidate', label: t('pdfEmailTab.candidateTemplate') },
+    { value: 'generic', label: t('pdfEmailTab.genericTemplate') },
+  ]
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -36,7 +37,7 @@ function PdfEmailTab({ projectId }) {
           pdf_template: pdfCfg.template || 'candidate',
         })
       } catch (error) {
-        message.error('Errore nel caricamento della configurazione')
+        message.error(t('pdfEmailTab.loadError'))
       } finally {
         setLoading(false)
       }
@@ -53,9 +54,9 @@ function PdfEmailTab({ projectId }) {
         pdf: { enabled: values.pdf_enabled, template: values.pdf_template },
       }
       await projectsApi.updateProject(projectId, { output_config })
-      message.success('Configurazione salvata')
+      message.success(t('crm.saved'))
     } catch (error) {
-      message.error(error.response?.data?.detail || 'Errore nel salvataggio')
+      message.error(error.response?.data?.detail || t('projectConfig.sipSaveError'))
     } finally {
       setSaving(false)
     }
@@ -68,25 +69,25 @@ function PdfEmailTab({ projectId }) {
       <Alert
         type="info"
         showIcon
-        message="Report PDF ed email dopo la chiamata"
-        description="Dopo ogni chiamata completata, Ascolta puo' generare automaticamente un report PDF dai dati estratti (e inviarlo via email, se la posta e' configurata a livello di sistema). Disattivalo per i progetti che non ne hanno bisogno."
+        message={t('pdfEmailTab.title')}
+        description={t('pdfEmailTab.description')}
       />
 
       <Form form={form} layout="vertical" onFinish={handleSave}>
-        <Form.Item name="pdf_enabled" label="Genera PDF dopo ogni chiamata" valuePropName="checked">
+        <Form.Item name="pdf_enabled" label={t('pdfEmailTab.generatePdf')} valuePropName="checked">
           <Switch onChange={setPdfEnabled} />
         </Form.Item>
 
         <Form.Item
           name="pdf_template"
-          label="Template PDF"
-          tooltip="Il template determina come vengono presentati i dati estratti dalla chiamata"
+          label={t('pdfEmailTab.pdfTemplate')}
+          tooltip={t('pdfEmailTab.templateTooltip')}
         >
           <Select options={TEMPLATE_OPTIONS} disabled={!pdfEnabled} style={{ maxWidth: 420 }} />
         </Form.Item>
 
         <Button type="primary" htmlType="submit" loading={saving}>
-          Salva
+          {t('common.save')}
         </Button>
       </Form>
     </Space>
