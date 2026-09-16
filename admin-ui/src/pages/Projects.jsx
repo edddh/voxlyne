@@ -831,11 +831,11 @@ function Projects() {
                   options={[
                     { value: 'openai_realtime', label: 'OpenAI Realtime (Inbound)' },
                     { value: 'vapi', label: 'Vapi + ElevenLabs (Outbound)' },
-                    { value: 'livekit_xai', label: 'LiveKit + xAI (Inbound, in sviluppo)' },
-                    { value: 'livekit_openai', label: 'LiveKit + OpenAI (Inbound, in sviluppo)' },
-                    { value: 'xai_sip_direct', label: 'SIP diretto + xAI voice-to-voice (Inbound, in sviluppo)' },
-                    { value: 'openai_sip_direct', label: 'SIP diretto + OpenAI (Inbound, in sviluppo)' },
-                    { value: 'elevenlabs_agent', label: 'ElevenLabs Agent (Inbound, in sviluppo)' },
+                    { value: 'livekit_xai', label: 'LiveKit + xAI (Inbound)' },
+                    { value: 'livekit_openai', label: 'LiveKit + OpenAI (Inbound)' },
+                    { value: 'xai_sip_direct', label: 'SIP diretto + xAI voice-to-voice (Inbound)' },
+                    { value: 'openai_sip_direct', label: 'SIP diretto + OpenAI (Inbound)' },
+                    { value: 'elevenlabs_agent', label: 'ElevenLabs Agent (Inbound)' },
                   ]}
                 />
               </Form.Item>

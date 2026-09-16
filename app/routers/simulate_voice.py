@@ -166,6 +166,14 @@ async def simulate_voice(websocket: WebSocket, project_id: UUID, token: str = Qu
             "SELECT tenant_id, voice_name, language, consent_message FROM projects WHERE id = :id",
             {"id": str(project_id)},
         )
+        has_knowledge_base = bool(await db.fetch_val(
+            """SELECT EXISTS(
+                 SELECT 1 FROM kb_sources
+                 WHERE project_id = :project_id
+                   AND status IN ('completed', 'indexed', 'ready')
+             )""",
+            {"project_id": str(project_id)},
+        )) if project else False
     if not project:
         await websocket.close(code=4404, reason="Project not found")
         return
@@ -232,7 +240,7 @@ async def simulate_voice(websocket: WebSocket, project_id: UUID, token: str = Qu
                     "output_modalities": ["audio"],
                     "voice": project["voice_name"] or "Eve",
                     "tool_choice": "auto",
-                    "tools": [SEARCH_KB_TOOL],
+                    "tools": [SEARCH_KB_TOOL] if has_knowledge_base else [],
                     "turn_detection": {
                         "type": "server_vad",
                         "create_response": True,

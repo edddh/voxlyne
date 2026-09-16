@@ -99,9 +99,9 @@ class SimulateResponse(BaseModel):
 def _provider_candidates_for_engine(voice_engine: Optional[str]) -> List[str]:
     engine = (voice_engine or "").strip().lower()
     if "xai" in engine:
-        return ["xai", "openai"]
+        return ["xai"]
     if "openai" in engine:
-        return ["openai", "xai"]
+        return ["openai"]
     if "eleven" in engine:
         return ["xai", "openai"]
     return ["xai", "openai"]
@@ -139,7 +139,7 @@ async def simulate_conversation(
     provider = None
     api_key = None
     for candidate in _provider_candidates_for_engine(project["voice_engine"]):
-        candidate_key = await resolve_provider_api_key(tenant_id, candidate)
+        candidate_key = await resolve_provider_api_key(tenant_id, candidate, project_id=project_id)
         if candidate_key:
             provider = candidate
             api_key = candidate_key

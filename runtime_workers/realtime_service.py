@@ -1421,6 +1421,18 @@ class LegacyController:
         if not call_state.api_key:
             raise RuntimeError(f"Call {call_id} has no api_key in its resolved state - this should be unreachable (handle_webhook declines before reaching here)")
         headers = {"Authorization": f"Bearer {call_state.api_key}"}
+        db = get_database()
+        has_knowledge_base = bool(await db.fetch_val(
+            """SELECT EXISTS(
+                 SELECT 1 FROM kb_sources
+                 WHERE project_id = :project_id
+                   AND status IN ('completed', 'indexed', 'ready')
+             )""",
+            {"project_id": call_state.scenario_name},
+        ))
+        call_tools = self.tools if has_knowledge_base else [
+            tool for tool in self.tools if tool.get("name") != "search_knowledge_base"
+        ]
 
         # try/finally (20/08): before this, finalization only happened
         # via the 'call.ended' webhook handler - if the connection to xAI
@@ -1442,7 +1454,7 @@ class LegacyController:
                                 voice=call_state.voice,
                                 language=call_state.response_language,
                                 instructions=instructions,
-                                tools=self.tools,
+                                tools=call_tools,
                             ),
                         },
                         ensure_ascii=True,
