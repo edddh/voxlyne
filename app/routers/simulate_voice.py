@@ -39,6 +39,7 @@ from uuid import UUID, uuid4
 import websockets
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
+from app.config import get_settings
 from app.database.db import get_database
 from app.middleware.auth_middleware import CurrentUser, check_tenant_access
 from app.services.agent_versions import resolve_provider_api_key
@@ -48,6 +49,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 XAI_REALTIME_URL = "wss://api.x.ai/v1/realtime"
+OPENAI_REALTIME_URL = "wss://api.openai.com/v1/realtime"
+OPENAI_REALTIME_VOICES = {
+    "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse",
+}
 
 # maintainer, 19/08: "metti un timeout per la simulazione vocale, ad esempio
 # 30s" - e' una prova, non una chiamata vera: senza un limite qualcuno
@@ -400,6 +405,225 @@ async def simulate_voice(websocket: WebSocket, project_id: UUID, token: str = Qu
             logger.info("simulate_voice stored call=%s transcript_items=%s", simulation_call_id, len(simulation_transcript))
         except Exception:
             logger.exception("simulate_voice could not persist call=%s", simulation_call_id)
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+
+
+@router.websocket("/ws/projects/{project_id}/simulate-openai-voice")
+async def simulate_openai_voice(websocket: WebSocket, project_id: UUID, token: str = Query(...)) -> None:
+    """Browser voice simulation for projects using OpenAI Realtime.
+
+    This is deliberately a separate relay from the xAI endpoint above: each
+    provider keeps its own authentication, session schema and audio events.
+    """
+    await websocket.accept()
+
+    user = await _authenticate(token)
+    if not user:
+        await websocket.close(code=4401, reason="Invalid or expired token")
+        return
+
+    db = get_database()
+    async with db.transaction():
+        if user.is_super_admin:
+            await db.execute("SELECT set_config('app.is_super_admin', 'true', true)")
+        else:
+            await db.execute("SELECT set_config('app.tenant_id', :t, true)", {"t": str(user.tenant_id)})
+        project = await db.fetch_one(
+            "SELECT tenant_id, voice_name, language, consent_message FROM projects WHERE id = :id",
+            {"id": str(project_id)},
+        )
+        has_knowledge_base = bool(await db.fetch_val(
+            """SELECT EXISTS(
+                 SELECT 1 FROM kb_sources
+                 WHERE project_id = :project_id
+                   AND status IN ('completed', 'indexed', 'ready')
+             )""",
+            {"project_id": str(project_id)},
+        )) if project else False
+    if not project:
+        await websocket.close(code=4404, reason="Project not found")
+        return
+
+    tenant_id = UUID(str(project["tenant_id"])) if project["tenant_id"] else None
+    if not tenant_id or not check_tenant_access(user, tenant_id):
+        await websocket.close(code=4403, reason="Access denied")
+        return
+
+    api_key = await resolve_provider_api_key(tenant_id, "openai_realtime", project_id=project_id)
+    if not api_key:
+        await websocket.close(
+            code=4400,
+            reason="Nessuna credenziale voice/openai_realtime per questo tenant o progetto",
+        )
+        return
+
+    simulation_call_id = uuid4()
+    simulation_started_at = datetime.now(timezone.utc)
+    simulation_transcript: list[dict[str, str]] = []
+    await db.execute(
+        """
+        INSERT INTO calls (
+            id, phone_number, status, consent_given, started_at,
+            project_id, tenant_id, voice_engine, direction, session_model,
+            origin, channel
+        ) VALUES (
+            :id, 'browser-simulation', 'in_progress', true, :started_at,
+            :project_id, :tenant_id, 'openai_realtime', 'inbound',
+            :session_model, 'voice_simulation', 'browser'
+        )
+        """,
+        {
+            "id": str(simulation_call_id),
+            "started_at": simulation_started_at,
+            "project_id": str(project_id),
+            "tenant_id": str(tenant_id),
+            "session_model": get_settings().openai_realtime_model or "gpt-realtime",
+        },
+    )
+
+    try:
+        first_raw = await asyncio.wait_for(websocket.receive_text(), timeout=10)
+        first = json.loads(first_raw)
+    except (asyncio.TimeoutError, json.JSONDecodeError):
+        await websocket.close(code=4400, reason="Expected a 'start' message with instructions")
+        return
+    if first.get("type") != "start" or not first.get("instructions"):
+        await websocket.close(code=4400, reason="Expected a 'start' message with instructions")
+        return
+
+    instructions = f"{first['instructions']}\n\n{TOOL_RESULT_WAIT_INSTRUCTIONS}"
+    consent_message = first.get("consent_message") or project["consent_message"] or "Hello, how can I help you?"
+    language = (project["language"] or "en").strip().lower()
+    voice = project["voice_name"] if project["voice_name"] in OPENAI_REALTIME_VOICES else "alloy"
+    openai_model = get_settings().openai_realtime_model or "gpt-realtime"
+
+    try:
+        query = urlencode({"model": openai_model})
+        headers = {"Authorization": f"Bearer {api_key}"}
+        async with websockets.connect(f"{OPENAI_REALTIME_URL}?{query}", additional_headers=headers) as openai_ws:
+            await openai_ws.send(json.dumps({
+                "type": "session.update",
+                "session": {
+                    "type": "realtime",
+                    "instructions": instructions,
+                    "output_modalities": ["audio"],
+                    "voice": voice,
+                    "tool_choice": "auto",
+                    "tools": [SEARCH_KB_TOOL] if has_knowledge_base else [],
+                    "turn_detection": {
+                        "type": "server_vad",
+                        "create_response": True,
+                        "interrupt_response": True,
+                    },
+                    "audio": {
+                        "input": {
+                            "format": {"type": "audio/pcm", "rate": 24000},
+                            "transcription": {"model": "gpt-4o-transcribe", "language": language},
+                        },
+                        "output": {"format": {"type": "audio/pcm", "rate": 24000}},
+                    },
+                },
+            }))
+            await openai_ws.send(json.dumps({
+                "type": "response.create",
+                "response": {
+                    "instructions": (
+                        "Pronuncia subito e integralmente il seguente messaggio iniziale, "
+                        "senza riassumerlo, senza cambiare lingua o ordine, e senza aggiungere altro prima: "
+                        f"{consent_message}"
+                    ),
+                },
+            }))
+            await websocket.send_text(json.dumps({"type": "ascolta.ready"}))
+
+            last_activity = time.monotonic()
+
+            async def browser_to_openai() -> None:
+                while True:
+                    await openai_ws.send(await websocket.receive_text())
+
+            async def openai_to_browser() -> None:
+                nonlocal last_activity
+                async for raw in openai_ws:
+                    last_activity = time.monotonic()
+                    event = json.loads(raw)
+                    event_type = event.get("type")
+                    if event_type == "conversation.item.input_audio_transcription.completed":
+                        transcript = (event.get("transcript") or "").strip()
+                        if transcript:
+                            simulation_transcript.append({"role": "user", "content": transcript})
+                    elif event_type in {"response.output_audio_transcript.done", "response.audio_transcript.done"}:
+                        transcript = (event.get("transcript") or "").strip()
+                        if transcript:
+                            simulation_transcript.append({"role": "assistant", "content": transcript})
+                    if event_type == "response.function_call_arguments.done":
+                        await _handle_function_call(openai_ws, websocket, event, project_id, tenant_id)
+                        continue
+                    await websocket.send_text(raw)
+
+            async def silence_watchdog() -> None:
+                while True:
+                    await asyncio.sleep(1)
+                    if time.monotonic() - last_activity >= SIMULATION_SILENCE_TIMEOUT_SECONDS:
+                        return
+
+            timeout_task = asyncio.create_task(silence_watchdog())
+            browser_task = asyncio.create_task(browser_to_openai())
+            openai_task = asyncio.create_task(openai_to_browser())
+            done, pending = await asyncio.wait(
+                [browser_task, openai_task, timeout_task],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for task in pending:
+                task.cancel()
+            if timeout_task in done:
+                try:
+                    await websocket.send_text(json.dumps({
+                        "type": "ascolta.timeout",
+                        "seconds": SIMULATION_SILENCE_TIMEOUT_SECONDS,
+                    }))
+                except Exception:
+                    pass
+            for task in done:
+                if task is timeout_task:
+                    continue
+                exc = task.exception()
+                if exc and not isinstance(exc, (WebSocketDisconnect, websockets.exceptions.ConnectionClosed)):
+                    logger.exception("simulate_openai_voice relay task failed", exc_info=exc)
+    except WebSocketDisconnect:
+        logger.info("simulate_openai_voice: browser disconnected (project=%s)", project_id)
+    except Exception as e:
+        logger.exception("simulate_openai_voice failed for project %s: %s", project_id, e)
+    finally:
+        simulation_ended_at = datetime.now(timezone.utc)
+        try:
+            await db.execute(
+                """
+                UPDATE calls
+                SET ended_at = :ended_at, status = 'completed'
+                WHERE id = :id
+                """,
+                {"id": str(simulation_call_id), "ended_at": simulation_ended_at},
+            )
+            for item in simulation_transcript:
+                await db.execute(
+                    """
+                    INSERT INTO transcripts (call_id, role, content, timestamp)
+                    VALUES (:call_id, :role, :content, :timestamp)
+                    """,
+                    {
+                        "call_id": str(simulation_call_id),
+                        "role": item["role"],
+                        "content": item["content"],
+                        "timestamp": simulation_ended_at,
+                    },
+                )
+            logger.info("simulate_openai_voice stored call=%s transcript_items=%s", simulation_call_id, len(simulation_transcript))
+        except Exception:
+            logger.exception("simulate_openai_voice could not persist call=%s", simulation_call_id)
         try:
             await websocket.close()
         except Exception:

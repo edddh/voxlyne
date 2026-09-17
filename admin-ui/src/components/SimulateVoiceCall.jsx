@@ -19,6 +19,7 @@ function buildWsUrl(path) {
 }
 
 const XAI_SAMPLE_RATE = 24000
+const OPENAI_SAMPLE_RATE = 24000
 const ELEVEN_SAMPLE_RATE = 16000
 // Stesso limite imposto lato server (app/routers/simulate_voice.py::
 // SIMULATION_SILENCE_TIMEOUT_SECONDS) - qui solo per mostrare il conto
@@ -92,8 +93,9 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
   const elevenToolTracePollRef = useRef(null)
   const lastActivityRef = useRef(Date.now())
   const isXaiVoiceSimulation = !voiceEngine || voiceEngine === 'xai_sip_direct'
+  const isOpenaiVoiceSimulation = voiceEngine === 'openai_realtime'
   const isElevenVoiceSimulation = voiceEngine === 'elevenlabs_agent'
-  const isSupportedVoiceSimulation = isXaiVoiceSimulation || isElevenVoiceSimulation
+  const isSupportedVoiceSimulation = isXaiVoiceSimulation || isOpenaiVoiceSimulation || isElevenVoiceSimulation
 
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
@@ -226,7 +228,11 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
       })
       streamRef.current = stream
 
-      const sampleRate = isElevenVoiceSimulation ? ELEVEN_SAMPLE_RATE : XAI_SAMPLE_RATE
+      const sampleRate = isElevenVoiceSimulation
+        ? ELEVEN_SAMPLE_RATE
+        : isOpenaiVoiceSimulation
+        ? OPENAI_SAMPLE_RATE
+        : XAI_SAMPLE_RATE
       const audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate })
       audioContextRef.current = audioContext
 
@@ -246,6 +252,9 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
         }
         elevenConversationIdRef.current = body.conversation_id || null
         ws = new WebSocket(body.signed_url)
+      } else if (isOpenaiVoiceSimulation) {
+        const token = localStorage.getItem('accessToken')
+        ws = new WebSocket(buildWsUrl(`/ws/projects/${projectId}/simulate-openai-voice?token=${encodeURIComponent(token)}`))
       } else {
         const token = localStorage.getItem('accessToken')
         ws = new WebSocket(buildWsUrl(`/ws/projects/${projectId}/simulate-voice?token=${encodeURIComponent(token)}`))
@@ -455,7 +464,7 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
       setStatus('error')
       cleanup()
     }
-  }, [projectId, promptA, consentMessage, playChunk, stopAgentPlayback, cleanup, status, appendTranscript, isElevenVoiceSimulation, isSupportedVoiceSimulation, voiceEngine, refreshElevenToolTrace])
+  }, [projectId, promptA, consentMessage, playChunk, stopAgentPlayback, cleanup, status, appendTranscript, isElevenVoiceSimulation, isOpenaiVoiceSimulation, isSupportedVoiceSimulation, voiceEngine, refreshElevenToolTrace])
 
   const stop = useCallback(() => {
     cleanup()
@@ -481,11 +490,15 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
           ? translate('simulateVoice.voiceTestUnavailable')
           : isElevenVoiceSimulation
           ? translate('simulateVoice.realElevenEngine')
+          : isOpenaiVoiceSimulation
+          ? translate('simulateVoice.realOpenaiEngine')
           : translate('simulateVoice.realXaiEngine')}
         description={!isSupportedVoiceSimulation
           ? translate('simulateVoice.openaiEngineNote')
           : isElevenVoiceSimulation
           ? translate('simulateVoice.elevenDescription', { seconds: SILENCE_TIMEOUT_SECONDS })
+          : isOpenaiVoiceSimulation
+          ? translate('simulateVoice.openaiDescription', { seconds: SILENCE_TIMEOUT_SECONDS })
           : translate('simulateVoice.xaiDescription', { seconds: SILENCE_TIMEOUT_SECONDS })}
         style={{ marginBottom: 16 }}
       />
