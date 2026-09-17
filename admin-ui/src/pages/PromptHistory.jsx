@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { Card, Button, Space, message, Typography, Table, Tag, Modal, Spin, Popconfirm, Tabs } from 'antd'
 import { ArrowLeftOutlined, RollbackOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
@@ -29,6 +29,7 @@ function PromptHistory() {
   const { t, i18n } = useTranslation()
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const [project, setProject] = useState(null)
   const [loading, setLoading] = useState(true)
   const [versions, setVersions] = useState([])
@@ -71,12 +72,17 @@ function PromptHistory() {
 
   const columns = [
     {
+      // maintainer, 17/09: "la colonna versione è troppo stretta" - 100px
+      // costringeva "vN" + il tag Pubblicata/Archiviata a spremersi sulla
+      // stessa riga, andando a capo carattere per carattere su schermi
+      // stretti (stesso bug di spazio insufficiente visto altrove in
+      // sessione). Spazio verticale invece che orizzontale + piu' largo.
       title: t('promptHistory.version'),
       dataIndex: 'version_number',
       key: 'version_number',
-      width: 100,
+      width: 140,
       render: (v, record) => (
-        <Space>
+        <Space direction="vertical" size={2}>
           <Text strong>v{v}</Text>
           {record.status === 'published' && <Tag color="green">{t('promptHistory.published')}</Tag>}
           {record.status === 'archived' && <Tag>{t('promptHistory.archived')}</Tag>}
@@ -84,9 +90,14 @@ function PromptHistory() {
       ),
     },
     {
+      // maintainer, 17/09: "fai Prompt preview più stretto così si vedono
+      // tutte le colonne" - senza un width la colonna si prendeva tutto
+      // lo spazio disponibile, spingendo le altre fuori vista. E' solo
+      // un'anteprima (il testo completo si vede con "Visualizza").
       title: t('promptHistory.promptPreview'),
       dataIndex: 'prompt_a',
       key: 'prompt_a',
+      width: 200,
       ellipsis: true,
       render: (content) => (
         <Text type="secondary" style={{ fontFamily: 'monospace', fontSize: 11 }}>
@@ -145,8 +156,19 @@ function PromptHistory() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 8 }}>
         <Space wrap>
-          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(`/projects/${id}/edit`)}>
-            {t('promptHistory.backToEditor')}
+          {/* maintainer, 17/09: "il back to editor non va bene perché potrei
+              provenire anche dalla lista progetti" - tornava sempre
+              all'Editor a prescindere da dove si veniva. navigate(-1)
+              torna alla pagina precedente vera (Editor o Progetti);
+              location.key === 'default' vuol dire che questa e' la prima
+              voce nello storico del browser (link diretto/refresh),
+              nessun "indietro" a cui tornare - in quel caso l'unica
+              destinazione sensata resta la lista progetti. */}
+          <Button
+            icon={<ArrowLeftOutlined />}
+            onClick={() => (location.key === 'default' ? navigate('/projects') : navigate(-1))}
+          >
+            {t('callDetail.back')}
           </Button>
           <Title level={3} style={{ margin: 0, flexShrink: 0 }}>{t('promptHistory.versionHistory')}: {project?.name}</Title>
         </Space>
