@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Table, Button, Space, Input, Select, DatePicker, Typography, Tag, Card, Row, Col, Statistic, Modal, Form, message, Progress, Tabs
+  Table, Button, Space, Input, Select, DatePicker, Typography, Tag, Card, Row, Col, Statistic, Modal, Form, message, Progress, Tabs, Popconfirm
 } from 'antd'
 import {
   SearchOutlined, PhoneOutlined, FileTextOutlined, FilePdfOutlined, EyeOutlined,
   CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, PhoneFilled, UserOutlined,
-  PieChartOutlined, DollarCircleOutlined
+  PieChartOutlined, DollarCircleOutlined, DeleteOutlined
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import * as callsApi from '../api/calls'
 import * as projectsApi from '../api/projects'
+import { useAuth } from '../hooks/useAuth'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -18,6 +19,7 @@ const { RangePicker } = DatePicker
 function Calls() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
+  const { isAdmin } = useAuth()
   const [calls, setCalls] = useState([])
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
@@ -170,6 +172,18 @@ function Calls() {
       window.URL.revokeObjectURL(url)
     } catch (error) {
       message.error(t('calls.jsonDownloadError'))
+    }
+  }
+
+  const handleDeleteSimulation = async (callId) => {
+    try {
+      await callsApi.deleteSimulationCall(callId)
+      setCalls((current) => current.filter((call) => call.id !== callId))
+      setTotal((current) => Math.max(0, current - 1))
+      await loadStats()
+      message.success('Simulazione eliminata')
+    } catch (error) {
+      message.error(error.response?.data?.detail || 'Impossibile eliminare la simulazione')
     }
   }
 
@@ -343,6 +357,18 @@ function Calls() {
           >
             {t('calls.details')}
           </Button>
+          {isAdmin && record.origin === 'voice_simulation' && (
+            <Popconfirm
+              title="Eliminare questa simulazione?"
+              description="La traccia e la trascrizione verranno cancellate definitivamente."
+              okText="Elimina"
+              cancelText="Annulla"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => handleDeleteSimulation(record.id)}
+            >
+              <Button danger icon={<DeleteOutlined />} size="small" aria-label="Elimina simulazione" />
+            </Popconfirm>
+          )}
         </Space>
       ),
     },

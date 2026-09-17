@@ -30,6 +30,7 @@ from app.models.schemas import (
     Transcript,
 )
 from app.services.pdf_generator import PDFGenerator, PDFGeneratorError
+from app.services.gdpr_controller import GDPRController
 
 logger = logging.getLogger(__name__)
 
@@ -400,6 +401,33 @@ async def get_calls_stats(
 
     result["can_view_costs"] = can_view_costs
     return result
+
+
+@router.delete("/{call_id}")
+async def delete_simulation_call(
+    call_id: UUID,
+    current_user: CurrentUser = Depends(require_roles(["admin", "super_admin"])),
+    tenant_ctx: TenantContext = Depends(get_tenant_context),
+):
+    """Delete a browser voice-simulation call; production calls are immutable here."""
+    db = get_database()
+    query = "SELECT id, origin FROM calls WHERE id = :call_id"
+    params = {"call_id": str(call_id)}
+    if not current_user.is_super_admin:
+        query += " AND tenant_id = :tenant_id"
+        params["tenant_id"] = str(current_user.tenant_id)
+
+    call = await db.fetch_one(query, params)
+    if not call:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Call not found")
+    if call["origin"] != "voice_simulation":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only voice simulation calls can be deleted here",
+        )
+
+    await GDPRController().hard_delete(call_id)
+    return {"success": True, "id": str(call_id)}
 
 
 @router.get("/{call_id}")

@@ -15,6 +15,11 @@ export const getCall = async (id) => {
   return response.data
 }
 
+export const deleteSimulationCall = async (id) => {
+  const response = await client.delete(`/api/v2/calls/${id}`)
+  return response.data
+}
+
 export const getCallTranscript = async (id, format = 'json') => {
   const response = await client.get(`/api/v2/calls/${id}/transcript`, { params: { format } })
   return response.data
