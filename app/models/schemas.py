@@ -249,7 +249,7 @@ class ProjectCreate(ProjectBase):
     )
     consent_message: Optional[str] = None
     voice_name: str = "alloy"
-    language: str = "it"
+    language: str = "en"
     output_config: Dict[str, Any] = Field(
         default_factory=lambda: {
             "pdf": {"enabled": True, "template": "default"},
@@ -260,7 +260,7 @@ class ProjectCreate(ProjectBase):
     sip_number: Optional[str] = None
     openai_project_id: Optional[str] = None
     # M5: Voice engine configuration
-    voice_engine: VoiceEngineType = VoiceEngineType.OPENAI_REALTIME
+    voice_engine: VoiceEngineType = VoiceEngineType.XAI_SIP_DIRECT
     call_direction: CallDirection = CallDirection.INBOUND
     vapi_assistant_id: Optional[str] = None
     twilio_phone_number: Optional[str] = None
@@ -304,7 +304,7 @@ class Project(ProjectBase):
     sip_number: Optional[str] = None
     openai_project_id: Optional[str] = None
     # M5: Voice engine configuration
-    voice_engine: str = "openai_realtime"
+    voice_engine: str = "xai_sip_direct"
     call_direction: str = "inbound"
     vapi_assistant_id: Optional[str] = None
     twilio_phone_number: Optional[str] = None
@@ -347,7 +347,7 @@ class TemplateCreate(BaseModel):
     prompt_b: str = Field(..., min_length=100, description="Extraction prompt template")
     consent_message: Optional[str] = None
     voice_name: str = "alloy"
-    language: str = "it"
+    language: str = "en"
     custom_variables_schema: List[TemplateCustomVariableField] = Field(default_factory=list)
     custom_variables: Dict[str, Any] = Field(default_factory=dict)
 

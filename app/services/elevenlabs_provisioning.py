@@ -248,7 +248,7 @@ def _build_conversation_config(
         or project.get("consent_message")
         or "Buongiorno, come posso aiutarla?"
     ).strip()
-    language = str(published.get("language") or project.get("language") or "it").strip().lower()
+    language = str(published.get("language") or project.get("language") or "en").strip().lower()
 
     language_presets = {
         language_code: {

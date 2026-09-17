@@ -14,7 +14,7 @@ def build_xai_accept_payload(*, model: str, voice: str, input_format: str, outpu
         "audio": {
             "input": {
                 "format": {"type": input_format},
-                "transcription": {"model": "whisper-1", "language": language or "it"},
+                "transcription": {"model": "whisper-1", "language": language or "en"},
                 "turn_detection": {
                     "type": "server_vad",
                     "create_response": True,
@@ -61,7 +61,7 @@ def build_xai_session_update(
             "input": {
                 "transcription": {
                     "model": "grok-transcribe",
-                    "language_hint": language or "it",
+                    "language_hint": language or "en",
                 },
             },
         },

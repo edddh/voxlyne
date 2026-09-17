@@ -75,7 +75,7 @@ async def create_outbound_call(
         raise HTTPException(status_code=400, detail="Project is not active")
 
     # 3. Verify project supports outbound
-    voice_engine = project["voice_engine"] or "openai_realtime"
+    voice_engine = project["voice_engine"] or "xai_sip_direct"
     call_direction = project["call_direction"] or "inbound"
 
     if call_direction == "inbound":

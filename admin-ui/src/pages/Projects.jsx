@@ -90,8 +90,8 @@ function Projects() {
         slug: project.slug,
         description: project.description,
         is_active: project.is_active,
-        language: project.language || 'it',
-        voice_engine: project.voice_engine || 'openai_realtime',
+        language: project.language || 'en',
+        voice_engine: project.voice_engine || 'xai_sip_direct',
         call_direction: project.call_direction || 'inbound',
         vapi_assistant_id: project.vapi_assistant_id,
         twilio_phone_number: project.twilio_phone_number,
@@ -103,8 +103,8 @@ function Projects() {
     } else {
       form.setFieldsValue({
         is_active: true,
-        language: 'it',
-        voice_engine: 'openai_realtime',
+        language: 'en',
+        voice_engine: 'xai_sip_direct',
         call_direction: 'inbound',
       })
       setCredentials([])
@@ -556,7 +556,7 @@ function Projects() {
       align: 'center',
       render: (lang) => {
         const flags = { it: '🇮🇹', en: '🇬🇧', es: '🇪🇸', fr: '🇫🇷', de: '🇩🇪' }
-        return <span>{flags[lang] || '🌐'} {(lang || 'it').toUpperCase()}</span>
+        return <span>{flags[lang] || '🌐'} {(lang || 'en').toUpperCase()}</span>
       },
     },
     {
@@ -564,7 +564,7 @@ function Projects() {
       key: 'voice_engine',
       align: 'center',
       render: (_, record) => {
-        const engine = record.voice_engine || 'openai_realtime'
+        const engine = record.voice_engine || 'xai_sip_direct'
         const direction = record.call_direction || 'inbound'
         const ENGINE_LABELS = {
           openai_realtime: 'OpenAI RT',
@@ -808,8 +808,8 @@ function Projects() {
               <Form.Item name="language" label={t('projects.callLanguage')}>
                 <Select
                   options={[
-                    { value: 'it', label: '🇮🇹 Italiano' },
                     { value: 'en', label: '🇬🇧 English' },
+                    { value: 'it', label: '🇮🇹 Italiano' },
                     { value: 'es', label: '🇪🇸 Español' },
                     { value: 'fr', label: '🇫🇷 Français' },
                     { value: 'de', label: '🇩🇪 Deutsch' },

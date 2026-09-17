@@ -165,7 +165,7 @@ async def _accept_realtime_call(call_id: str, settings, resolved: Dict[str, Any]
         goodbye_phrase=goodbye_phrase,
     )
     voice = (resolved or {}).get("voice_name") or settings.openai_realtime_voice
-    language = (resolved or {}).get("language") or "it"
+    language = (resolved or {}).get("language") or "en"
 
     url = f"https://api.openai.com/v1/realtime/calls/{call_id}/accept"
     headers = {

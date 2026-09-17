@@ -270,8 +270,14 @@ async def simulate_voice(websocket: WebSocket, project_id: UUID, token: str = Qu
                         "create_response": True,
                         "interrupt_response": True,
                     },
-                    "audio": {
-                        "input": {"format": {"type": "audio/pcm", "rate": 24000}},
+            "audio": {
+                        "input": {
+                            "format": {"type": "audio/pcm", "rate": 24000},
+                            "transcription": {
+                                "model": "grok-transcribe",
+                                "language_hint": project["language"] or "en",
+                            },
+                        },
                         "output": {"format": {"type": "audio/pcm", "rate": 24000}},
                     },
                 },

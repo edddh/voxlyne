@@ -84,7 +84,7 @@ async def provision_project_runtime(project: Dict[str, Any]) -> Dict[str, Any]:
         dict with config_path, env_path, start_script_path, systemd_unit
         (text, not installed - the caller has no root), install_commands.
     """
-    engine_type = project.get("voice_engine") or "openai_realtime"
+    engine_type = project.get("voice_engine") or "xai_sip_direct"
     if engine_type not in ENGINE_SCRIPTS:
         raise RuntimeProvisioningError(
             f"Voice engine '{engine_type}' non ha ancora un runtime standalone "
@@ -188,7 +188,7 @@ async def provision_project_runtime(project: Dict[str, Any]) -> Dict[str, Any]:
         if calendar_cfg.get("username"):
             calcom_cfg["username"] = str(calendar_cfg["username"])
 
-    language = project.get("language") or "it"
+    language = project.get("language") or "en"
     first_message = project.get("consent_message") or _default_first_message(language)
     primary_prompt = project["prompt_a"]
 

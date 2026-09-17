@@ -11,7 +11,7 @@ class VoiceCallState:
     caller_number: str = ""
     instructions: str = ""
     first_message: str = ""
-    response_language: str = "it"
+    response_language: str = "en"
     provider: str = "openai"
     model: str = ""
     voice: str = ""
