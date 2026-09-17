@@ -109,10 +109,10 @@ async def _store_elevenlabs_call(payload: dict[str, Any], project_id: UUID | Non
             raise HTTPException(status_code=404, detail="No Ascolta project matches this ElevenLabs agent")
 
         existing = await db.fetch_one(
-            "SELECT id FROM calls WHERE openai_session_id = :conversation_id",
+            "SELECT id, origin FROM calls WHERE openai_session_id = :conversation_id",
             {"conversation_id": conversation_id},
         )
-        if existing:
+        if existing and (existing["origin"] or "production") != "voice_simulation":
             return {"status": "already_recorded", "call_id": str(existing["id"]), "conversation_id": conversation_id}
 
         metadata = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
@@ -122,32 +122,46 @@ async def _store_elevenlabs_call(payload: dict[str, Any], project_id: UUID | Non
             duration_seconds = 0
         started_at = _elevenlabs_started_at(metadata, payload.get("event_timestamp"), duration_seconds)
         ended_at = started_at + timedelta(seconds=duration_seconds)
-        call_id = uuid4()
-        await db.execute(
-            """
-            INSERT INTO calls (
-                id, phone_number, status, consent_given, openai_session_id,
-                started_at, ended_at, duration_seconds, project_id, tenant_id,
-                agent_version_id, voice_engine, direction, session_model
-            ) VALUES (
-                :id, :phone_number, 'completed', true, :conversation_id,
-                :started_at, :ended_at, :duration_seconds, :project_id, :tenant_id,
-                :agent_version_id, 'elevenlabs_agent', 'inbound', :session_model
+        call_id = existing["id"] if existing else uuid4()
+        call_values = {
+            "id": str(call_id),
+            "phone_number": _elevenlabs_phone_number(metadata),
+            "conversation_id": conversation_id,
+            "started_at": started_at,
+            "ended_at": ended_at,
+            "duration_seconds": duration_seconds,
+            "project_id": str(project["id"]),
+            "tenant_id": str(project["tenant_id"]),
+            "agent_version_id": str(project["agent_version_id"]) if project["agent_version_id"] else None,
+            "session_model": str(metadata.get("model") or "eleven_v3_conversational"),
+        }
+        if existing:
+            await db.execute(
+                """
+                UPDATE calls
+                SET phone_number = :phone_number, status = 'completed', consent_given = true,
+                    started_at = :started_at, ended_at = :ended_at,
+                    project_id = :project_id, tenant_id = :tenant_id,
+                    agent_version_id = :agent_version_id, session_model = :session_model
+                WHERE id = :id
+                """,
+                call_values,
             )
-            """,
-            {
-                "id": str(call_id),
-                "phone_number": _elevenlabs_phone_number(metadata),
-                "conversation_id": conversation_id,
-                "started_at": started_at,
-                "ended_at": ended_at,
-                "duration_seconds": duration_seconds,
-                "project_id": str(project["id"]),
-                "tenant_id": str(project["tenant_id"]),
-                "agent_version_id": str(project["agent_version_id"]) if project["agent_version_id"] else None,
-                "session_model": str(metadata.get("model") or "eleven_v3_conversational"),
-            },
-        )
+        else:
+            await db.execute(
+                """
+                INSERT INTO calls (
+                    id, phone_number, status, consent_given, openai_session_id,
+                    started_at, ended_at, duration_seconds, project_id, tenant_id,
+                    agent_version_id, voice_engine, direction, session_model, origin
+                ) VALUES (
+                    :id, :phone_number, 'completed', true, :conversation_id,
+                    :started_at, :ended_at, :duration_seconds, :project_id, :tenant_id,
+                    :agent_version_id, 'elevenlabs_agent', 'inbound', :session_model, 'production'
+                )
+                """,
+                call_values,
+            )
         transcript = data.get("transcript") if isinstance(data.get("transcript"), list) else []
         for turn in transcript:
             if not isinstance(turn, dict):
@@ -300,11 +314,35 @@ async def get_signed_url(
     signed_url = body.get("signed_url")
     if not signed_url:
         raise HTTPException(status_code=502, detail="ElevenLabs returned no signed URL")
+    conversation_id = body.get("conversation_id")
+    if conversation_id:
+        await db.execute(
+            """
+            INSERT INTO calls (
+                id, phone_number, status, consent_given, openai_session_id,
+                started_at, project_id, tenant_id, voice_engine, direction,
+                session_model, origin, channel
+            )
+            SELECT :id, 'browser-simulation', 'in_progress', true, :conversation_id,
+                   :started_at, :project_id, :tenant_id, 'elevenlabs_agent',
+                   'inbound', 'eleven_v3_conversational', 'voice_simulation', 'browser'
+            WHERE NOT EXISTS (
+                SELECT 1 FROM calls WHERE openai_session_id = :conversation_id
+            )
+            """,
+            {
+                "id": str(uuid4()),
+                "conversation_id": str(conversation_id),
+                "started_at": datetime.now(timezone.utc),
+                "project_id": str(project_id),
+                "tenant_id": str(ctx["tenant_id"]),
+            },
+        )
     return {
         "status": "ok",
         "signed_url": signed_url,
         "agent_id": agent_id,
-        "conversation_id": body.get("conversation_id"),
+        "conversation_id": conversation_id,
     }
 
 
