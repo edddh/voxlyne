@@ -633,12 +633,23 @@ function Projects() {
       render: (count) => count || 0,
     },
     {
+      // maintainer, 17/09: "nella lista dei progetti mi mette sempre v1" -
+      // prompt_a_version/prompt_b_version non sono mai esistiti lato
+      // backend (sempre undefined -> fallback fisso a 1). Il modello
+      // reale versiona l'intero agente con un solo numero (agent_versions,
+      // vedi backend) - stesso record.published_version per entrambe le
+      // colonne, "Bozza" quando il progetto non e' mai stato pubblicato
+      // (invece di mentire con un "v1" che non corrisponde a niente).
       title: 'Prompt A',
       key: 'prompt_a',
       align: 'center',
       render: (_, record) => (
         <Tag color={record.prompt_a ? 'blue' : 'default'}>
-          {record.prompt_a ? `v${record.prompt_a_version || 1}` : t('projects.notConfigured')}
+          {!record.prompt_a
+            ? t('projects.notConfigured')
+            : record.published_version
+            ? `v${record.published_version}`
+            : t('projects.draftNotPublished')}
         </Tag>
       ),
     },
@@ -648,7 +659,11 @@ function Projects() {
       align: 'center',
       render: (_, record) => (
         <Tag color={record.prompt_b ? 'purple' : 'default'}>
-          {record.prompt_b ? `v${record.prompt_b_version || 1}` : t('projects.notConfigured')}
+          {!record.prompt_b
+            ? t('projects.notConfigured')
+            : record.published_version
+            ? `v${record.published_version}`
+            : t('projects.draftNotPublished')}
         </Tag>
       ),
     },

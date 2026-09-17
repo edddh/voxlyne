@@ -666,6 +666,7 @@
     "inOut": "In+Out",
     "inbound": "Inbound",
     "notConfigured": "Not configured",
+    "draftNotPublished": "Draft",
     "editPrompt": "Edit Prompt",
     "promptHistory": "Prompt History",
     "settings": "Settings",

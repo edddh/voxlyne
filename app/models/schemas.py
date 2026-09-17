@@ -229,21 +229,28 @@ class ProjectBase(BaseModel):
 
 class ProjectCreate(ProjectBase):
     """Schema for creating a new project."""
+    # maintainer, 17/09: "quando crei nuovo progetto non mettere [i default
+    # da colloquio di lavoro]... nel prompt principale metti [assistente
+    # di reception generico]" - i default precedenti erano specifici per
+    # il caso d'uso recruiting/colloqui (primo caso reale del progetto),
+    # ma un nuovo progetto puo' essere qualsiasi cosa - questi sono
+    # generici, con {{company_name}}/{{opening_hours}} come {{key}}
+    # placeholder (stesso sistema di variabili custom dei template, vedi
+    # app/services/prompt_variables.py) invece di un nome/orario finti.
     prompt_a: str = Field(
         default=(
-            "Sei un assistente AI che conduce una breve intervista professionale. "
-            "Inizia chiedendo il consenso al trattamento dati, poi fai domande chiare "
-            "sull'esperienza, competenze, motivazioni e disponibilita. Mantieni un tono "
-            "cordiale, non interrompere l'utente e chiudi con un riepilogo sintetico."
+            "You are the reception assistant for {{company_name}}.\n"
+            "Be helpful and friendly.\n"
+            "Opening hours are {{opening_hours}}.\n"
+            "Collect the caller's name, phone number and provide what they need."
         ),
         min_length=100,
     )
     prompt_b: str = Field(
         default=(
-            "Analizza la trascrizione e restituisci solo JSON valido con: nome candidato, "
-            "telefono, email, riepilogo esperienza, competenze tecniche, soft skills, "
-            "disponibilita, motivazioni, criticita e punteggio complessivo 1-10. "
-            "Non inventare dati e usa null o [] quando le informazioni non sono presenti."
+            "Analizza la trascrizione e restituisci solo JSON valido con le informazioni "
+            "chiave che si desumono dalla conversazione. Non inventare dati e usa null o "
+            "[] quando le informazioni non sono presenti."
         ),
         min_length=100,
     )
@@ -322,6 +329,14 @@ class Project(ProjectBase):
     custom_variables: Dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
+    # maintainer, 17/09: "nella lista dei progetti mi mette sempre v1" - il
+    # backend non mandava mai questo campo (il frontend leggeva
+    # prompt_a_version/prompt_b_version, che non sono mai esistiti da
+    # nessuna parte, quindi ricadeva sempre sul default `|| 1`). Il
+    # modello reale (agent_versions, vedi app/services/agent_versions.py)
+    # versiona l'intero agente con UN solo numero, non prompt_a/prompt_b
+    # separatamente - nessuna versione pubblicata ancora = None.
+    published_version: Optional[int] = None
 
     class Config:
         from_attributes = True

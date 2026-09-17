@@ -137,6 +137,32 @@ async def _handle_function_call(
     await xai_ws.send(json.dumps({"type": "response.create"}))
 
 
+async def _run_simulation_extraction(call_id: UUID) -> None:
+    """
+    Estrazione JSON (Prompt B) anche per le chiamate di simulazione -
+    maintainer, 17/09: "a questo punto si può mettere anche per le
+    simulazioni?", dopo aver notato che l'estrazione non compariva mai
+    perche' finora girava solo per le chiamate reali (CallManager.
+    _handle_interview_complete, mai richiamato da questo modulo). Stesso
+    PostProcessor delle chiamate vere, nessuna duplicazione di logica -
+    la riga gia' inserita in `calls` con status='completed' soddisfa gia'
+    il suo controllo di stato. Il websocket col browser e' gia' chiuso a
+    questo punto (siamo nel blocco finally) - il risultato non torna qui,
+    arriva alla UI attraverso la stessa pagina Chiamate/Dettaglio usata
+    per le chiamate reali, una volta salvato in `records`.
+    Best-effort: un fallimento (es. nessuna credenziale llm/openai per il
+    tenant) non deve far sparire la chiamata gia' salvata ne' sollevare
+    un'eccezione nel blocco finally del chiamante.
+    """
+    try:
+        from app.services.post_processor import PostProcessor
+
+        await PostProcessor().process_call(call_id)
+        logger.info("simulation extraction completed for call=%s", call_id)
+    except Exception:
+        logger.exception("simulation extraction failed for call=%s", call_id)
+
+
 async def _authenticate(token: str) -> Optional[CurrentUser]:
     payload = AuthService().decode_token(token)
     if not payload or payload.get("type") != "access":
@@ -413,6 +439,8 @@ async def simulate_voice(websocket: WebSocket, project_id: UUID, token: str = Qu
             logger.info("simulate_voice stored call=%s transcript_items=%s", simulation_call_id, len(simulation_transcript))
         except Exception:
             logger.exception("simulate_voice could not persist call=%s", simulation_call_id)
+        if simulation_transcript:
+            await _run_simulation_extraction(simulation_call_id)
         try:
             await websocket.close()
         except Exception:
@@ -704,6 +732,8 @@ async def simulate_openai_voice(websocket: WebSocket, project_id: UUID, token: s
             logger.info("simulate_openai_voice stored call=%s transcript_items=%s", simulation_call_id, len(simulation_transcript))
         except Exception:
             logger.exception("simulate_openai_voice could not persist call=%s", simulation_call_id)
+        if simulation_transcript:
+            await _run_simulation_extraction(simulation_call_id)
         try:
             await websocket.close()
         except Exception:

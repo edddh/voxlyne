@@ -135,20 +135,30 @@ async def list_projects(
     # Projects table - one of them got clicked in "Genera servizio runtime",
     # which then crashed (ValueError: badly formed hexadecimal UUID string)
     # trying to parse its NULL tenant_id, see runtime_provisioning.py.
-    conditions = ["is_template = FALSE"]
+    conditions = ["p.is_template = FALSE"]
     params: dict = {}
 
     if active_only is True:
-        conditions.append("is_active = TRUE")
+        conditions.append("p.is_active = TRUE")
     elif active_only is False:
-        conditions.append("is_active = FALSE")
+        conditions.append("p.is_active = FALSE")
 
     if not current_user.is_super_admin:
-        conditions.append("tenant_id = :tenant_id")
+        conditions.append("p.tenant_id = :tenant_id")
         params["tenant_id"] = str(current_user.tenant_id)
 
     where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
-    query = f"SELECT * FROM projects {where_clause} ORDER BY created_at DESC"
+    # LEFT JOIN sulla versione pubblicata (al massimo una per progetto,
+    # publish_version() archivia sempre la precedente prima di inserire
+    # la nuova - vedi app/services/agent_versions.py) - un progetto senza
+    # nessuna pubblicazione ancora ha semplicemente av.version_number NULL.
+    query = f"""
+        SELECT p.*, av.version_number AS published_version
+        FROM projects p
+        LEFT JOIN agent_versions av ON av.project_id = p.id AND av.status = 'published'
+        {where_clause}
+        ORDER BY p.created_at DESC
+    """
 
     projects = await db.fetch_all(query, params)
 
