@@ -15,6 +15,10 @@ const { TextArea } = Input
 
 const NEW_VOICE_ENGINES = ['livekit_xai', 'livekit_openai', 'xai_sip_direct', 'openai_sip_direct', 'elevenlabs_agent']
 
+// Keep legacy projects editable without exposing the old generic value as a
+// separate OpenAI choice in the UI.
+const normalizeVoiceEngineForUi = (engine) => engine === 'openai_realtime' ? 'openai_sip_direct' : (engine || 'xai_sip_direct')
+
 function Projects() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
@@ -91,7 +95,7 @@ function Projects() {
         description: project.description,
         is_active: project.is_active,
         language: project.language || 'en',
-        voice_engine: project.voice_engine || 'xai_sip_direct',
+        voice_engine: normalizeVoiceEngineForUi(project.voice_engine),
         call_direction: project.call_direction || 'inbound',
         vapi_assistant_id: project.vapi_assistant_id,
         twilio_phone_number: project.twilio_phone_number,
@@ -564,7 +568,7 @@ function Projects() {
       key: 'voice_engine',
       align: 'center',
       render: (_, record) => {
-        const engine = record.voice_engine || 'xai_sip_direct'
+        const engine = normalizeVoiceEngineForUi(record.voice_engine)
         const direction = record.call_direction || 'inbound'
         const ENGINE_LABELS = {
           openai_realtime: 'OpenAI RT',
@@ -831,7 +835,6 @@ function Projects() {
               <Form.Item name="voice_engine" label="Voice Engine">
                 <Select
                   options={[
-                    { value: 'openai_realtime', label: `OpenAI Realtime (${t('projects.inbound')})` },
                     { value: 'vapi', label: `Vapi + ElevenLabs (${t('projects.outbound')})` },
                     { value: 'livekit_xai', label: `LiveKit + xAI (${t('projects.inbound')})` },
                     { value: 'livekit_openai', label: `LiveKit + OpenAI (${t('projects.inbound')})` },
