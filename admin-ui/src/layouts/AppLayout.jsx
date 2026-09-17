@@ -11,7 +11,6 @@ import {
   SettingOutlined,
   LogoutOutlined,
   ApiOutlined,
-  CalendarOutlined,
   ProfileOutlined,
   RiseOutlined,
   GlobalOutlined,
@@ -117,23 +116,6 @@ function AppLayout() {
       key: '/templates',
       icon: <ProfileOutlined />,
       label: t('nav.templates'),
-    },
-    {
-      key: 'integrations',
-      icon: <ApiOutlined />,
-      label: t('nav.integrations'),
-      children: [
-        {
-          key: '/integrations/crm',
-          icon: <ApiOutlined />,
-          label: t('nav.integrationsCrm'),
-        },
-        {
-          key: '/integrations/calendar',
-          icon: <CalendarOutlined />,
-          label: t('nav.integrationsCalendar'),
-        },
-      ],
     },
   ].filter(Boolean)
 
