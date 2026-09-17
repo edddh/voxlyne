@@ -518,7 +518,10 @@ async def simulate_openai_voice(websocket: WebSocket, project_id: UUID, token: s
                     "tools": [SEARCH_KB_TOOL] if has_knowledge_base else [],
                     "turn_detection": {
                         "type": "server_vad",
-                        "create_response": True,
+                        # Do not let silence/echo trigger an endless chain of
+                        # responses. We create exactly one response after the
+                        # server confirms that a user turn has ended.
+                        "create_response": False,
                         "interrupt_response": True,
                     },
                     "audio": {
@@ -554,10 +557,21 @@ async def simulate_openai_voice(websocket: WebSocket, project_id: UUID, token: s
                     last_activity = time.monotonic()
                     event = json.loads(raw)
                     event_type = event.get("type")
+                    if event_type in {
+                        "conversation.item.input_audio_transcription.completed",
+                        "conversation.item.input_audio_transcription.failed",
+                    }:
+                        logger.info(
+                            "simulate_openai_voice transcription event=%s item=%s",
+                            event_type,
+                            event.get("item_id"),
+                        )
                     if event_type == "conversation.item.input_audio_transcription.completed":
                         transcript = (event.get("transcript") or "").strip()
                         if transcript:
                             simulation_transcript.append({"role": "user", "content": transcript})
+                    elif event_type == "input_audio_buffer.speech_stopped":
+                        await openai_ws.send(json.dumps({"type": "response.create"}))
                     elif event_type in {"response.output_audio_transcript.done", "response.audio_transcript.done"}:
                         transcript = (event.get("transcript") or "").strip()
                         if transcript:
