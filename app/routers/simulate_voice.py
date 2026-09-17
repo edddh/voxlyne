@@ -31,9 +31,10 @@ import asyncio
 import json
 import logging
 import time
+from datetime import datetime, timezone
 from typing import Any, Optional
 from urllib.parse import urlencode
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import websockets
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
@@ -191,6 +192,29 @@ async def simulate_voice(websocket: WebSocket, project_id: UUID, token: str = Qu
         )
         return
 
+    simulation_call_id = uuid4()
+    simulation_started_at = datetime.now(timezone.utc)
+    simulation_transcript: list[dict[str, str]] = []
+    await db.execute(
+        """
+        INSERT INTO calls (
+            id, phone_number, status, consent_given, started_at,
+            project_id, tenant_id, voice_engine, direction, session_model,
+            origin, channel
+        ) VALUES (
+            :id, 'browser-simulation', 'in_progress', true, :started_at,
+            :project_id, :tenant_id, 'xai_sip_direct', 'inbound',
+            'grok-voice-latest', 'voice_simulation', 'browser'
+        )
+        """,
+        {
+            "id": str(simulation_call_id),
+            "started_at": simulation_started_at,
+            "project_id": str(project_id),
+            "tenant_id": str(tenant_id),
+        },
+    )
+
     # Il primo messaggio del browser deve essere {"type": "start",
     # "instructions": "<prompt_a corrente nell'editor>"} - non un evento
     # dell'API realtime, solo il modo per passare il prompt da testare
@@ -291,6 +315,15 @@ async def simulate_voice(websocket: WebSocket, project_id: UUID, token: str = Qu
                 async for raw in xai_ws:
                     last_activity = time.monotonic()
                     event = json.loads(raw)
+                    event_type = event.get("type")
+                    if event_type == "conversation.item.input_audio_transcription.completed":
+                        transcript = (event.get("transcript") or "").strip()
+                        if transcript:
+                            simulation_transcript.append({"role": "user", "content": transcript})
+                    elif event_type == "response.output_audio_transcript.done":
+                        transcript = (event.get("transcript") or "").strip()
+                        if transcript:
+                            simulation_transcript.append({"role": "assistant", "content": transcript})
                     if event.get("type") == "response.function_call_arguments.done":
                         await _handle_function_call(xai_ws, websocket, event, project_id, tenant_id)
                         continue  # meccanica interna, non serve al browser
@@ -334,6 +367,33 @@ async def simulate_voice(websocket: WebSocket, project_id: UUID, token: str = Qu
     except Exception as e:
         logger.exception(f"simulate_voice failed for project {project_id}: {e}")
     finally:
+        simulation_ended_at = datetime.now(timezone.utc)
+        try:
+            await db.execute(
+                """
+                UPDATE calls
+                SET ended_at = :ended_at,
+                    status = 'completed'
+                WHERE id = :id
+                """,
+                {"id": str(simulation_call_id), "ended_at": simulation_ended_at},
+            )
+            for item in simulation_transcript:
+                await db.execute(
+                    """
+                    INSERT INTO transcripts (call_id, role, content, timestamp)
+                    VALUES (:call_id, :role, :content, :timestamp)
+                    """,
+                    {
+                        "call_id": str(simulation_call_id),
+                        "role": item["role"],
+                        "content": item["content"],
+                        "timestamp": simulation_ended_at,
+                    },
+                )
+            logger.info("simulate_voice stored call=%s transcript_items=%s", simulation_call_id, len(simulation_transcript))
+        except Exception:
+            logger.exception("simulate_voice could not persist call=%s", simulation_call_id)
         try:
             await websocket.close()
         except Exception:

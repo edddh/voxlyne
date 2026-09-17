@@ -90,6 +90,7 @@ async def list_calls(
     phone_search: Optional[str] = None,
     date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None,
+    origin: Optional[str] = Query("production", pattern="^(production|voice_simulation|all)$"),
     current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator", "power_user"])),
     tenant_ctx: TenantContext = Depends(get_tenant_context),
 ):
@@ -124,6 +125,11 @@ async def list_calls(
         base_query += " AND c.tenant_id = :tenant_id"
         count_query += " AND c.tenant_id = :tenant_id"
         params["tenant_id"] = str(current_user.tenant_id)
+
+    if origin != "all":
+        base_query += " AND c.origin = :origin"
+        count_query += " AND c.origin = :origin"
+        params["origin"] = origin
 
     # Status filter
     if status:
@@ -193,6 +199,8 @@ async def list_calls(
                 "has_pdf": c["pdf_key"] is not None,
                 "candidate_name": _extract_json_field(c["json_data"], "candidate_name"),
                 "created_at": c["created_at"],
+                "origin": c["origin"] or "production",
+                "channel": c["channel"],
             }
             for c in calls
         ],
@@ -211,6 +219,7 @@ async def get_calls_stats(
     phone_search: Optional[str] = None,
     date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None,
+    origin: Optional[str] = Query("production", pattern="^(production|voice_simulation|all)$"),
     current_user: CurrentUser = Depends(require_roles(["admin", "super_admin", "creator", "power_user"])),
     tenant_ctx: TenantContext = Depends(get_tenant_context),
 ):
@@ -246,6 +255,10 @@ async def get_calls_stats(
     if not current_user.is_super_admin:
         where += " AND tenant_id = :tenant_id"
         params["tenant_id"] = str(current_user.tenant_id)
+
+    if origin != "all":
+        where += " AND origin = :origin"
+        params["origin"] = origin
 
     if status:
         where += " AND status = :status"
@@ -328,18 +341,20 @@ async def get_calls_stats(
         result["today_cost_usd"] = float(row["today_cost_usd"]) if row["today_cost_usd"] is not None else 0.0
 
         if current_user.is_super_admin:
+            tenant_origin_clause = "" if origin == "all" else " AND c.origin = :origin"
             by_tenant_rows = await db.fetch_all(
-                """
+                f"""
                 SELECT t.id AS tenant_id, t.name AS tenant_name,
                        COUNT(c.id) AS calls_count,
                        SUM(c.cost_usd) FILTER (WHERE c.cost_usd IS NOT NULL) AS cost_usd,
                        SUM(c.billable_audio_seconds) FILTER (WHERE c.billable_audio_seconds IS NOT NULL) AS billable_audio_seconds
                 FROM tenants t
-                LEFT JOIN calls c ON c.tenant_id = t.id
+                LEFT JOIN calls c ON c.tenant_id = t.id{tenant_origin_clause}
                 GROUP BY t.id, t.name
                 HAVING COUNT(c.id) > 0
                 ORDER BY cost_usd DESC NULLS LAST
                 """,
+                {"origin": origin} if origin != "all" else {},
             )
             result["by_tenant"] = [
                 {
@@ -493,6 +508,8 @@ async def get_call_detail(
             "candidate_email": _extract_json_field(record["json_data"], "email") if record else None,
             "has_pdf": record["pdf_key"] is not None if record else False,
             "can_view_costs": can_view_costs,
+            "origin": call["origin"] or "production",
+            "channel": call["channel"],
         },
         "transcript": [
             {

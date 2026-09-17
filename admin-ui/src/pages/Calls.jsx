@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Table, Button, Space, Input, Select, DatePicker, Typography, Tag, Card, Row, Col, Statistic, Modal, Form, message, Progress
+  Table, Button, Space, Input, Select, DatePicker, Typography, Tag, Card, Row, Col, Statistic, Modal, Form, message, Progress, Tabs
 } from 'antd'
 import {
   SearchOutlined, PhoneOutlined, FileTextOutlined, FilePdfOutlined, EyeOutlined,
@@ -30,6 +30,7 @@ function Calls() {
   const [statusFilter, setStatusFilter] = useState(null)
   const [projectFilter, setProjectFilter] = useState(null)
   const [dateRange, setDateRange] = useState(null)
+  const [callOrigin, setCallOrigin] = useState('production')
 
   // Stats - conteggi reali sul tenant intero (GET /api/v2/calls/stats),
   // non piu' calcolati sulla sola pagina caricata (maintainer, 20/08: "che
@@ -62,7 +63,7 @@ function Calls() {
   useEffect(() => {
     loadCalls()
     loadStats()
-  }, [page, pageSize, phoneSearch, statusFilter, projectFilter, dateRange])
+  }, [page, pageSize, phoneSearch, statusFilter, projectFilter, dateRange, callOrigin])
 
   const loadProjects = async () => {
     try {
@@ -84,6 +85,7 @@ function Calls() {
       if (projectFilter) params.project_id = projectFilter
       if (dateRange && dateRange[0]) params.date_from = dateRange[0].toISOString()
       if (dateRange && dateRange[1]) params.date_to = dateRange[1].toISOString()
+      params.origin = callOrigin
 
       const data = await callsApi.getCallsStats(params)
       setStats(data)
@@ -101,6 +103,7 @@ function Calls() {
       if (projectFilter) params.project_id = projectFilter
       if (dateRange && dateRange[0]) params.date_from = dateRange[0].toISOString()
       if (dateRange && dateRange[1]) params.date_to = dateRange[1].toISOString()
+      params.origin = callOrigin
 
       const data = await callsApi.getCalls(params)
       setCalls(data.calls)
@@ -233,6 +236,14 @@ function Calls() {
       ),
     },
     {
+      title: 'Tipo',
+      key: 'origin',
+      align: 'center',
+      render: (_, record) => record.origin === 'voice_simulation'
+        ? <Tag color="blue">SIMULAZIONE</Tag>
+        : <Tag>PRODUZIONE</Tag>,
+    },
+    {
       title: t('dashboard.project'),
       key: 'project',
       render: (_, record) => (
@@ -351,6 +362,17 @@ function Calls() {
           {t('calls.newOutboundCall')}
         </Button>
       </div>
+
+      <Tabs
+        activeKey={callOrigin}
+        onChange={(value) => { setCallOrigin(value); setPage(1) }}
+        items={[
+          { key: 'production', label: 'Produzione' },
+          { key: 'voice_simulation', label: <span>Simulazioni <Tag color="blue">TEST</Tag></span> },
+          { key: 'all', label: 'Tutte' },
+        ]}
+        style={{ marginBottom: 16 }}
+      />
 
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         <Col xs={12} sm={6}>
