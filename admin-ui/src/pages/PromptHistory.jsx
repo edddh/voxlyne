@@ -91,17 +91,25 @@ function PromptHistory() {
     },
     {
       // maintainer, 17/09: "fai Prompt preview più stretto così si vedono
-      // tutte le colonne" - senza un width la colonna si prendeva tutto
-      // lo spazio disponibile, spingendo le altre fuori vista. E' solo
+      // tutte le colonne" - con scroll={{x:'max-content'}} la Table
+      // ignora width/ellipsis come vincolo reale e si allarga quanto
+      // serve per mostrare tutti i 100 caratteri di anteprima per
+      // intero: la colonna restava larga a prescindere. Il troncamento
+      // vero va forzato via CSS sulla cella stessa (maxWidth fisso +
+      // overflow nascosto), non lasciato alle prop della colonna. E' solo
       // un'anteprima (il testo completo si vede con "Visualizza").
       title: t('promptHistory.promptPreview'),
       dataIndex: 'prompt_a',
       key: 'prompt_a',
-      width: 200,
-      ellipsis: true,
       render: (content) => (
-        <Text type="secondary" style={{ fontFamily: 'monospace', fontSize: 11 }}>
-          {content ? `${content.substring(0, 100)}...` : '—'}
+        <Text
+          type="secondary"
+          style={{
+            fontFamily: 'monospace', fontSize: 11, display: 'block',
+            maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}
+        >
+          {content || '—'}
         </Text>
       ),
     },
