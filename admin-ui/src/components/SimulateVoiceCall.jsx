@@ -21,6 +21,7 @@ function buildWsUrl(path) {
 const XAI_SAMPLE_RATE = 24000
 const OPENAI_SAMPLE_RATE = 24000
 const ELEVEN_SAMPLE_RATE = 16000
+const OPENAI_VOICE_ENGINES = new Set(['openai', 'openai_realtime', 'openai_sip_direct'])
 // Stesso limite imposto lato server (app/routers/simulate_voice.py::
 // SIMULATION_SILENCE_TIMEOUT_SECONDS) - qui solo per mostrare il conto
 // alla rovescia, il taglio effettivo lo fa il backend. maintainer, 19/08:
@@ -92,9 +93,10 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
   const countdownRef = useRef(null)
   const elevenToolTracePollRef = useRef(null)
   const lastActivityRef = useRef(Date.now())
-  const isXaiVoiceSimulation = !voiceEngine || voiceEngine === 'xai_sip_direct'
-  const isOpenaiVoiceSimulation = voiceEngine === 'openai_realtime'
-  const isElevenVoiceSimulation = voiceEngine === 'elevenlabs_agent'
+  const normalizedVoiceEngine = (voiceEngine || '').toLowerCase()
+  const isXaiVoiceSimulation = !normalizedVoiceEngine || normalizedVoiceEngine === 'xai_sip_direct'
+  const isOpenaiVoiceSimulation = OPENAI_VOICE_ENGINES.has(normalizedVoiceEngine)
+  const isElevenVoiceSimulation = normalizedVoiceEngine === 'elevenlabs_agent'
   const isSupportedVoiceSimulation = isXaiVoiceSimulation || isOpenaiVoiceSimulation || isElevenVoiceSimulation
 
   useEffect(() => {
