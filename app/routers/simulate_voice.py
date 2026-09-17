@@ -39,7 +39,6 @@ from uuid import UUID, uuid4
 import websockets
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
-from app.config import get_settings
 from app.database.db import get_database
 from app.middleware.auth_middleware import CurrentUser, check_tenant_access
 from app.services.agent_versions import resolve_provider_api_key
@@ -50,6 +49,10 @@ router = APIRouter()
 
 XAI_REALTIME_URL = "wss://api.x.ai/v1/realtime"
 OPENAI_REALTIME_URL = "wss://api.openai.com/v1/realtime"
+# The browser simulator uses the provider's current realtime model directly.
+# Authentication is always resolved from the project/tenant credential store;
+# this path must not depend on process environment configuration.
+OPENAI_SIMULATION_MODEL = "gpt-realtime"
 OPENAI_REALTIME_VOICES = {
     "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse",
 }
@@ -480,7 +483,7 @@ async def simulate_openai_voice(websocket: WebSocket, project_id: UUID, token: s
             "started_at": simulation_started_at,
             "project_id": str(project_id),
             "tenant_id": str(tenant_id),
-            "session_model": get_settings().openai_realtime_model or "gpt-realtime",
+            "session_model": OPENAI_SIMULATION_MODEL,
         },
     )
 
@@ -498,7 +501,7 @@ async def simulate_openai_voice(websocket: WebSocket, project_id: UUID, token: s
     consent_message = first.get("consent_message") or project["consent_message"] or "Hello, how can I help you?"
     language = (project["language"] or "en").strip().lower()
     voice = project["voice_name"] if project["voice_name"] in OPENAI_REALTIME_VOICES else "alloy"
-    openai_model = get_settings().openai_realtime_model or "gpt-realtime"
+    openai_model = OPENAI_SIMULATION_MODEL
 
     try:
         query = urlencode({"model": openai_model})
