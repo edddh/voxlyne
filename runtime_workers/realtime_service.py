@@ -61,7 +61,7 @@ from openai import AsyncOpenAI
 
 from app.database.db import get_database
 from app.integrations.common.config import active_services, load_config, load_realtime_config, load_scenario_config, resolve_scenario
-from app.integrations.common.tools import build_tools
+from app.integrations.common.tools import build_tools, NO_UNAVAILABLE_ACTIONS_INSTRUCTION
 from app.integrations.voice_core.scenario import resolve_voice_bundle
 from app.integrations.voice_core.state import VoiceCallState, VoiceStateStore
 from app.integrations.voice_core.xai_session import build_xai_session_update
@@ -1332,7 +1332,7 @@ class LegacyController:
                 )
                 return {"status": "declined", "reason": "no_credentials", "call_id": call_id}
 
-            instructions = resolved["prompt_a"]
+            instructions = f"{resolved['prompt_a']}\n\n{NO_UNAVAILABLE_ACTIONS_INSTRUCTION}"
             first_message = resolved.get("consent_message") or "Salve, come posso aiutarla?"
             voice = resolved.get("voice_name") or self.voice
             language = resolved.get("language") or self.response_language or "it"

@@ -45,6 +45,28 @@ def _resolve_tool_flags(scenario_config: dict | None) -> dict[str, bool]:
     }
 
 
+# maintainer, 17/09: "si può mettere una regola sottostante invisibile per
+# cui l'agente non cerca di controllare cose se non ha i tool
+# necessari?" - regola generale, non specifica a un progetto: senza
+# questa, il modello puo' dire frasi come "let me check the availability"
+# anche su un progetto senza alcun tool calendario collegato (osservato
+# in un tracciato reale di simulazione), promettendo un controllo che non
+# sta facendo. Appesa in coda al prompt_a di ogni progetto, sia in
+# simulazione di test (runtime_workers/realtime_service.py) sia nelle
+# simulazioni (app/routers/simulate_voice.py) - un'unica costante cosi'
+# le due strade non divergono nel tempo.
+#
+# Deliberatamente SENZA un'alternativa prescritta (maintainer, subito dopo:
+# "voglio lasciare che l'engine decida il da farsi... vediamo poi come si
+# comporta") - solo il divieto, non la soluzione: cosa fare quando manca
+# lo strumento resta una scelta del modello, da osservare.
+NO_UNAVAILABLE_ACTIONS_INSTRUCTION = (
+    "Regola inderogabile: non dichiarare mai di poter verificare, controllare, prenotare, "
+    "modificare o eseguire un'azione se non hai davvero a disposizione, in questa "
+    "conversazione, lo strumento (tool) necessario per farlo."
+)
+
+
 def build_tools(scenario_config: dict | None = None) -> list[dict[str, Any]]:
     enabled = _resolve_tool_flags(scenario_config)
     tools: list[dict[str, Any]] = [

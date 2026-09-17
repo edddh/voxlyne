@@ -405,10 +405,18 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
           refreshElevenToolTrace()
           return
         }
-        if (msg.type === 'interruption') {
-          // Il server ha riconosciuto che l'utente ha iniziato a parlare.
-          // Ferma anche i chunk gia' accodati nel browser: il microfono
-          // resta sempre attivo e il barge-in segue l'agente reale.
+        if (msg.type === 'interruption' || msg.type === 'input_audio_buffer.speech_started') {
+          // Il server ha riconosciuto che l'utente ha iniziato a parlare -
+          // 'interruption' e' il nome usato da ElevenLabs,
+          // 'input_audio_buffer.speech_started' quello usato da xAI e
+          // OpenAI (entrambi ricalcano gli stessi nomi evento). In
+          // entrambi i casi il server ferma la propria generazione, ma
+          // l'audio dell'agente gia' schedulato nelle casse del browser
+          // (Web Audio API, riprodotto in anticipo) resta suo - va fermato
+          // qui, altrimenti l'agente continua a parlare fino a fine frase
+          // anche mentre l'utente lo interrompe (maintainer, 17/09: "non
+          // funziona l'interruzione quando parlo io"). Il microfono resta
+          // sempre attivo, il barge-in segue l'agente reale.
           stopAgentPlayback()
           return
         }

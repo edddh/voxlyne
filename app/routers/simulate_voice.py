@@ -40,6 +40,7 @@ import websockets
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from app.database.db import get_database
+from app.integrations.common.tools import NO_UNAVAILABLE_ACTIONS_INSTRUCTION
 from app.middleware.auth_middleware import CurrentUser, check_tenant_access
 from app.services.agent_versions import resolve_provider_api_key
 from app.services.auth_service import AuthService
@@ -233,7 +234,7 @@ async def simulate_voice(websocket: WebSocket, project_id: UUID, token: str = Qu
     if first.get("type") != "start" or not first.get("instructions"):
         await websocket.close(code=4400, reason="Expected a 'start' message with instructions")
         return
-    instructions = f"{first['instructions']}\n\n{TOOL_RESULT_WAIT_INSTRUCTIONS}"
+    instructions = f"{first['instructions']}\n\n{TOOL_RESULT_WAIT_INSTRUCTIONS}\n\n{NO_UNAVAILABLE_ACTIONS_INSTRUCTION}"
 
     query = urlencode({"model": "grok-voice-latest"})
     xai_ws_url = f"{XAI_REALTIME_URL}?{query}"
@@ -274,6 +275,13 @@ async def simulate_voice(websocket: WebSocket, project_id: UUID, token: str = Qu
                         "type": "server_vad",
                         "create_response": True,
                         "interrupt_response": True,
+                        # Default VAD silence window (~200ms) basta a far
+                        # scattare l'agente durante una semplice esitazione
+                        # a meta' frase, non solo a fine turno reale
+                        # (maintainer, 17/09: "lui a volte mi interrompe dopo
+                        # una piccola esitazione"). Alzato per dare piu'
+                        # margine prima di considerare finito il turno.
+                        "silence_duration_ms": 2000,
                     },
             "audio": {
                         "input": {
@@ -496,28 +504,43 @@ async def simulate_openai_voice(websocket: WebSocket, project_id: UUID, token: s
         await websocket.close(code=4400, reason="Expected a 'start' message with instructions")
         return
 
-    instructions = f"{first['instructions']}\n\n{TOOL_RESULT_WAIT_INSTRUCTIONS}"
+    instructions = f"{first['instructions']}\n\n{TOOL_RESULT_WAIT_INSTRUCTIONS}\n\n{NO_UNAVAILABLE_ACTIONS_INSTRUCTION}"
     consent_message = first.get("consent_message") or project["consent_message"] or "Hello, how can I help you?"
-    language = (project["language"] or "en").strip().lower()
     voice = project["voice_name"] if project["voice_name"] in OPENAI_REALTIME_VOICES else "alloy"
     try:
         query = urlencode({"model": openai_model})
         headers = {"Authorization": f"Bearer {api_key}"}
         async with websockets.connect(f"{OPENAI_REALTIME_URL}?{query}", additional_headers=headers) as openai_ws:
-            await openai_ws.send(json.dumps({
+            session_update_payload = {
                 "type": "session.update",
                 "session": {
                     "type": "realtime",
                     "instructions": instructions,
                     "output_modalities": ["audio"],
-                    "voice": voice,
                     "tool_choice": "auto",
                     "tools": [SEARCH_KB_TOOL] if has_knowledge_base else [],
                     "audio": {
                         "input": {
                             "format": {"type": "audio/pcm", "rate": 24000},
                             "noise_reduction": {"type": "near_field"},
-                            "transcription": {"model": "gpt-4o-transcribe", "language": language},
+                            # maintainer, 17/09: "siamo sicuri che venga
+                            # passata la lingua della conversazione?" - non
+                            # lo era: "language" veniva fissato una volta
+                            # sola dalla lingua NOMINALE del progetto
+                            # (project.language), non da cosa dice davvero
+                            # chi chiama. gpt-4o-transcribe (famiglia
+                            # Whisper) e' molto sensibile a un hint di
+                            # lingua sbagliato - forzarlo su "en" mentre
+                            # l'utente parla italiano peggiora la
+                            # trascrizione invece di aiutarla (verificato
+                            # nel tracciato reale: nome storpiato due volte
+                            # in modo diverso). Omettere "language" attiva
+                            # il rilevamento automatico per turno,
+                            # verificato dal vivo (session.updated conferma
+                            # language: None, non un errore) - gestisce
+                            # anche chi cambia lingua a meta' conversazione,
+                            # cosa che un valore fisso non puo' fare.
+                            "transcription": {"model": "gpt-4o-transcribe"},
                             "turn_detection": {
                                 "type": "server_vad",
                                 # OpenAI GA expects turn detection under
@@ -525,12 +548,32 @@ async def simulate_openai_voice(websocket: WebSocket, project_id: UUID, token: s
                                 # when the server confirms the end of speech.
                                 "create_response": False,
                                 "interrupt_response": True,
+                                # Default silence window (~200ms) e' abbastanza
+                                # corto da scattare durante una semplice
+                                # esitazione a meta' frase, non solo a fine
+                                # turno reale (maintainer, 17/09: "lui a volte
+                                # mi interrompe dopo una piccola esitazione").
+                                "silence_duration_ms": 2000,
                             },
                         },
-                        "output": {"format": {"type": "audio/pcm", "rate": 24000}},
+                        # "voice" is only valid under audio.output, NOT at
+                        # the session root - verified live (17/09): sending
+                        # it as a top-level "voice" key makes OpenAI reject
+                        # the whole session.update with
+                        # invalid_request_error "Unknown parameter:
+                        # 'session.voice'", and since this code never
+                        # checked for "error" events, the session silently
+                        # kept its DEFAULTS instead (transcription: None,
+                        # turn_detection.create_response: True) - exactly
+                        # why the simulation played real audio and the
+                        # assistant kept replying, but the user's own
+                        # speech was never transcribed (maintainer, 17/09:
+                        # "non trascrive le mie frasi").
+                        "output": {"format": {"type": "audio/pcm", "rate": 24000}, "voice": voice},
                     },
                 },
-            }))
+            }
+            await openai_ws.send(json.dumps(session_update_payload))
             await openai_ws.send(json.dumps({
                 "type": "response.create",
                 "response": {
@@ -565,6 +608,12 @@ async def simulate_openai_voice(websocket: WebSocket, project_id: UUID, token: s
                     last_activity = time.monotonic()
                     event = json.loads(raw)
                     event_type = event.get("type")
+                    if event_type == "error":
+                        # 17/09: un session.update rifiutato (parametro nel
+                        # posto sbagliato) falliva prima in silenzio - la
+                        # sessione restava sui default invece di quello che
+                        # avevamo configurato, senza nessun segnale visibile.
+                        logger.error("simulate_openai_voice: OpenAI error event=%s", event.get("error"))
                     if event_type in {"response.created", "response.output_audio.delta"}:
                         response_in_progress = True
                     elif event_type in {"response.done", "response.cancelled", "response.failed"}:
