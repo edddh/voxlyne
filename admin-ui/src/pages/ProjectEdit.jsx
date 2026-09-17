@@ -184,10 +184,22 @@ function ProjectEdit() {
     }
     const start = el.selectionStart
     const end = el.selectionEnd
+    // maintainer, 17/09: "metti anche ctrl-z come tasto undo" - sostituire
+    // il value a mano via setState (come sotto, nel fallback) azzera lo
+    // stack di undo NATIVO del <textarea>: dopo aver inserito una
+    // variabile da un chip, Ctrl+Z non annullava piu' nulla.
+    // execCommand('insertText') e' un edit nativo del browser - genera
+    // l'evento "input" che l'onChange gia' collegato intercetta da solo
+    // (nessun'altra modifica necessaria) e resta nello stack di undo,
+    // quindi Ctrl+Z lo annulla come una battitura qualsiasi.
+    el.focus()
+    el.setSelectionRange(start, end)
+    const inserted = document.execCommand && document.execCommand('insertText', false, text)
+    if (inserted) return
+    // Fallback per browser senza execCommand('insertText') funzionante -
+    // stesso comportamento di prima, ma solo se la via nativa fallisce.
     const next = current.slice(0, start) + text + current.slice(end)
     handlePromptChange(type, next)
-    // Il cursore dopo il testo appena inserito, dopo che React ha
-    // ri-renderizzato con il nuovo value.
     requestAnimationFrame(() => {
       el.focus()
       el.setSelectionRange(start + text.length, start + text.length)
@@ -758,6 +770,15 @@ function ProjectEdit() {
           </Card>
         </Col>
 
+        <Col span={24}>
+          <Card title={t('projectEdit.promptEditor')}>
+            <Tabs items={promptItems} />
+          </Card>
+        </Col>
+
+        {/* maintainer, 17/09: "metti Project variables dopo Prompt Editor" -
+            spostata sotto l'editor (prima era sopra) - stesso contenuto,
+            solo ordine diverso. */}
         {customVariablesSchema.length > 0 && (
           <Col span={24}>
             <Card
@@ -826,12 +847,6 @@ function ProjectEdit() {
             </Card>
           </Col>
         )}
-
-        <Col span={24}>
-          <Card title={t('projectEdit.promptEditor')}>
-            <Tabs items={promptItems} />
-          </Card>
-        </Col>
 
         {versions.length > 0 && (
           <Col span={24}>

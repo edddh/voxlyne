@@ -254,7 +254,15 @@ class ProjectCreate(ProjectBase):
         ),
         min_length=100,
     )
-    consent_message: Optional[str] = None
+    # maintainer, 17/09: "la simulazione testuale... non scrive la frase di
+    # apertura" - senza un consent_message, SimulateChat.jsx non ha nulla
+    # da mostrare come primo messaggio e il modello (puramente reattivo
+    # nella chat testuale, vedi app/routers/simulation.py) aspetta sempre
+    # che parli prima l'utente. Stessa frase gia' usata come fallback in
+    # runtime_workers/realtime_service.py e app/routers/simulate_voice.py
+    # - un progetto nuovo ne ha bisogno fin da subito, non solo come
+    # fallback quando manca.
+    consent_message: Optional[str] = "Hello, how can I help you?"
     voice_name: str = "alloy"
     language: str = "en"
     output_config: Dict[str, Any] = Field(
