@@ -14,6 +14,12 @@ const { Title, Text, Paragraph } = Typography
 const { TextArea } = Input
 
 const NEW_VOICE_ENGINES = ['livekit_xai', 'livekit_openai', 'xai_sip_direct', 'openai_sip_direct', 'elevenlabs_agent']
+const OPENAI_VOICE_ENGINES = ['livekit_openai', 'openai_sip_direct']
+const OPENAI_REALTIME_MODELS = [
+  { value: 'gpt-realtime', label: 'GPT Realtime' },
+  { value: 'gpt-realtime-1.5', label: 'GPT Realtime 1.5' },
+  { value: 'gpt-realtime-2', label: 'GPT Realtime 2' },
+]
 
 // Keep legacy projects editable without exposing the old generic value as a
 // separate OpenAI choice in the UI.
@@ -89,6 +95,9 @@ function Projects() {
     setEditingProject(project)
     form.resetFields()
     if (project) {
+      const providerConfig = typeof project.voice_provider_config === 'string'
+        ? JSON.parse(project.voice_provider_config || '{}')
+        : (project.voice_provider_config || {})
       form.setFieldsValue({
         name: project.name,
         slug: project.slug,
@@ -101,6 +110,7 @@ function Projects() {
         twilio_phone_number: project.twilio_phone_number,
         vapi_phone_number_id: project.vapi_phone_number_id,
         elevenlabs_voice_id: project.elevenlabs_voice_id,
+        openai_realtime_model: providerConfig?.openai?.model || 'gpt-realtime',
       })
       // Load credentials for this project
       await loadCredentials(project.id)
@@ -110,6 +120,7 @@ function Projects() {
         language: 'en',
         voice_engine: 'xai_sip_direct',
         call_direction: 'inbound',
+        openai_realtime_model: 'gpt-realtime',
       })
       setCredentials([])
     }
@@ -411,11 +422,25 @@ function Projects() {
 
   const handleSubmit = async (values) => {
     try {
+      const { openai_realtime_model: openaiModel, ...projectValues } = values
+      if (OPENAI_VOICE_ENGINES.includes(projectValues.voice_engine)) {
+        const currentConfig = editingProject?.voice_provider_config || {}
+        const providerConfig = typeof currentConfig === 'string'
+          ? JSON.parse(currentConfig || '{}')
+          : currentConfig
+        projectValues.voice_provider_config = {
+          ...providerConfig,
+          openai: {
+            ...(providerConfig.openai || {}),
+            model: openaiModel || 'gpt-realtime',
+          },
+        }
+      }
       if (editingProject) {
-        await projectsApi.updateProject(editingProject.id, values)
+        await projectsApi.updateProject(editingProject.id, projectValues)
         message.success(t('projects.updated'))
       } else {
-        await projectsApi.createProject(values)
+        await projectsApi.createProject(projectValues)
         message.success(t('projects.created'))
       }
       setModalOpen(false)
@@ -868,6 +893,17 @@ function Projects() {
               </Form.Item>
             </Col>
           </Row>
+          <Form.Item noStyle shouldUpdate={(prev, curr) => prev.voice_engine !== curr.voice_engine}>
+            {({ getFieldValue }) => OPENAI_VOICE_ENGINES.includes(getFieldValue('voice_engine')) && (
+              <Form.Item
+                name="openai_realtime_model"
+                label={t('projects.openaiRealtimeModel')}
+                rules={[{ required: true, message: t('projects.selectOpenaiRealtimeModel') }]}
+              >
+                <Select options={OPENAI_REALTIME_MODELS} />
+              </Form.Item>
+            )}
+          </Form.Item>
           <Form.Item noStyle shouldUpdate={(prev, curr) => prev.voice_engine !== curr.voice_engine}>
             {({ getFieldValue }) =>
               getFieldValue('voice_engine') === 'vapi' ? (

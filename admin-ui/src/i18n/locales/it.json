@@ -628,6 +628,8 @@
     "agent": "Agente:"
   },
   "projects": {
+    "openaiRealtimeModel": "Modello OpenAI Realtime",
+    "selectOpenaiRealtimeModel": "Seleziona il modello OpenAI Realtime",
     "loadError": "Errore caricamento progetti",
     "loadCredentialsError": "Errore caricamento credenziali",
     "saveProjectFirst": "Salva prima il progetto",

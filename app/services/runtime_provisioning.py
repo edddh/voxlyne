@@ -21,6 +21,7 @@ from typing import Any, Dict
 from uuid import UUID
 
 from app.services.credentials.manager import CredentialsManager
+from app.services.openai_realtime_config import get_openai_realtime_model
 
 logger = logging.getLogger(__name__)
 
@@ -193,6 +194,7 @@ async def provision_project_runtime(project: Dict[str, Any]) -> Dict[str, Any]:
     primary_prompt = project["prompt_a"]
 
     provider = "xai" if engine_type in ("xai_sip_direct", "livekit_xai") else "openai"
+    openai_model = get_openai_realtime_model(project.get("voice_provider_config"))
 
     config: Dict[str, Any] = {
         "services": ["realtime"] if voice_entrypoint == "script" else ["livekit"],
@@ -201,7 +203,7 @@ async def provision_project_runtime(project: Dict[str, Any]) -> Dict[str, Any]:
         "realtime": {
             "scenario": slug,
             "provider": provider,
-            "model": "grok-voice-think-fast-1.0" if provider == "xai" else "gpt-realtime",
+            "model": "grok-voice-think-fast-1.0" if provider == "xai" else openai_model,
             "voice": project.get("voice_name") or ("Eve" if provider == "xai" else "marin"),
             "input_format": "audio/pcma",
             "output_format": "audio/pcma",

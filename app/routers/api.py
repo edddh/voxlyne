@@ -26,6 +26,7 @@ from app.models.schemas import (
     RecordWithCall,
 )
 from app.services.pdf_generator import PDFGenerator, PDFGeneratorError
+from app.services.openai_realtime_config import validate_openai_realtime_model
 from app.services.post_processor import PostProcessor, PostProcessingError
 
 logger = logging.getLogger(__name__)
@@ -70,6 +71,12 @@ def _serialize_project(project_row) -> dict:
             item["custom_variables"] = json.loads(values)
         except json.JSONDecodeError:
             item["custom_variables"] = {}
+    provider_config = item.get("voice_provider_config")
+    if isinstance(provider_config, str):
+        try:
+            item["voice_provider_config"] = json.loads(provider_config)
+        except json.JSONDecodeError:
+            item["voice_provider_config"] = {}
     return item
 
 
@@ -366,6 +373,10 @@ async def create_project(
         )
 
     now = datetime.now(timezone.utc)
+    try:
+        validate_openai_realtime_model(project_data.voice_provider_config)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     output_config_value = project_data.output_config
     output_config_json = json.dumps(output_config_value) if output_config_value is not None else "{}"
 
@@ -380,6 +391,7 @@ async def create_project(
             sip_number, openai_project_id,
             voice_engine, call_direction, vapi_assistant_id,
             twilio_phone_number, vapi_phone_number_id, elevenlabs_voice_id,
+            voice_provider_config,
             tenant_id, created_by, created_at, updated_at
         )
         VALUES (
@@ -389,6 +401,7 @@ async def create_project(
             :sip_number, :openai_project_id,
             :voice_engine, :call_direction, :vapi_assistant_id,
             :twilio_phone_number, :vapi_phone_number_id, :elevenlabs_voice_id,
+            :voice_provider_config,
             :tenant_id, :created_by, :created_at, :updated_at
         )
         RETURNING *
@@ -413,6 +426,7 @@ async def create_project(
             "twilio_phone_number": project_data.twilio_phone_number,
             "vapi_phone_number_id": project_data.vapi_phone_number_id,
             "elevenlabs_voice_id": project_data.elevenlabs_voice_id,
+            "voice_provider_config": json.dumps(project_data.voice_provider_config or {}),
             "tenant_id": str(current_user.tenant_id) if current_user.tenant_id else None,
             "created_by": str(current_user.id),
             "created_at": now,
@@ -498,6 +512,12 @@ async def update_project(
         update_data["custom_variables_schema"] = json.dumps(update_data["custom_variables_schema"])
     if "custom_variables" in update_data and update_data["custom_variables"] is not None:
         update_data["custom_variables"] = json.dumps(update_data["custom_variables"])
+    if "voice_provider_config" in update_data and update_data["voice_provider_config"] is not None:
+        try:
+            validate_openai_realtime_model(update_data["voice_provider_config"])
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        update_data["voice_provider_config"] = json.dumps(update_data["voice_provider_config"])
 
     set_clauses = []
     params = {"project_id": str(project_id), "updated_at": datetime.now(timezone.utc)}

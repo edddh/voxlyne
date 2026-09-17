@@ -211,8 +211,10 @@ async def resolve_inbound(identifier: str) -> Optional[Dict[str, Any]]:
             """
             SELECT e.tenant_id, e.project_id, v.id AS agent_version_id,
                    v.version_number, v.prompt_a, v.prompt_b, v.consent_message,
-                   v.voice_name, v.language, v.voice_engine
+                   v.voice_name, v.language, v.voice_engine,
+                   p.voice_provider_config
             FROM inbound_endpoints e
+            JOIN projects p ON p.id = e.project_id
             LEFT JOIN agent_versions v
                 ON v.project_id = e.project_id AND v.status = 'published'
             WHERE e.identifier = :identifier AND e.is_active = TRUE

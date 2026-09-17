@@ -23,6 +23,7 @@ from app.services.webhook_security import (
     verify_openai_signature,
 )
 from app.services.agent_versions import resolve_inbound
+from app.services.openai_realtime_config import get_openai_realtime_model
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -166,6 +167,7 @@ async def _accept_realtime_call(call_id: str, settings, resolved: Dict[str, Any]
     )
     voice = (resolved or {}).get("voice_name") or settings.openai_realtime_voice
     language = (resolved or {}).get("language") or "en"
+    model = get_openai_realtime_model((resolved or {}).get("voice_provider_config"))
 
     url = f"https://api.openai.com/v1/realtime/calls/{call_id}/accept"
     headers = {
@@ -174,7 +176,7 @@ async def _accept_realtime_call(call_id: str, settings, resolved: Dict[str, Any]
     }
     payload = {
         "type": "realtime",
-        "model": settings.openai_realtime_model,
+        "model": model,
         "instructions": instructions,
         "audio": {
             "input": {

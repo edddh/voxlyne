@@ -43,16 +43,13 @@ from app.database.db import get_database
 from app.middleware.auth_middleware import CurrentUser, check_tenant_access
 from app.services.agent_versions import resolve_provider_api_key
 from app.services.auth_service import AuthService
+from app.services.openai_realtime_config import get_openai_realtime_model
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 XAI_REALTIME_URL = "wss://api.x.ai/v1/realtime"
 OPENAI_REALTIME_URL = "wss://api.openai.com/v1/realtime"
-# The browser simulator uses the provider's current realtime model directly.
-# Authentication is always resolved from the project/tenant credential store;
-# this path must not depend on process environment configuration.
-OPENAI_SIMULATION_MODEL = "gpt-realtime"
 OPENAI_REALTIME_VOICES = {
     "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse",
 }
@@ -435,7 +432,7 @@ async def simulate_openai_voice(websocket: WebSocket, project_id: UUID, token: s
         else:
             await db.execute("SELECT set_config('app.tenant_id', :t, true)", {"t": str(user.tenant_id)})
         project = await db.fetch_one(
-            "SELECT tenant_id, voice_name, language, consent_message FROM projects WHERE id = :id",
+            "SELECT tenant_id, voice_name, language, consent_message, voice_provider_config FROM projects WHERE id = :id",
             {"id": str(project_id)},
         )
         has_knowledge_base = bool(await db.fetch_val(
@@ -454,6 +451,8 @@ async def simulate_openai_voice(websocket: WebSocket, project_id: UUID, token: s
     if not tenant_id or not check_tenant_access(user, tenant_id):
         await websocket.close(code=4403, reason="Access denied")
         return
+
+    openai_model = get_openai_realtime_model(project["voice_provider_config"])
 
     api_key = await resolve_provider_api_key(tenant_id, "openai_realtime", project_id=project_id)
     if not api_key:
@@ -483,7 +482,7 @@ async def simulate_openai_voice(websocket: WebSocket, project_id: UUID, token: s
             "started_at": simulation_started_at,
             "project_id": str(project_id),
             "tenant_id": str(tenant_id),
-            "session_model": OPENAI_SIMULATION_MODEL,
+            "session_model": openai_model,
         },
     )
 
@@ -501,8 +500,6 @@ async def simulate_openai_voice(websocket: WebSocket, project_id: UUID, token: s
     consent_message = first.get("consent_message") or project["consent_message"] or "Hello, how can I help you?"
     language = (project["language"] or "en").strip().lower()
     voice = project["voice_name"] if project["voice_name"] in OPENAI_REALTIME_VOICES else "alloy"
-    openai_model = OPENAI_SIMULATION_MODEL
-
     try:
         query = urlencode({"model": openai_model})
         headers = {"Authorization": f"Bearer {api_key}"}
@@ -516,18 +513,19 @@ async def simulate_openai_voice(websocket: WebSocket, project_id: UUID, token: s
                     "voice": voice,
                     "tool_choice": "auto",
                     "tools": [SEARCH_KB_TOOL] if has_knowledge_base else [],
-                    "turn_detection": {
-                        "type": "server_vad",
-                        # Do not let silence/echo trigger an endless chain of
-                        # responses. We create exactly one response after the
-                        # server confirms that a user turn has ended.
-                        "create_response": False,
-                        "interrupt_response": True,
-                    },
                     "audio": {
                         "input": {
                             "format": {"type": "audio/pcm", "rate": 24000},
+                            "noise_reduction": {"type": "near_field"},
                             "transcription": {"model": "gpt-4o-transcribe", "language": language},
+                            "turn_detection": {
+                                "type": "server_vad",
+                                # OpenAI GA expects turn detection under
+                                # audio.input. We create exactly one response
+                                # when the server confirms the end of speech.
+                                "create_response": False,
+                                "interrupt_response": True,
+                            },
                         },
                         "output": {"format": {"type": "audio/pcm", "rate": 24000}},
                     },
@@ -546,17 +544,32 @@ async def simulate_openai_voice(websocket: WebSocket, project_id: UUID, token: s
             await websocket.send_text(json.dumps({"type": "ascolta.ready"}))
 
             last_activity = time.monotonic()
+            response_in_progress = True
+            pending_user_response = False
 
             async def browser_to_openai() -> None:
                 while True:
                     await openai_ws.send(await websocket.receive_text())
 
             async def openai_to_browser() -> None:
-                nonlocal last_activity
+                nonlocal last_activity, response_in_progress, pending_user_response
+
+                async def create_pending_response() -> None:
+                    nonlocal response_in_progress, pending_user_response
+                    if pending_user_response and not response_in_progress:
+                        pending_user_response = False
+                        response_in_progress = True
+                        await openai_ws.send(json.dumps({"type": "response.create"}))
+
                 async for raw in openai_ws:
                     last_activity = time.monotonic()
                     event = json.loads(raw)
                     event_type = event.get("type")
+                    if event_type in {"response.created", "response.output_audio.delta"}:
+                        response_in_progress = True
+                    elif event_type in {"response.done", "response.cancelled", "response.failed"}:
+                        response_in_progress = False
+                        await create_pending_response()
                     if event_type in {
                         "conversation.item.input_audio_transcription.completed",
                         "conversation.item.input_audio_transcription.failed",
@@ -571,7 +584,8 @@ async def simulate_openai_voice(websocket: WebSocket, project_id: UUID, token: s
                         if transcript:
                             simulation_transcript.append({"role": "user", "content": transcript})
                     elif event_type == "input_audio_buffer.speech_stopped":
-                        await openai_ws.send(json.dumps({"type": "response.create"}))
+                        pending_user_response = True
+                        await create_pending_response()
                     elif event_type in {"response.output_audio_transcript.done", "response.audio_transcript.done"}:
                         transcript = (event.get("transcript") or "").strip()
                         if transcript:

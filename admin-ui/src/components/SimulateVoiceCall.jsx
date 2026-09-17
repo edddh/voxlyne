@@ -107,9 +107,16 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
   // la stessa frase (interim + finale con contenuto identico) - maintainer,
   // 19/08: "riporta due volte le mie frasi". Ignora una nuova riga
   // identica, stesso ruolo, a quella appena aggiunta.
-  const appendTranscript = useCallback((role, content) => {
+  const appendTranscript = useCallback((role, content, itemId = null) => {
     if (!content) return
     setTranscript((prev) => {
+      if (itemId) {
+        const existingIndex = prev.findIndex((item) => item.itemId === itemId)
+        if (existingIndex >= 0) {
+          return prev.map((item, index) => index === existingIndex ? { ...item, content } : item)
+        }
+        return [...prev, { role, content, itemId }]
+      }
       const last = prev[prev.length - 1]
       // xAI can emit consecutive completed ASR items while the same user
       // turn is still being assembled. Keep one visible line and show the
@@ -120,6 +127,17 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
       }
       if (last && last.role === role && last.content === content) return prev
       return [...prev, { role, content }]
+    })
+  }, [])
+
+  const appendTranscriptDelta = useCallback((itemId, delta) => {
+    if (!itemId || !delta) return
+    setTranscript((prev) => {
+      const existingIndex = prev.findIndex((item) => item.itemId === itemId)
+      if (existingIndex < 0) return [...prev, { role: 'user', content: delta, itemId }]
+      return prev.map((item, index) => index === existingIndex
+        ? { ...item, content: `${item.content || ''}${delta}` }
+        : item)
     })
   }, [])
 
@@ -367,7 +385,11 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
           return
         }
         if (msg.type === 'conversation.item.input_audio_transcription.completed') {
-          appendTranscript('user', msg.transcript || '')
+          appendTranscript('user', msg.transcript || '', msg.item_id)
+          return
+        }
+        if (msg.type === 'conversation.item.input_audio_transcription.delta') {
+          appendTranscriptDelta(msg.item_id, msg.delta || '')
           return
         }
         if (msg.type === 'user_transcript') {
@@ -466,7 +488,7 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
       setStatus('error')
       cleanup()
     }
-  }, [projectId, promptA, consentMessage, playChunk, stopAgentPlayback, cleanup, status, appendTranscript, isElevenVoiceSimulation, isOpenaiVoiceSimulation, isSupportedVoiceSimulation, voiceEngine, refreshElevenToolTrace])
+  }, [projectId, promptA, consentMessage, playChunk, stopAgentPlayback, cleanup, status, appendTranscript, appendTranscriptDelta, isElevenVoiceSimulation, isOpenaiVoiceSimulation, isSupportedVoiceSimulation, voiceEngine, refreshElevenToolTrace])
 
   const stop = useCallback(() => {
     cleanup()

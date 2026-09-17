@@ -266,6 +266,7 @@ class ProjectCreate(ProjectBase):
     twilio_phone_number: Optional[str] = None
     vapi_phone_number_id: Optional[str] = None
     elevenlabs_voice_id: Optional[str] = None
+    voice_provider_config: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ProjectUpdate(BaseModel):
@@ -288,6 +289,7 @@ class ProjectUpdate(BaseModel):
     twilio_phone_number: Optional[str] = None
     vapi_phone_number_id: Optional[str] = None
     elevenlabs_voice_id: Optional[str] = None
+    voice_provider_config: Optional[Dict[str, Any]] = None
     custom_variables_schema: Optional[List[Dict[str, Any]]] = None
     custom_variables: Optional[Dict[str, Any]] = None
 
@@ -310,6 +312,7 @@ class Project(ProjectBase):
     twilio_phone_number: Optional[str] = None
     vapi_phone_number_id: Optional[str] = None
     elevenlabs_voice_id: Optional[str] = None
+    voice_provider_config: Dict[str, Any] = Field(default_factory=dict)
     # {{key}} tags in prompt_a/prompt_b/consent_message this project (or,
     # on a template row, projects cloned from it) substitutes - not
     # {{system__xxx}} tags, those are resolved by the voice provider

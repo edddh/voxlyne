@@ -44,6 +44,7 @@ if str(ROOT) not in sys.path:
 
 from app.integrations.common.tools import build_tools
 from app.services.agent_versions import resolve_inbound, resolve_provider_api_key
+from app.services.openai_realtime_config import get_openai_realtime_model
 from livekit.agents import Agent, AgentServer, AgentSession, JobContext, RunContext, cli, function_tool
 from livekit.agents.llm.tool_context import ToolFlag
 from livekit.plugins import openai, xai
@@ -236,7 +237,7 @@ async def entrypoint(ctx: JobContext) -> None:
     provider_raw = (resolved or {}).get("voice_engine") or "livekit_xai"
     provider = "openai" if "openai" in provider_raw else "xai"
     if provider == "openai":
-        model = "gpt-realtime"
+        model = get_openai_realtime_model((resolved or {}).get("voice_provider_config"))
         voice = (resolved or {}).get("voice_name") or "marin"
         openai_api_key = await resolve_provider_api_key((resolved or {}).get("tenant_id"), "openai")
         if not openai_api_key:
