@@ -107,6 +107,13 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
     if (!content) return
     setTranscript((prev) => {
       const last = prev[prev.length - 1]
+      // xAI can emit consecutive completed ASR items while the same user
+      // turn is still being assembled. Keep one visible line and show the
+      // latest recognition instead of rendering every partial fragment.
+      if (role === 'user' && last && last.role === 'user') {
+        if (last.content === content) return prev
+        return [...prev.slice(0, -1), { ...last, content }]
+      }
       if (last && last.role === role && last.content === content) return prev
       return [...prev, { role, content }]
     })
