@@ -56,14 +56,12 @@ def _resolve_tool_flags(scenario_config: dict | None) -> dict[str, bool]:
 # simulazioni (app/routers/simulate_voice.py) - un'unica costante cosi'
 # le due strade non divergono nel tempo.
 #
-# Deliberatamente SENZA un'alternativa prescritta (maintainer, subito dopo:
-# "voglio lasciare che l'engine decida il da farsi... vediamo poi come si
-# comporta") - solo il divieto, non la soluzione: cosa fare quando manca
-# lo strumento resta una scelta del modello, da osservare.
+# Quando il tool non esiste, prescrive una risposta immediata invece di
+# lasciare al modello la possibilita' di promettere controlli futuri.
 NO_UNAVAILABLE_ACTIONS_INSTRUCTION = (
-    "Regola inderogabile: non dichiarare mai di poter verificare, controllare, prenotare, "
-    "modificare o eseguire un'azione se non hai davvero a disposizione, in questa "
-    "conversazione, lo strumento (tool) necessario per farlo."
+    "Se non e' disponibile un tool adatto, non annunciare verifiche, attese o azioni future. "
+    "Rispondi immediatamente usando le informazioni gia' disponibili nel prompt, nella "
+    "conversazione e nelle tue conoscenze generali, salvo che il prompt personalizzato lo vieti."
 )
 
 
