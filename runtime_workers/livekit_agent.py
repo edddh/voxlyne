@@ -232,7 +232,11 @@ async def entrypoint(ctx: JobContext) -> None:
     # this file, unused, for when that governance layer exists.
     tools: list[Any] = []
     prompt_text = (resolved or {}).get("prompt_a") or FALLBACK_PROMPT
-    first_message = (resolved or {}).get("consent_message") or FALLBACK_FIRST_MESSAGE
+    from app.services.language_messages import resolve_first_message
+
+    first_message = resolve_first_message(
+        (resolved or {}).get("consent_message"), (resolved or {}).get("language")
+    ) or FALLBACK_FIRST_MESSAGE
 
     provider_raw = (resolved or {}).get("voice_engine") or "livekit_xai"
     provider = "openai" if "openai" in provider_raw else "xai"

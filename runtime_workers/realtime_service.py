@@ -1333,7 +1333,11 @@ class LegacyController:
                 return {"status": "declined", "reason": "no_credentials", "call_id": call_id}
 
             instructions = f"{resolved['prompt_a']}\n\n{NO_UNAVAILABLE_ACTIONS_INSTRUCTION}"
-            first_message = resolved.get("consent_message") or "Salve, come posso aiutarla?"
+            from app.services.language_messages import resolve_first_message
+
+            first_message = resolve_first_message(
+                resolved.get("consent_message"), resolved.get("language")
+            ) or "Salve, come posso aiutarla?"
             voice = resolved.get("voice_name") or self.voice
             language = resolved.get("language") or self.response_language or "it"
 

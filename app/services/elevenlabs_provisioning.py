@@ -23,6 +23,7 @@ from app.config import get_settings
 from app.database.db import get_database
 from app.integrations.common.tools import build_tools
 from app.services.credentials.manager import CredentialsManager
+from app.services.language_messages import resolve_first_message
 
 logger = logging.getLogger(__name__)
 
@@ -243,12 +244,10 @@ def _build_conversation_config(
         f"{prompt}\n\n{KNOWLEDGE_BASE_FIRST_INSTRUCTIONS}\n\n"
         f"{TOOL_RESULT_WAIT_INSTRUCTIONS}\n\n{EXPRESSIVE_VOICE_INSTRUCTIONS}"
     ).strip()
-    first_message = (
-        published.get("consent_message")
-        or project.get("consent_message")
-        or "Buongiorno, come posso aiutarla?"
-    ).strip()
     language = str(published.get("language") or project.get("language") or "en").strip().lower()
+    first_message = resolve_first_message(
+        published.get("consent_message") or project.get("consent_message"), language
+    ) or "Buongiorno, come posso aiutarla?"
 
     language_presets = {
         language_code: {

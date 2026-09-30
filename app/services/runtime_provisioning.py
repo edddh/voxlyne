@@ -21,6 +21,7 @@ from typing import Any, Dict
 from uuid import UUID
 
 from app.services.credentials.manager import CredentialsManager
+from app.services.language_messages import resolve_first_message
 from app.services.openai_realtime_config import get_openai_realtime_model
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,9 @@ class RuntimeProvisioningError(Exception):
 
 
 def _default_first_message(language: str) -> str:
+    localized = resolve_first_message(None, language)
+    if localized:
+        return localized
     defaults = {
         "it": "Salve, come posso aiutarla?",
         "en": "Hello, how can I help you?",
@@ -190,7 +194,7 @@ async def provision_project_runtime(project: Dict[str, Any]) -> Dict[str, Any]:
             calcom_cfg["username"] = str(calendar_cfg["username"])
 
     language = project.get("language") or "en"
-    first_message = project.get("consent_message") or _default_first_message(language)
+    first_message = resolve_first_message(project.get("consent_message"), language) or _default_first_message(language)
     primary_prompt = project["prompt_a"]
 
     provider = "xai" if engine_type in ("xai_sip_direct", "livekit_xai") else "openai"
