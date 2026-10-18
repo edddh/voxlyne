@@ -1,4 +1,5 @@
 {
+  "demo": { "noAnswer": "No answer", "failed": "Failed" },
   "nav": {
     "dashboard": "Dashboard",
     "calls": "Calls",

@@ -10,6 +10,7 @@ from typing import Dict, List, Optional
 from uuid import UUID
 
 from app.database.db import get_database
+from app.services.demo_showcase import DEMO_TENANT_ID
 
 logger = logging.getLogger(__name__)
 
@@ -48,16 +49,18 @@ class AnalyticsService:
         month_start = today_start - timedelta(days=30)
 
         # Build tenant filter
-        tenant_filter = ""
+        tenant_filter = "AND c.tenant_id IS DISTINCT FROM :demo_tenant_id"
         base_params = {
             "today_start": today_start,
             "week_start": week_start,
             "month_start": month_start,
+            "demo_tenant_id": str(DEMO_TENANT_ID),
         }
 
         if tenant_id:
             tenant_filter = "AND c.tenant_id = :tenant_id"
             base_params["tenant_id"] = str(tenant_id)
+            del base_params["demo_tenant_id"]
 
         # Calls today
         calls_today = await db.fetch_one(
@@ -68,7 +71,7 @@ class AnalyticsService:
             FROM calls c
             WHERE c.created_at >= :today_start {tenant_filter}
             """,
-            {k: v for k, v in base_params.items() if k in ("today_start", "tenant_id")},
+            {k: v for k, v in base_params.items() if k in ("today_start", "tenant_id", "demo_tenant_id")},
         )
 
         # Calls this week
@@ -78,7 +81,7 @@ class AnalyticsService:
             FROM calls c
             WHERE c.created_at >= :week_start {tenant_filter}
             """,
-            {k: v for k, v in base_params.items() if k in ("week_start", "tenant_id")},
+            {k: v for k, v in base_params.items() if k in ("week_start", "tenant_id", "demo_tenant_id")},
         )
 
         # Calls this month
@@ -88,7 +91,7 @@ class AnalyticsService:
             FROM calls c
             WHERE c.created_at >= :month_start {tenant_filter}
             """,
-            {k: v for k, v in base_params.items() if k in ("month_start", "tenant_id")},
+            {k: v for k, v in base_params.items() if k in ("month_start", "tenant_id", "demo_tenant_id")},
         )
 
         # Average duration (completed calls)
@@ -100,7 +103,7 @@ class AnalyticsService:
               AND (status = 'completed' OR status = 'processed')
               {tenant_filter}
             """,
-            {k: v for k, v in base_params.items() if k in ("tenant_id",)},
+            {k: v for k, v in base_params.items() if k in ("tenant_id", "demo_tenant_id")},
         )
 
         # Active projects. Was interpolating tenant_id straight into the
@@ -109,10 +112,11 @@ class AnalyticsService:
         # from the authenticated request context here, never raw user
         # input, so there wasn't an actual injection path, but it's the
         # kind of inconsistency worth fixing on sight (18/08).
-        project_filter = "WHERE p.is_active = TRUE"
-        project_params: Dict = {}
+        project_filter = "WHERE p.is_active = TRUE AND p.tenant_id IS DISTINCT FROM :demo_tenant_id"
+        project_params: Dict = {"demo_tenant_id": str(DEMO_TENANT_ID)}
         if tenant_id:
-            project_filter += " AND p.tenant_id = :tenant_id"
+            project_filter = "WHERE p.is_active = TRUE AND p.tenant_id = :tenant_id"
+            project_params = {}
             project_params["tenant_id"] = str(tenant_id)
 
         active_projects = await db.fetch_one(
@@ -128,7 +132,7 @@ class AnalyticsService:
             JOIN calls c ON r.call_id = c.id
             WHERE r.crm_synced = TRUE {tenant_filter.replace('c.', 'c.')}
             """,
-            {k: v for k, v in base_params.items() if k in ("tenant_id",)},
+            {k: v for k, v in base_params.items() if k in ("tenant_id", "demo_tenant_id")},
         )
 
         # Appointments scheduled
@@ -139,7 +143,7 @@ class AnalyticsService:
             JOIN calls c ON r.call_id = c.id
             WHERE r.appointment_scheduled = TRUE {tenant_filter.replace('c.', 'c.')}
             """,
-            {k: v for k, v in base_params.items() if k in ("tenant_id",)},
+            {k: v for k, v in base_params.items() if k in ("tenant_id", "demo_tenant_id")},
         )
 
         # Calculate conversion rate
@@ -192,12 +196,13 @@ class AnalyticsService:
             interval = "day"
             trunc = "day"
 
-        tenant_filter = ""
-        params = {"start_date": start_date}
+        tenant_filter = "AND tenant_id IS DISTINCT FROM :demo_tenant_id"
+        params = {"start_date": start_date, "demo_tenant_id": str(DEMO_TENANT_ID)}
 
         if tenant_id:
             tenant_filter = "AND tenant_id = :tenant_id"
             params["tenant_id"] = str(tenant_id)
+            del params["demo_tenant_id"]
 
         # Get trend data
         trends = await db.fetch_all(
@@ -254,12 +259,13 @@ class AnalyticsService:
         """
         db = get_database()
 
-        tenant_filter = ""
-        params = {}
+        tenant_filter = "WHERE p.tenant_id IS DISTINCT FROM :demo_tenant_id"
+        params = {"demo_tenant_id": str(DEMO_TENANT_ID)}
 
         if tenant_id:
             tenant_filter = "WHERE p.tenant_id = :tenant_id"
             params["tenant_id"] = str(tenant_id)
+            del params["demo_tenant_id"]
 
         stats = await db.fetch_all(
             f"""
@@ -311,12 +317,13 @@ class AnalyticsService:
 
         start_date = datetime.now(timezone.utc) - timedelta(days=days)
 
-        tenant_filter = ""
-        params = {"start_date": start_date}
+        tenant_filter = "AND tenant_id IS DISTINCT FROM :demo_tenant_id"
+        params = {"start_date": start_date, "demo_tenant_id": str(DEMO_TENANT_ID)}
 
         if tenant_id:
             tenant_filter = "AND tenant_id = :tenant_id"
             params["tenant_id"] = str(tenant_id)
+            del params["demo_tenant_id"]
 
         stats = await db.fetch_all(
             f"""

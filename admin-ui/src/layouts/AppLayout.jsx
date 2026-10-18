@@ -93,7 +93,7 @@ function AppLayout() {
       icon: <ProjectOutlined />,
       label: t('nav.projects'),
     },
-    isAdmin && {
+    isAdmin && user?.tenant_slug !== 'demo-showcase' && {
       key: '/users',
       icon: <UserOutlined />,
       label: t('nav.users'),
@@ -102,7 +102,7 @@ function AppLayout() {
     // Tenant (icona per riga) - qui serve solo per l'admin del proprio
     // tenant, che altrimenti non ha alcuna via per raggiungere una pagina
     // che esiste ed e' gia' protetta correttamente lato backend.
-    user?.role === 'admin' && {
+    user?.role === 'admin' && user?.tenant_slug !== 'demo-showcase' && {
       key: `/tenants/${user.tenant_id}/credentials`,
       icon: <ApiOutlined />,
       label: t('nav.credentials'),

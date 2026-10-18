@@ -29,6 +29,10 @@ function ProtectedRoute({ children, allowedRoles, fallback = '/' }) {
     return <Navigate to="/login" replace />
   }
 
+  if (user.tenant_slug === 'demo-showcase' && window.location.pathname.startsWith('/tenants/')) {
+    return <Navigate to="/" replace />
+  }
+
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     const to = typeof fallback === 'function' ? fallback(user) : fallback
     return <Navigate to={to} replace />

@@ -28,7 +28,8 @@ const normalizeVoiceEngineForUi = (engine) => engine === 'openai_realtime' ? 'op
 function Projects() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
-  const { isSuperAdmin, isAdmin } = useAuth()
+  const { isSuperAdmin, isAdmin, user } = useAuth()
+  const isDemo = user?.tenant_slug === 'demo-showcase'
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
@@ -596,6 +597,7 @@ function Projects() {
         const engine = normalizeVoiceEngineForUi(record.voice_engine)
         const direction = record.call_direction || 'inbound'
         const ENGINE_LABELS = {
+          demo: 'Demo / TEST',
           openai_realtime: 'OpenAI RT',
           vapi: 'Vapi',
           livekit_xai: 'LiveKit + xAI',
@@ -676,7 +678,7 @@ function Projects() {
     {
       title: t('tenantCredentials.actions'),
       key: 'actions',
-      render: (_, record) => (
+      render: (_, record) => isDemo ? null : (
         <Space>
           {record.is_active && (
             <Tooltip title={t('projects.editPrompt')}>
@@ -761,14 +763,14 @@ function Projects() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <Title level={3} style={{ margin: 0, flexShrink: 0 }}>{t('nav.projects')}</Title>
-        <Space>
+        {!isDemo && <Space>
           <Button type="default" onClick={openFromTemplateModal}>
             {t('projects.createFromTemplate')}
           </Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>
             {t('projects.newProject')}
           </Button>
-        </Space>
+        </Space>}
       </div>
 
       <Space style={{ marginBottom: 16, flexWrap: 'wrap' }}>
@@ -795,7 +797,7 @@ function Projects() {
       <Table
         scroll={{ x: 'max-content' }}
         dataSource={projects}
-        columns={columns}
+        columns={isDemo ? columns.filter(column => column.key !== 'actions') : columns}
         rowKey="id"
         loading={loading}
         pagination={{

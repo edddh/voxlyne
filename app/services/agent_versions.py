@@ -16,6 +16,7 @@ from uuid import UUID
 
 from app.database.db import get_database
 from app.services.prompt_variables import substitute_custom_variables
+from app.services.demo_showcase import is_demo_tenant
 
 
 async def resolve_provider_api_key(
@@ -34,7 +35,7 @@ async def resolve_provider_api_key(
     that as a hard failure (decline the call), not silently reuse another
     tenant's key or a global one.
     """
-    if not tenant_id:
+    if not tenant_id or is_demo_tenant(tenant_id):
         return None
     from app.services.credentials.manager import CredentialsManager
 

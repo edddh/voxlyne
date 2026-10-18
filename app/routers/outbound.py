@@ -22,6 +22,7 @@ from app.models.schemas import (
 from app.services.telephony.twilio_client import normalize_phone_number, validate_e164
 from app.services.voice.base import OutboundCallRequest as VoiceOutboundRequest
 from app.services.voice.factory import get_voice_engine
+from app.services.demo_showcase import is_demo_tenant
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/outbound")
@@ -70,6 +71,9 @@ async def create_outbound_call(
     # to a different tenant, just by knowing/guessing its project_id.
     if not check_tenant_access(current_user, project["tenant_id"]):
         raise HTTPException(status_code=404, detail="Project not found")
+
+    if is_demo_tenant(project["tenant_id"]):
+        raise HTTPException(status_code=403, detail="Demo projects cannot place calls")
 
     if not project["is_active"]:
         raise HTTPException(status_code=400, detail="Project is not active")

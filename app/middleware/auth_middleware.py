@@ -15,6 +15,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.database.db import get_database
 from app.services.auth_service import AuthService
+from app.services.demo_showcase import is_demo_tenant
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +146,18 @@ async def get_current_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Questo account non è associato a nessun tenant. Contatta un amministratore.",
         )
+
+    if is_demo_tenant(user.tenant_id):
+        path = request.url.path
+        safe_read = request.method in ("GET", "HEAD") and (
+            path == "/api/auth/me"
+            or path == "/api/projects"
+            or path.startswith("/api/analytics/")
+            or path == "/api/v2/calls"
+            or path.startswith("/api/v2/calls/")
+        )
+        if not safe_read and not (request.method == "POST" and path == "/api/auth/logout"):
+            raise HTTPException(status_code=403, detail="Demo showcase is read-only")
 
     return user
 

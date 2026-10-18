@@ -40,6 +40,7 @@ from app.middleware.auth_middleware import CurrentUser, check_tenant_access, req
 from app.services import elevenlabs_provisioning
 from app.services import xai_provisioning, zadarma_provisioning
 from app.services.credentials.manager import CredentialsManager
+from app.services.demo_showcase import is_demo_tenant
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -143,6 +144,9 @@ async def connect_number(
         raise HTTPException(status_code=400, detail="Project has no owning tenant - cannot resolve credentials")
     if not check_tenant_access(current_user, tenant_id):
         raise HTTPException(status_code=403, detail="Access denied to this project")
+
+    if is_demo_tenant(tenant_id):
+        raise HTTPException(status_code=403, detail="Demo projects cannot connect phone numbers")
 
     provider_config = _json_object(project["voice_provider_config"])
     previous_endpoint = await db.fetch_one(

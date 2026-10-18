@@ -7,6 +7,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import * as analyticsApi from '../api/analytics'
 import { BRAND } from '../main'
+import { useAuth } from '../hooks/useAuth'
 
 const { Title, Text } = Typography
 
@@ -46,6 +47,8 @@ const STATUS_COLORS = {
 
 function Analytics() {
   const { t, i18n } = useTranslation()
+  const { user } = useAuth()
+  const isDemo = user?.tenant_slug === 'demo-showcase'
   const [period, setPeriod] = useState('week')
   const [days, setDays] = useState(30)
   const [trends, setTrends] = useState(null)
@@ -60,9 +63,9 @@ function Analytics() {
     completed: t('analytics.statusCompleted'),
     processing: t('analytics.statusProcessing'),
     processed: t('analytics.statusProcessed'),
-    declined: t('analytics.statusDeclined'),
+    declined: t(isDemo ? 'demo.noAnswer' : 'analytics.statusDeclined'),
     escalated: t('analytics.statusEscalated'),
-    cancelled: t('analytics.statusCancelled'),
+    cancelled: t(isDemo ? 'demo.failed' : 'analytics.statusCancelled'),
   }
 
   useEffect(() => {
@@ -144,7 +147,7 @@ function Analytics() {
                     formatter={(value) => ({
                       total: t('analytics.legendTotal'),
                       completed: t('analytics.legendCompleted'),
-                      cancelled: t('analytics.legendCancelled'),
+                      cancelled: t(isDemo ? 'demo.failed' : 'analytics.legendCancelled'),
                     }[value] || value)}
                   />
                   <Line type="monotone" dataKey="total" name="total" stroke={TREND_COLORS.total} strokeWidth={2} dot={{ r: 3 }} />

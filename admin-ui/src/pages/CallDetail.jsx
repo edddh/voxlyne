@@ -10,11 +10,14 @@ import {
 import { useTranslation } from 'react-i18next'
 import * as callsApi from '../api/calls'
 import { BRAND } from '../main'
+import { useAuth } from '../hooks/useAuth'
 
 const { Title, Text, Paragraph } = Typography
 
 function CallDetail() {
   const { t, i18n } = useTranslation()
+  const { user } = useAuth()
+  const isDemo = user?.tenant_slug === 'demo-showcase'
   const { id } = useParams()
   const navigate = useNavigate()
   const [call, setCall] = useState(null)
@@ -66,9 +69,9 @@ function CallDetail() {
       completed: { color: 'green', icon: <CheckCircleOutlined />, label: t('analytics.statusCompleted') },
       processing: { color: 'orange', icon: <ClockCircleOutlined />, label: t('analytics.statusProcessing') },
       processed: { color: 'success', icon: <CheckCircleOutlined />, label: t('analytics.statusProcessed') },
-      declined: { color: 'red', icon: <CloseCircleOutlined />, label: t('analytics.statusDeclined') },
+      declined: { color: 'red', icon: <CloseCircleOutlined />, label: t(isDemo ? 'demo.noAnswer' : 'analytics.statusDeclined') },
       escalated: { color: 'purple', icon: <UserOutlined />, label: t('analytics.statusEscalated') },
-      cancelled: { color: 'default', icon: <CloseCircleOutlined />, label: t('analytics.statusCancelled') },
+      cancelled: { color: 'default', icon: <CloseCircleOutlined />, label: t(isDemo ? 'demo.failed' : 'analytics.statusCancelled') },
     }
     return configs[status] || { color: 'default', label: status }
   }

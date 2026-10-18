@@ -1,4 +1,5 @@
 {
+  "demo": { "noAnswer": "Non risposta", "failed": "Fallita" },
   "nav": {
     "dashboard": "Dashboard",
     "calls": "Chiamate",

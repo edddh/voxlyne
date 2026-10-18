@@ -51,11 +51,16 @@ def _serialize_project(project_row) -> dict:
     """Normalize project row for API output."""
     item = dict(project_row)
     output_config = item.get("output_config")
-    if isinstance(output_config, str):
+    # Some legacy rows contain a JSON string inside JSONB. Decode both layers.
+    for _ in range(2):
+        if not isinstance(output_config, str):
+            break
         try:
-            item["output_config"] = json.loads(output_config)
+            output_config = json.loads(output_config)
         except json.JSONDecodeError:
-            item["output_config"] = {}
+            output_config = {}
+            break
+    item["output_config"] = output_config if isinstance(output_config, dict) else {}
     # Stessa gestione difensiva di output_config sopra - il driver a
     # volte restituisce le colonne JSONB come stringa non ancora
     # deserializzata (20/08, custom_variables_schema/custom_variables).

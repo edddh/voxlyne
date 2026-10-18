@@ -19,7 +19,8 @@ const { RangePicker } = DatePicker
 function Calls() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
-  const { isAdmin } = useAuth()
+  const { isAdmin, user } = useAuth()
+  const isDemo = user?.tenant_slug === 'demo-showcase'
   const [calls, setCalls] = useState([])
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
@@ -32,7 +33,7 @@ function Calls() {
   const [statusFilter, setStatusFilter] = useState(null)
   const [projectFilter, setProjectFilter] = useState(null)
   const [dateRange, setDateRange] = useState(null)
-  const [callOrigin, setCallOrigin] = useState('production')
+  const [callOrigin, setCallOrigin] = useState(isDemo ? 'voice_simulation' : 'production')
 
   // Stats - conteggi reali sul tenant intero (GET /api/v2/calls/stats),
   // non piu' calcolati sulla sola pagina caricata (maintainer, 20/08: "che
@@ -118,7 +119,7 @@ function Calls() {
   }
 
   // M5: Outbound call
-  const outboundProjects = projects.filter(p =>
+  const outboundProjects = projects.filter(p => !isDemo &&
     (p.call_direction === 'outbound' || p.call_direction === 'both') && p.voice_engine === 'vapi'
   )
 
@@ -195,9 +196,9 @@ function Calls() {
       completed: { color: 'green', icon: <CheckCircleOutlined />, label: t('analytics.statusCompleted') },
       processing: { color: 'orange', icon: <ClockCircleOutlined />, label: t('analytics.statusProcessing') },
       processed: { color: 'success', icon: <CheckCircleOutlined />, label: t('analytics.statusProcessed') },
-      declined: { color: 'red', icon: <CloseCircleOutlined />, label: t('analytics.statusDeclined') },
+      declined: { color: 'red', icon: <CloseCircleOutlined />, label: t(isDemo ? 'demo.noAnswer' : 'analytics.statusDeclined') },
       escalated: { color: 'purple', icon: <UserOutlined />, label: t('analytics.statusEscalated') },
-      cancelled: { color: 'default', icon: <CloseCircleOutlined />, label: t('analytics.statusCancelled') },
+      cancelled: { color: 'default', icon: <CloseCircleOutlined />, label: t(isDemo ? 'demo.failed' : 'analytics.statusCancelled') },
     }
     return configs[status] || { color: 'default', label: status }
   }
@@ -357,7 +358,7 @@ function Calls() {
           >
             {t('calls.details')}
           </Button>
-          {isAdmin && record.origin === 'voice_simulation' && (
+          {isAdmin && !isDemo && record.origin === 'voice_simulation' && (
             <Popconfirm
               title="Eliminare questa simulazione?"
               description="La traccia e la trascrizione verranno cancellate definitivamente."
@@ -528,9 +529,9 @@ function Calls() {
                 { value: 'completed', label: t('analytics.statusCompleted') },
                 { value: 'processing', label: t('analytics.statusProcessing') },
                 { value: 'processed', label: t('analytics.statusProcessed') },
-                { value: 'declined', label: t('analytics.statusDeclined') },
+                { value: 'declined', label: t(isDemo ? 'demo.noAnswer' : 'analytics.statusDeclined') },
                 { value: 'escalated', label: t('analytics.statusEscalated') },
-                { value: 'cancelled', label: t('analytics.statusCancelled') },
+                { value: 'cancelled', label: t(isDemo ? 'demo.failed' : 'analytics.statusCancelled') },
               ]}
             />
           </Col>
