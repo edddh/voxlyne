@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 112" role="img" aria-labelledby="title">
+  <title id="title">Ascolta</title>
+  <rect width="112" height="112" rx="24" fill="#F47A1F"/>
+  <path d="M25 29h17l14 42 14-42h17L64 85H48L25 29Z" fill="#121417"/>
+  <text x="136" y="73" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="62" font-weight="700" letter-spacing="-2">Ascolta</text>
+</svg>
