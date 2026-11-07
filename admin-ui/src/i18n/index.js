@@ -5,11 +5,8 @@ import LanguageDetector from 'i18next-browser-languagedetector'
 import it from './locales/it.json'
 import en from './locales/en.json'
 
-// Italiano resta la lingua sorgente/di riferimento (l'app è nata in
-// italiano) - l'inglese è la lingua aggiunta ora
-// (maintainer, 16/09: "internazionalizzare l'interfaccia... in inglese").
-// Nuove lingue future si aggiungono solo qui + un nuovo
-// locales/<lang>.json, nessun'altra modifica di codice necessaria.
+// Italiano resta la lingua sorgente; nuove lingue si aggiungono qui e con
+// un nuovo file locales/<lang>.json, senza altre modifiche di codice.
 export const SUPPORTED_LANGUAGES = [
   { code: 'it', label: 'Italiano' },
   { code: 'en', label: 'English' },
