@@ -1,81 +1,135 @@
 # Roadmap
 
+## Product Direction: Business Operating Layer
+
+Ascolta is intended to evolve beyond a telephone agent into a controlled
+operating layer for business processes. A conversation should be able to
+understand a case, consult the relevant systems, coordinate specialist agents,
+and complete approved work across channels.
+
+The goal is not uncontrolled replacement of people. Standard, low-risk work
+can become autonomous; exceptions, ambiguous requests, sensitive data, and
+high-impact actions must remain policy-governed and transferable to a person.
+
 ## 1. Reproducible Demo Installation
 
-**Deliverable:** a one-command local bootstrap and Docker Compose profile for
-a safe demo environment.
+**Deliverable:** a one-command bootstrap and Docker Compose profile for a safe
+demo environment.
 
 - Add `make demo-up`, `make demo-reset`, and `make demo-check` targets.
 - Run migrations, create Demo Showcase, and expose a health report without
-  credentials or external voice providers.
-- Add a CI job that starts the stack, seeds synthetic data, and calls health
-  and list endpoints.
+  credentials or external providers.
+- Add CI that starts the stack, seeds synthetic data, and calls health and
+  list endpoints.
 
-**Done when:** a new contributor can clone the repository and obtain a working
-demo UI with four fictional scenarios in under 15 minutes.
+**Done when:** a new contributor can obtain a working demo UI with four
+fictional scenarios in under 15 minutes.
 
-## 2. Simulation Regression Suite
+## 2. Business Context Graph
 
-**Deliverable:** saved, replayable voice-agent test cases.
+**Deliverable:** one durable case record that joins every interaction and
+business object involved in a request.
 
-- Define JSON fixtures for standard reception, recruiting, retail, and
+- Model callers, organizations, contacts, orders, appointments, tickets,
+  documents, and conversations as linked entities.
+- Build a case timeline that merges calls, messages, tool executions, agent
+  handoffs, and human decisions.
+- Add identity resolution with confidence and explicit conflict handling
+  instead of assuming one phone number equals one person.
+- Expose a read-only context API used by all agents and channels.
+
+**Done when:** an agent can resume a request from another channel with the
+relevant history, open tasks, and source-system references already available.
+
+## 3. Enterprise Action Catalog
+
+**Deliverable:** a policy-controlled catalog of actions over calendars, CRM,
+ticketing, commerce, billing, document, and internal systems.
+
+- Define typed input/output schemas and idempotency keys for every action.
+- Add adapters for calendar availability, CRM lookup/update, ticket creation,
+  order status, document retrieval, and outbound notifications.
+- Add `dry_run`, `approval_required`, `automatic`, and `disabled` modes per
+  tenant, project, action, and risk level.
+- Persist an audit record with actor, policy decision, redacted request,
+  result, source-system ID, and replay ID.
+
+**Done when:** a demo agent can resolve an appointment, support, or recruiting
+case end-to-end against mocked business systems without free-form API access.
+
+## 4. Specialist-Agent Orchestration
+
+**Deliverable:** an orchestrator that delegates bounded tasks to specialist
+agents instead of one generalist model attempting every task.
+
+- Introduce agent roles for triage, retrieval, scheduling, CRM, document
+  review, follow-up, and quality assurance.
+- Define explicit handoff contracts: case summary, required inputs, allowed
+  actions, expected output, timeout, and escalation rule.
+- Add a planner that chooses the next specialist only from policy-approved
+  options and records the rationale.
+- Add a human handoff queue with accept, reject, callback, and resume states.
+
+**Done when:** a standard-reception demo can route scheduling to a scheduling
+agent, missing information to a follow-up agent, and sensitive requests to a
+human queue while preserving one case timeline.
+
+## 5. Omnichannel Case Continuity
+
+**Deliverable:** one case can move between phone, web chat, email, messaging,
+and a human operator without restarting the conversation.
+
+- Normalize channel events into the case timeline.
+- Add channel-specific consent, identity, and notification policies.
+- Let a caller receive a secure link or follow-up message that continues an
+  unfinished case.
+- Add outbound follow-up only when a policy and explicit user preference allow
+  it.
+
+**Done when:** a synthetic caller can begin by phone, receive a follow-up, and
+complete the same request in web chat without repeating the context.
+
+## 6. Simulation, Evaluation, and Digital Twin
+
+**Deliverable:** a safe environment that proves an agent workflow before it
+can touch a production integration.
+
+- Define replayable fixtures for standard reception, recruiting, retail, and
   restaurant scenarios.
-- Run each fixture against a prompt version and record response, tool calls,
-  latency, and estimated cost.
-- Add pass/fail assertions for required tool use, prohibited promises, chosen
-  language, and maximum response length.
-- Show a prompt-version comparison in the project editor before publishing.
+- Provide mocked versions of every external system with deterministic data.
+- Record response, tool calls, policy decisions, latency, cost, and final case
+  outcome for each run.
+- Compare prompt, policy, model, and tool changes against a regression suite.
+- Add adversarial cases: ambiguous identity, unavailable slot, duplicate
+  request, conflicting knowledge, and forbidden action.
 
-**Done when:** a prompt change cannot be published without seeing its result
-against the scenario regression set.
+**Done when:** a change cannot enable automatic external actions until it has
+passed the relevant synthetic workflow and policy tests.
 
-## 3. Controlled External Actions
+## 7. Retrieval Traceability and Operational Trust
 
-**Deliverable:** an action gateway for calendar, CRM, and ticketing adapters.
+**Deliverable:** every factual answer and every action is inspectable.
 
-- Define typed input/output schemas for every external action.
-- Require idempotency keys and structured success/failure responses.
-- Add `dry_run`, `approval_required`, and `disabled` execution modes.
-- Persist an audit record with request, redacted result, actor, and replay ID.
+- Store source chunks and scores for each retrieval-backed answer.
+- Flag unsupported answers, conflicting sources, low confidence, and stale
+  knowledge.
+- Add a supervisor view with case state, agent path, tool results, policy
+  decisions, and unresolved blockers.
+- Provide a "why did it do this?" explanation assembled from structured
+  execution records, not model self-reporting alone.
 
-**Done when:** a simulated call can demonstrate an appointment or ticket flow
-without contacting an external system, while production adapters remain
-explicitly opt-in.
+**Done when:** an operator can reconstruct the exact evidence and policy that
+led to any answer, handoff, or external action.
 
-## 4. Specialist-Agent Handoffs
+## 8. Release and Safety Gate
 
-**Deliverable:** routing that transfers structured context to another agent or
-a human operator.
+**Deliverable:** automation that blocks unsafe releases.
 
-- Add handoff rules based on intent, confidence, and tool outcome.
-- Pass a bounded summary rather than the complete transcript.
-- Add a human-review queue with accept, reject, and callback outcomes.
-- Measure containment rate, handoff rate, and unresolved requests.
+- Run dependency, secret, schema, and migration checks in CI.
+- Run demo smoke tests plus workflow regression tests before release.
+- Require explicit approval for policy changes that increase autonomous action
+  scope.
+- Produce changelog, migration notes, and rollback steps for every release.
 
-**Done when:** the standard demo can route scheduling requests to a scheduling
-agent and sensitive requests to a human-review queue.
-
-## 5. Retrieval Evaluation and Traceability
-
-**Deliverable:** reliable, inspectable knowledge-base answers.
-
-- Record the source chunks returned for each retrieval tool call.
-- Add a small question-and-answer evaluation set per demo scenario.
-- Flag answers with no source, low retrieval score, or conflicting chunks.
-- Add a UI view that links an answer to the exact indexed source excerpts.
-
-**Done when:** each demo answer based on retrieval can be inspected and
-reproduced from its source chunks.
-
-## 6. Accessibility and Release Discipline
-
-**Deliverable:** a release checklist enforced by automation.
-
-- Add keyboard and screen-reader checks for login, projects, calls, and
-  simulator flows.
-- Add visual snapshots for desktop and mobile critical screens.
-- Publish a changelog and migration notes for every release.
-- Add dependency and secret scans to CI.
-
-**Done when:** `main` is releasable only after tests, scans, and the demo
-smoke check pass.
+**Done when:** `main` cannot be released until code, synthetic workflows, and
+action-policy checks all pass.
