@@ -85,3 +85,5 @@ Do not submit credentials or personal information in issues. See [SECURITY.md](S
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
+
+The name and logo policy is in [TRADEMARKS.md](TRADEMARKS.md).
