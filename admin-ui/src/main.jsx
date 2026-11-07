@@ -9,17 +9,16 @@ import './i18n'
 import { applyBrandMetadata } from './components/BrandLogo'
 import { RootWithLocale } from './i18n/RootWithLocale'
 
-// Palette di brand Ascolta: bianco e arancione su sfondo scuro.
-// Valori esatti prelevati dal logo (Ascolta.png) — non arrotondati a occhio.
+// Palette Ascolta: petrolio, acqua e verde salvia. Non deriva dal brand legacy.
 export const BRAND = {
-  bg: '#121417', // quasi nero: usato per la maggior parte dello schermo (sider, layout)
-  bgElevated: '#1E2227', // grigio molto scuro: solo per header/dropdown/modali
-  bgContainer: '#191C20', // grigio molto scuro, appena sopra il nero: card/contenuto
-  border: '#2A2E34',
-  orange: '#F47A1F',
-  orangeSoft: 'rgba(244, 122, 31, 0.16)',
-  white: '#FFFFFF',
-  textDim: 'rgba(255, 255, 255, 0.65)',
+  bg: '#0E2025',
+  bgElevated: '#153A4A',
+  bgContainer: '#112C34',
+  border: '#244B51',
+  orange: '#00A8A8',
+  orangeSoft: 'rgba(0, 168, 168, 0.15)',
+  white: '#F4FAF8',
+  textDim: 'rgba(244, 250, 248, 0.68)',
 }
 
 applyBrandMetadata()
@@ -43,7 +42,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               colorText: BRAND.white,
               colorTextSecondary: BRAND.textDim,
               colorLink: BRAND.orange,
-              colorLinkHover: '#FF9A3D',
+              colorLinkHover: '#00A8A8',
               borderRadius: 8,
               fontFamily:
                 "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
@@ -58,7 +57,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 darkItemBg: BRAND.bg,
                 darkItemSelectedBg: BRAND.orangeSoft,
                 darkItemSelectedColor: BRAND.orange,
-                darkItemHoverBg: 'rgba(255,255,255,0.04)',
+                darkItemHoverBg: 'rgba(0,109,119,0.06)',
               },
               Button: {
                 primaryShadow: 'none',
