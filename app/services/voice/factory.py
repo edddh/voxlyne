@@ -59,13 +59,13 @@ def _create_engine(vtype: VoiceEngineType) -> BaseVoiceEngine:
         VoiceEngineType.OPENAI_SIP_DIRECT,
         VoiceEngineType.ELEVENLABS_AGENT,
     ):
-        # M5: ported from earlier-prototype, not wired into the factory yet - concrete
-        # engine classes (app/services/voice/livekit_engine.py,
-        # direct_sip_engine.py, elevenlabs_agent_engine.py) land in the next
-        # implementation phase. See README Milestone 5 and runtime_workers/.
+        # These provider modes run through dedicated inbound routes and workers
+        # (runtime_workers/ and app/routers/), not through this in-process
+        # factory. This exception prevents callers from selecting the wrong
+        # execution path; it does not mean the provider integration is absent.
         raise NotImplementedError(
-            f"Voice engine '{vtype.value}' is not implemented yet - "
-            "the provider integration phase (see README Milestone 5) adds it."
+            f"Voice engine '{vtype.value}' is managed by its dedicated inbound runtime, "
+            "not by VoiceEngineFactory."
         )
 
     else:
