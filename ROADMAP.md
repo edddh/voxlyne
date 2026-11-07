@@ -1,13 +1,11 @@
 # Roadmap
 
-The following work is planned independently of the current implementation.
-
 ## Reliability and Provider Support
 
-- Add contract tests for every voice and telephony provider adapter.
+- Add contract tests for every voice and telephony adapter.
 - Complete direct inbound routing for supported SIP providers.
-- Add durable job handling for post-call processing and provider retries.
-- Add tenant-scoped diagnostics and provider health checks.
+- Add durable jobs for post-call processing and provider retries.
+- Add workspace-scoped diagnostics and provider health checks.
 
 ## Agent Quality
 
@@ -16,16 +14,16 @@ The following work is planned independently of the current implementation.
 - Improve interruption, turn-taking, and transcript consolidation tests.
 - Add safe fixtures for multilingual voice simulations.
 
+## Controlled Integrations
+
+- Introduce typed action contracts with validation and idempotency keys.
+- Add dry-run and approval modes for external actions.
+- Add specialist-agent and human-handoff workflows with structured context.
+- Add replayable simulations against mocked CRM, calendar, and ticketing systems.
+
 ## Product and Accessibility
 
 - Complete English and Italian interface coverage and automated localization checks.
 - Audit keyboard navigation, focus behavior, contrast, and screen-reader labels.
 - Improve mobile layouts for project configuration and call analysis.
 - Add exportable synthetic reports for demonstrations.
-
-## Operations
-
-- Document reproducible local and production deployment paths.
-- Add backup, restore, retention, and tenant-deletion runbooks.
-- Add structured audit events for privileged administration actions.
-- Add monitoring dashboards and alert thresholds for failed call processing.

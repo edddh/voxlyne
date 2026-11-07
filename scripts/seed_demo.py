@@ -30,9 +30,9 @@ PROJECTS = (
     ("retail", "Assistenza clienti retail (demo)", "support", "Aiuta i clienti con informazioni generiche su ordini e resi."),
     ("ristorante", "Prenotazioni ristorante (demo)", "other", "Raccogli numero di persone e preferenze per una richiesta di prenotazione."),
 )
-USERS = (("admin@example.test", "Giulia Ventresi", "admin"),
-         ("admin@example.test", "Elia Valdieri", "creator"),
-         ("admin@example.test", "Nora Bellani", "power_user"))
+USERS = (("giulia.ventresi@example.com", "Giulia Ventresi", "admin"),
+         ("elia.valdieri@example.com", "Elia Valdieri", "creator"),
+         ("nora.bellani@example.com", "Nora Bellani", "power_user"))
 NAMES = ("Arianna Valdieri", "Luca Ventresi", "Viola Merlani", "Tommaso Bellani", "Elisa Selvani", "Davide Rinaldi")
 QUESTIONS = (
     "Buongiorno, vorrei sapere se posso fissare un appuntamento per la prossima settimana.",
@@ -123,7 +123,7 @@ def execute(reset, password_file, dry_run=False):
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'demo','inbound','voice_simulation','demo',%s,%s,'demo_estimate','grok-voice-latest')
                     ON CONFLICT (id) DO NOTHING RETURNING id""",
                     (call_id, TENANT, ident("project:" + key), ident(f"version:{key}:2"),
-                     f"+00000000{i:02d}", state, start, start + timedelta(seconds=seconds), start, seconds, cost))
+                     f"+39 02 0000 {i:04d}", state, start, start + timedelta(seconds=seconds), start, seconds, cost))
                 inserted = cur.fetchone()
                 if inserted and state == "completed":
                     lines = (("user", f"Sono {NAMES[i % len(NAMES)]}. {QUESTIONS[p]}"), ("assistant", ANSWERS[p]))
