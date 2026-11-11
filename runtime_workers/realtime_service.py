@@ -404,7 +404,7 @@ class LegacyController:
                 return normalized
         return None
 
-    def infer_visit_kind(self, value: str | None) -> str | None:
+    def infer_appointment_kind(self, value: str | None) -> str | None:
         if not value:
             return None
         text = value.lower()
@@ -421,13 +421,7 @@ class LegacyController:
         )
         if any(marker in text for marker in sport_markers):
             return "sport"
-        standard_markers = (
-            "standard",
-            "visita",
-            "controll",
-            "dolor",
-            "ricetta",
-        )
+        standard_markers = ("standard", "generico", "ordinario")
         if any(marker in text for marker in standard_markers):
             return "standard"
         return None
@@ -436,10 +430,10 @@ class LegacyController:
         default_id = getattr(self, "calcom_default_event_type_id", None)
         standard_id = getattr(self, "calcom_standard_event_type_id", None)
         sport_id = getattr(self, "calcom_sport_event_type_id", None)
-        inferred_kind = self.infer_visit_kind(requested)
+        inferred_kind = self.infer_appointment_kind(requested)
         if not inferred_kind and arguments:
-            for key in ("appointment_type", "appointment_type", "event_type_id", "execution_message", "notes", "reason_hint"):
-                inferred_kind = self.infer_visit_kind(str(arguments.get(key) or ""))
+            for key in ("appointment_type", "event_type_id", "execution_message", "notes", "reason_hint"):
+                inferred_kind = self.infer_appointment_kind(str(arguments.get(key) or ""))
                 if inferred_kind:
                     break
 
@@ -451,7 +445,7 @@ class LegacyController:
             normalized = (requested or "").strip().lower()
             if normalized in {"sport", "sportiva", "sportivo", "agonistica", "agonistico"} and sport_id:
                 value = sport_id
-            elif normalized in {"standard", "standard", "standard", "visita", "visita standard"}:
+            elif normalized in {"standard", "generico", "ordinario"}:
                 value = standard_id or default_id
             else:
                 value = requested or standard_id or default_id
