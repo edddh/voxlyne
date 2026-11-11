@@ -1,5 +1,5 @@
 """
-Ascolta - CRM Providers
+Voxlyne - CRM Providers
 
 Available providers:
 - GenericWebhookProvider: Send data to any HTTP endpoint

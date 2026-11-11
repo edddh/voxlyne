@@ -1,5 +1,5 @@
 """
-Ascolta - Voice Engine Base Classes
+Voxlyne - Voice Engine Base Classes
 
 Abstract base class and types for voice AI integrations.
 Follows the same pattern as app/services/crm/base.py.

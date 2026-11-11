@@ -1,5 +1,5 @@
 """
-Ascolta - Encryption Utility
+Voxlyne - Encryption Utility
 
 Provides Fernet symmetric encryption for credentials storage.
 Uses SECRET_KEY from config to derive encryption key.

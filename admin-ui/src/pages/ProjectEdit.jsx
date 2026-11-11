@@ -412,7 +412,7 @@ function ProjectEdit() {
                 {{tag}}: current_datetime e' uno STRUMENTO che il modello
                 chiama da solo (basta nominarlo nel prompt, non va tra
                 parentesi graffe - inserirlo come {{current_datetime}}
-                sarebbe scorretto, Ascolta non lo sostituisce), mentre
+                sarebbe scorretto, Voxlyne non lo sostituisce), mentre
                 system__caller_id resta un vero tag {{...}}, risolto dal
                 provider voce. Spiegati qui invece di lasciarli intuire. */}
             <div style={{ marginTop: 8 }}>

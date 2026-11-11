@@ -1,5 +1,5 @@
 """
-Ascolta - RAG embeddings client.
+Voxlyne - RAG embeddings client.
 
 Same "strictly per-tenant, no .env fallback" rule as every other provider
 credential in this codebase (see app/services/agent_versions.py's

@@ -1,5 +1,5 @@
 """
-Ascolta - Analytics Service
+Voxlyne - Analytics Service
 
 Dashboard statistics and call trend analysis.
 """

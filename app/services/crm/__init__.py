@@ -1,5 +1,5 @@
 """
-Ascolta - CRM Integration Module
+Voxlyne - CRM Integration Module
 
 This module provides CRM synchronization capabilities:
 - Generic webhook dispatcher for any HTTP endpoint

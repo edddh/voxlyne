@@ -1,5 +1,5 @@
 """
-Ascolta - Storage Module
+Voxlyne - Storage Module
 S3-compatible storage client (MinIO local, AWS S3 production)
 """
 

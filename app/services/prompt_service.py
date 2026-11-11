@@ -1,5 +1,5 @@
 """
-Ascolta - Prompt Versioning Service
+Voxlyne - Prompt Versioning Service
 
 Manages prompt versions, activation, rollback, and diff.
 """

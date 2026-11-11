@@ -1,12 +1,12 @@
-# Ascolta
+# Voxlyne
 
-Ascolta is an open-source, self-hosted platform for building and operating AI telephone agents. It combines SIP-ready voice runtimes, project configuration, prompt versioning, retrieval-backed knowledge bases, browser simulations, call analytics, and controlled integrations with external systems.
+Voxlyne is an open-source, self-hosted platform for building and operating AI telephone agents. It combines SIP-ready voice runtimes, project configuration, prompt versioning, retrieval-backed knowledge bases, browser simulations, call analytics, and controlled integrations with external systems.
 
-It is designed for developers and teams that want to own their telephony workflow while connecting their chosen AI and telephony providers. Ascolta does not serve models itself: it orchestrates external provider APIs. The repository contains no production credentials, recordings, transcripts, customer names, or live configuration. The included scenarios and calls are synthetic.
+It is designed for developers and teams that want to own their telephony workflow while connecting their chosen AI and telephony providers. Voxlyne does not serve models itself: it orchestrates external provider APIs. The repository contains no production credentials, recordings, transcripts, customer names, or live configuration. The included scenarios and calls are synthetic.
 
 ## Focus
 
-Ascolta provides the operational layer around an AI telephone agent:
+Voxlyne provides the operational layer around an AI telephone agent:
 
 - Version prompts, compare changes, test them, and roll them back.
 - Simulate conversations against synthetic data before enabling an integration.
@@ -35,8 +35,8 @@ All names, email addresses, phone numbers, calls, transcripts, and costs created
 Prerequisites: Python 3.11+, Node.js 20+, Docker with Docker Compose, and PostgreSQL.
 
 ```bash
-git clone https://github.com/edddh/ascolta.git
-cd ascolta
+git clone https://github.com/edddh/voxlyne.git
+cd voxlyne
 cp .env.example .env
 docker compose up -d postgres minio
 .venv/bin/alembic upgrade heads

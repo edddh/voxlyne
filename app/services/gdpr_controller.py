@@ -1,5 +1,5 @@
 """
-Ascolta - GDPR Controller
+Voxlyne - GDPR Controller
 Handles data deletion and privacy compliance
 """
 

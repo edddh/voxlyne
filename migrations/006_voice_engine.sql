@@ -1,4 +1,4 @@
--- Ascolta - Voice Engine Schema
+-- Voxlyne - Voice Engine Schema
 -- Milestone 5: Dual Voice Engine + Outbound Calling
 --
 -- This migration adds:

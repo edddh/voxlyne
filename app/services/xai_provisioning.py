@@ -1,5 +1,5 @@
 """
-Ascolta - xAI phone number provisioning (byo_trunk).
+Voxlyne - xAI phone number provisioning (byo_trunk).
 
 Registers a phone number the tenant already owns (via Zadarma or another
 SIP provider - "byo_trunk" = bring your own trunk, this does NOT purchase
@@ -59,10 +59,10 @@ async def register_byo_trunk_number(
 
     payload = {
         "origin": "byo_trunk",
-        "name": name or f"Ascolta {phone_number}",
+        "name": name or f"Voxlyne {phone_number}",
         "phone_number": phone_number,
         "webhook": {
-            "name": f"Ascolta webhook {phone_number}",
+            "name": f"Voxlyne webhook {phone_number}",
             "url": webhook_url,
         },
     }

@@ -1,5 +1,5 @@
 """
-Ascolta - RAG indexer: turns a kb_source (url or upload) into kb_chunks.
+Voxlyne - RAG indexer: turns a kb_source (url or upload) into kb_chunks.
 
 Runs as an asyncio.create_task() background job kicked off by the admin
 API (app/routers/knowledge_base.py), same "no external task queue"

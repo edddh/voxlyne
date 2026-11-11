@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Ported from earlier-prototype via ascolta-salvage-2026-07-24, adapted for ascolta.
-Self-contained: no import/runtime dependency on the earlier-prototype or ascolta directories.
+Ported from earlier-prototype via voxlyne-salvage-2026-07-24, adapted for voxlyne.
+Self-contained: no import/runtime dependency on the earlier-prototype or voxlyne directories.
 
-18/08/2026 (Grok/xAI priority - see memory ascolta-grok-priority, and
+18/08/2026 (Grok/xAI priority - see memory voxlyne-grok-priority, and
 runtime_workers/livekit_agent.py's identical treatment): the
 "realtime.call.incoming" path in handle_webhook() no longer resolves
 prompt/voice/language from the static scenario config file - it calls the
@@ -70,10 +70,10 @@ from app.services.agent_versions import resolve_inbound, resolve_provider_api_ke
 
 SERVICE_DIR = Path(__file__).resolve().parent
 ROOT = SERVICE_DIR
-DEFAULT_ENV = Path(os.environ.get("ASCOLTA_GLOBAL_ENV") or REPO_ROOT / ".env")
+DEFAULT_ENV = Path(os.environ.get("VOXLYNE_GLOBAL_ENV") or REPO_ROOT / ".env")
 NC_API = os.environ.get("NC_API_PATH") or str(REPO_ROOT / "workspace" / "scripts" / "nc-api")
 ELEVEN_TRANSCRIPTS_DIR = REPO_ROOT / "runtime" / "transcripts"
-CONFIG_PATH = Path(os.environ.get("ASCOLTA_CONFIG_PATH") or REPO_ROOT / "ascolta-stack-config.json")
+CONFIG_PATH = Path(os.environ.get("VOXLYNE_CONFIG_PATH") or REPO_ROOT / "voxlyne-stack-config.json")
 def load_env_file(path: Path) -> None:
     if not path.exists():
         return
@@ -120,7 +120,7 @@ class LegacyController:
         scenario_config = load_scenario_config(scenario.get("config_path"))
 
         self.response_language = str(response_cfg.get("language") or "it").strip().lower()
-        self.provider = str(realtime_cfg.get("provider") or os.environ.get("ASCOLTA_REALTIME_PROVIDER") or "openai").strip().lower()
+        self.provider = str(realtime_cfg.get("provider") or os.environ.get("VOXLYNE_REALTIME_PROVIDER") or "openai").strip().lower()
         self.model = realtime_cfg.get("model") or ("grok-voice-latest" if self.provider in {"xai", "grok"} else "gpt-realtime-mini")
         self.voice = realtime_cfg.get("voice") or ("eve" if self.provider in {"xai", "grok"} else "sage")
         self.input_format = realtime_cfg.get("input_format") or "audio/pcma"
@@ -1020,9 +1020,9 @@ class LegacyController:
         self, xai_call_id: str, caller_number: str, resolved: dict[str, Any],
     ) -> "uuid.UUID":
         """
-        Ascolta's own `calls` row for this xAI call - see the 18/08 fix note
+        Voxlyne's own `calls` row for this xAI call - see the 18/08 fix note
         above its call site. Mirrors app/routers/webhook.py's
-        handle_call_started() INSERT for the OpenAI path: Ascolta's own
+        handle_call_started() INSERT for the OpenAI path: Voxlyne's own
         internal id (not xAI's call_id string, which goes in the new
         xai_call_id column - same pattern as vapi_call_id/twilio_call_sid).
         No RLS bypass needed here despite running outside a request
@@ -1335,7 +1335,7 @@ class LegacyController:
             voice = resolved.get("voice_name") or self.voice
             language = resolved.get("language") or self.response_language or "it"
 
-            # Ascolta's own call record - was entirely missing before 18/08
+            # Voxlyne's own call record - was entirely missing before 18/08
             # (maintainer: "ma la trascrizione delle telefonate e gli analytics
             # sono a posto?" - they weren't, for this path: this worker only
             # ever ran the live audio session, no `calls` row, no
@@ -1389,7 +1389,7 @@ class LegacyController:
             logging.info("Call %s already active", call_id)
             return
 
-        task = asyncio.create_task(self.run_call(call_id), name=f"ascolta-call-{call_id}")
+        task = asyncio.create_task(self.run_call(call_id), name=f"voxlyne-call-{call_id}")
         task.add_done_callback(lambda t, cid=call_id: self._finalize_call_task(cid, t))
         self.active_calls[call_id] = task
 
@@ -1814,7 +1814,7 @@ def main() -> None:
     import threading
 
     threading.Thread(target=loop.run_forever, daemon=True).start()
-    logging.info("Ascolta realtime service listening on http://%s:%s", host, port)
+    logging.info("Voxlyne realtime service listening on http://%s:%s", host, port)
     server.serve_forever()
 
 

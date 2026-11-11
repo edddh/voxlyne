@@ -1,5 +1,5 @@
 """
-Ascolta - Middleware
+Voxlyne - Middleware
 """
 
 from app.middleware.auth_middleware import (

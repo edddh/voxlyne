@@ -20,7 +20,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 """
 maintainer, 20/08: "ora nei prompt Appointment Demo, comune di exampleville e
-ascolta ci sono dei tag che andrebbero collegati a dei campi o
+voxlyne ci sono dei tag che andrebbero collegati a dei campi o
 attivi (come data e ora) oppure custom. inoltre il template dovrebbe
 avere dei campi custom che chiede di riempire quando si effettua
 l'importazione e che possono poi essere modificati successivamente."
@@ -30,11 +30,11 @@ convention rather than storage:
 - {{system__xxx}} (e.g. {{system__caller_id}}, already used and
   working - see runtime_workers/provision_elevenlabs.py) - resolved by
   the voice PROVIDER itself at call time (ElevenLabs' and xAI's
-  realtime APIs both understand this convention natively). Ascolta never
+  realtime APIs both understand this convention natively). Voxlyne never
   touches these - confirmed by grepping the whole codebase for any
   substitution logic before this, there is none.
 - {{anything_else}} (e.g. {{comune}}, {{nome_contatto}}) - a per-project
-  CUSTOM variable Ascolta itself substitutes, using these two new
+  CUSTOM variable Voxlyne itself substitutes, using these two new
   columns.
 
 custom_variables_schema: what fields exist (on a template: what a new

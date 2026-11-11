@@ -1,5 +1,5 @@
 """
-Ascolta - xAI SIP-direct Webhook Router.
+Voxlyne - xAI SIP-direct Webhook Router.
 
 18/08/2026 (Grok/xAI priority): moved LegacyController's webhook handling
 out of the standalone runtime_workers/realtime_service.py process and into

@@ -1,5 +1,5 @@
 """
-Ascolta - OpenAI Realtime Voice Engine
+Voxlyne - OpenAI Realtime Voice Engine
 
 Wraps the existing RealtimeSession to conform to the BaseVoiceEngine interface.
 This engine handles INBOUND calls via OpenAI's SIP gateway.

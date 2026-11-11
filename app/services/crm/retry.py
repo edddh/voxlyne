@@ -1,5 +1,5 @@
 """
-Ascolta - CRM Retry Manager
+Voxlyne - CRM Retry Manager
 
 Handles retry logic with exponential backoff for CRM operations.
 """

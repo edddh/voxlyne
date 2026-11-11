@@ -1,7 +1,7 @@
 """
-Ported from earlier-prototype via ascolta-salvage-2026-07-24, adapted for ascolta.
+Ported from earlier-prototype via voxlyne-salvage-2026-07-24, adapted for voxlyne.
 
-18/08/2026 (Grok/xAI priority - see memory ascolta-grok-priority): config
+18/08/2026 (Grok/xAI priority - see memory voxlyne-grok-priority): config
 resolution switched from the static file loader (load_config/
 load_realtime_config/resolve_voice_bundle - earlier-prototype's original, single-tenant
 approach) to the Fase 2 kernel resolver (app.services.agent_versions.
@@ -49,7 +49,7 @@ from livekit.agents import Agent, AgentServer, AgentSession, JobContext, RunCont
 from livekit.agents.llm.tool_context import ToolFlag
 from livekit.plugins import openai, xai
 
-DEFAULT_AGENT_NAME = os.environ.get("ASCOLTA_LIVEKIT_AGENT_NAME", "ascolta-livekit")
+DEFAULT_AGENT_NAME = os.environ.get("VOXLYNE_LIVEKIT_AGENT_NAME", "voxlyne-livekit")
 FALLBACK_PROMPT = (
     "Rispondi in modo cortese e sintetico, nella lingua dell'interlocutore. "
     "Se non hai informazioni certe sull'argomento, dillo esplicitamente invece di inventare."
@@ -75,7 +75,7 @@ WRITE_TOOL_NAMES = {
 @lru_cache(maxsize=1)
 def _load_legacy_controller() -> Any:
     module_path = ROOT / "runtime_workers" / "realtime_service.py"
-    spec = importlib.util.spec_from_file_location("ascolta_realtime_service", module_path)
+    spec = importlib.util.spec_from_file_location("voxlyne_realtime_service", module_path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Unable to load legacy controller from {module_path}")
     module = importlib.util.module_from_spec(spec)
@@ -269,23 +269,23 @@ async def entrypoint(ctx: JobContext) -> None:
         turn_handling={
             "endpointing": {
                 "mode": "dynamic",
-                "min_delay": float(os.environ.get("ASCOLTA_ENDPOINTING_MIN_DELAY", "0.12")),
-                "max_delay": float(os.environ.get("ASCOLTA_ENDPOINTING_MAX_DELAY", "0.65")),
-                "alpha": float(os.environ.get("ASCOLTA_ENDPOINTING_ALPHA", "0.55")),
+                "min_delay": float(os.environ.get("VOXLYNE_ENDPOINTING_MIN_DELAY", "0.12")),
+                "max_delay": float(os.environ.get("VOXLYNE_ENDPOINTING_MAX_DELAY", "0.65")),
+                "alpha": float(os.environ.get("VOXLYNE_ENDPOINTING_ALPHA", "0.55")),
             },
             "interruption": {
                 "enabled": True,
                 "mode": "vad",
                 "discard_audio_if_uninterruptible": True,
-                "min_duration": float(os.environ.get("ASCOLTA_INTERRUPTION_MIN_DURATION", "0.12")),
-                "min_words": int(os.environ.get("ASCOLTA_INTERRUPTION_MIN_WORDS", "0")),
+                "min_duration": float(os.environ.get("VOXLYNE_INTERRUPTION_MIN_DURATION", "0.12")),
+                "min_words": int(os.environ.get("VOXLYNE_INTERRUPTION_MIN_WORDS", "0")),
                 "resume_false_interruption": False,
             },
             "preemptive_generation": {
                 "enabled": True,
                 "preemptive_tts": True,
-                "max_speech_duration": float(os.environ.get("ASCOLTA_PREEMPTIVE_MAX_SPEECH_DURATION", "5.0")),
-                "max_retries": int(os.environ.get("ASCOLTA_PREEMPTIVE_MAX_RETRIES", "1")),
+                "max_speech_duration": float(os.environ.get("VOXLYNE_PREEMPTIVE_MAX_SPEECH_DURATION", "5.0")),
+                "max_retries": int(os.environ.get("VOXLYNE_PREEMPTIVE_MAX_RETRIES", "1")),
             },
         },
     )

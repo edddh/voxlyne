@@ -1,5 +1,5 @@
 """
-Ascolta - Post Processing Service
+Voxlyne - Post Processing Service
 Extracts structured JSON from call transcripts using GPT-4 (Prompt B)
 """
 

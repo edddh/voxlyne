@@ -1,5 +1,5 @@
 """
-Ascolta - RAG semantic search.
+Voxlyne - RAG semantic search.
 
 pgvector's `<=>` operator is cosine *distance* (0 = identical, 2 =
 opposite) - matches the hnsw index built with vector_cosine_ops in the

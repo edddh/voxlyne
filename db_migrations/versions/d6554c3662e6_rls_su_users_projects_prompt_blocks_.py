@@ -48,7 +48,7 @@ la vulnerabilita' dimostrata oggi era di lettura (un tenant vedeva dati di
 un altro), non di scrittura. Le policy di scrittura sono un secondo giro,
 deliberatamente non incluso in questa migration.
 
-FORCE ROW LEVEL SECURITY e' necessario perche' il ruolo applicativo (ascolta)
+FORCE ROW LEVEL SECURITY e' necessario perche' il ruolo applicativo (voxlyne)
 e' anche il proprietario delle tabelle (verificato: pg_tables.tableowner) -
 senza FORCE, un proprietario bypassa sempre le policy.
 

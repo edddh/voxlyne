@@ -1,5 +1,5 @@
 """
-Ascolta - Generic Webhook Provider
+Voxlyne - Generic Webhook Provider
 
 Sends candidate data to any HTTP endpoint.
 Supports HMAC signature for webhook verification.
@@ -103,7 +103,7 @@ class GenericWebhookProvider(BaseCRMProvider):
         # Build headers
         headers = {
             "Content-Type": "application/json",
-            "User-Agent": "Ascolta/1.0",
+            "User-Agent": "Voxlyne/1.0",
             **self.custom_headers,
         }
 

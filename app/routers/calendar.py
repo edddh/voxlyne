@@ -1,5 +1,5 @@
 """
-Ascolta - Calendar API Routes
+Voxlyne - Calendar API Routes
 
 Endpoints for calendar scheduling and appointment management.
 """

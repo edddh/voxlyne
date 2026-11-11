@@ -34,9 +34,9 @@ piu' KB per progetto), aggiungerlo se/quando serve davvero.
 
 pgvector: richiede `CREATE EXTENSION vector`, che richiede superuser (o
 un'estensione marcata "trusted" - non garantito su tutte le distro/
-versioni). Il ruolo applicativo `ascolta` non e' superuser (verificato
+versioni). Il ruolo applicativo `voxlyne` non e' superuser (verificato
 18/08) - se questa migration fallisce qui, l'estensione va creata a mano
-una tantum da un superuser (`sudo -u postgres psql -d ascolta -c "CREATE
+una tantum da un superuser (`sudo -u postgres psql -d voxlyne -c "CREATE
 EXTENSION IF NOT EXISTS vector"`) prima di rilanciare `alembic upgrade
 head`.
 

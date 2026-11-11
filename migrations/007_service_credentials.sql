@@ -1,4 +1,4 @@
--- Ascolta - Service Credentials
+-- Voxlyne - Service Credentials
 -- Milestone 5.5: Generalize credentials storage for all services
 --
 -- This migration:

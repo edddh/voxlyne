@@ -1,8 +1,8 @@
 """
-Project-aware ElevenLabs agent provisioning for Ascolta.
+Project-aware ElevenLabs agent provisioning for Voxlyne.
 
 Unlike runtime_workers/provision_elevenlabs.py, this module reads prompt /
-voice / language from a real Ascolta project (preferably its published
+voice / language from a real Voxlyne project (preferably its published
 agent_version snapshot) and points tool webhooks back to FastAPI routes that
 carry the project_id explicitly.
 """

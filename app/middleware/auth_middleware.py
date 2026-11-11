@@ -1,5 +1,5 @@
 """
-Ascolta - Authentication Middleware
+Voxlyne - Authentication Middleware
 
 FastAPI dependencies for JWT authentication and RBAC.
 """

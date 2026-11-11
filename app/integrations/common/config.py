@@ -5,11 +5,11 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = Path(
-    os.environ.get("ASCOLTA_CONFIG_PATH")
+    os.environ.get("VOXLYNE_CONFIG_PATH")
     or (
-        (Path.cwd() / "ascolta-stack-config.json")
+        (Path.cwd() / "voxlyne-stack-config.json")
         if Path.cwd().name == ROOT.name
-        else ROOT / "ascolta-stack-config.json"
+        else ROOT / "voxlyne-stack-config.json"
     )
 )
 def _read_json(path: Path) -> dict[str, Any]:
@@ -26,7 +26,7 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def _read_json_from_env() -> dict[str, Any]:
-    raw = os.environ.get("ASCOLTA_CONFIG_JSON", "").strip()
+    raw = os.environ.get("VOXLYNE_CONFIG_JSON", "").strip()
     if not raw:
         return {}
     try:

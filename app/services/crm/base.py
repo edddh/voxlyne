@@ -1,5 +1,5 @@
 """
-Ascolta - CRM Base Classes
+Voxlyne - CRM Base Classes
 
 Abstract base class and types for CRM integrations.
 """

@@ -1,5 +1,5 @@
 """
-Ascolta - Calendar Scheduler
+Voxlyne - Calendar Scheduler
 
 Orchestrates calendar operations: slot finding, event creation, and tracking.
 """

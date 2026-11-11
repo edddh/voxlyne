@@ -1,5 +1,5 @@
 """
-Ascolta - Prompt Blocks API Routes (M4+)
+Voxlyne - Prompt Blocks API Routes (M4+)
 
 Building blocks for prompt composer:
 - Global blocks (super_admin, is_public=TRUE)

@@ -1,5 +1,5 @@
 """
-Ascolta - Authentication API Routes
+Voxlyne - Authentication API Routes
 
 JWT login, token refresh, logout, and user info.
 """

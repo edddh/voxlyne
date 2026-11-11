@@ -1,5 +1,5 @@
 """
-Ascolta - Authentication Service
+Voxlyne - Authentication Service
 
 JWT token generation, validation, and password hashing.
 """

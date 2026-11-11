@@ -131,7 +131,7 @@ function Login() {
       >
         <Space direction="vertical" size="large" style={{ width: '100%' }}>
           <div style={{ textAlign: 'center', position: 'relative' }}>
-            <BrandLogo alt="Ascolta" style={{ maxWidth: 220, height: 'auto' }} />
+            <BrandLogo alt="Voxlyne" style={{ maxWidth: 220, height: 'auto' }} />
             <Dropdown menu={languageMenu} placement="bottomRight">
               <Button
                 type="text"

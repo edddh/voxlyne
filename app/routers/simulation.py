@@ -1,5 +1,5 @@
 """
-Ascolta - Prompt simulation (test-chat before publishing).
+Voxlyne - Prompt simulation (test-chat before publishing).
 
 maintainer, 19/08: "sarebbe bello poter simulare la chiamata sul sito prima
 di pubblicare". Not a real voice call (xAI's realtime voice model is a

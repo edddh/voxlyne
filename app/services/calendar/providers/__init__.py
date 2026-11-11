@@ -1,5 +1,5 @@
 """
-Ascolta - Calendar Providers
+Voxlyne - Calendar Providers
 
 Available providers:
 - GoogleCalendarProvider: Google Calendar with OAuth2

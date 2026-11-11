@@ -1,5 +1,5 @@
 """
-FastAPI endpoints used by ElevenLabs agents provisioned from Ascolta projects.
+FastAPI endpoints used by ElevenLabs agents provisioned from Voxlyne projects.
 """
 
 from __future__ import annotations
@@ -106,7 +106,7 @@ async def _store_elevenlabs_call(payload: dict[str, Any], project_id: UUID | Non
             params,
         )
         if not project or not project["tenant_id"]:
-            raise HTTPException(status_code=404, detail="No Ascolta project matches this ElevenLabs agent")
+            raise HTTPException(status_code=404, detail="No Voxlyne project matches this ElevenLabs agent")
 
         existing = await db.fetch_one(
             "SELECT id, origin FROM calls WHERE openai_session_id = :conversation_id",

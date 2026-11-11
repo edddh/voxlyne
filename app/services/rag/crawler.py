@@ -1,5 +1,5 @@
 """
-Ascolta - RAG web crawler.
+Voxlyne - RAG web crawler.
 
 Deliberately simple breadth-first, same-domain-only crawler with a hard
 page cap (kb_sources.crawl_max_pages, default 20) - this indexes a
@@ -59,7 +59,7 @@ def _is_fetchable_detail_url(url: str) -> bool:
 
 logger = logging.getLogger(__name__)
 
-USER_AGENT = "AscoltaBot/1.0 (+https://ascolta.example.invalid.com)"
+USER_AGENT = "VoxlyneBot/1.0 (+https://voxlyne.example.invalid.com)"
 
 # Below this, extracted text is almost certainly an empty SPA shell (e.g.
 # "Portale istituzionale" and nothing else) rather than real content -

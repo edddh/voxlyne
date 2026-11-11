@@ -1,5 +1,5 @@
 """
-Ascolta - Calendar Base Classes
+Voxlyne - Calendar Base Classes
 
 Abstract base class and types for calendar integrations.
 """

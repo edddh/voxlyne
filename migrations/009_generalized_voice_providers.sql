@@ -1,4 +1,4 @@
--- Ascolta - Generalized Voice/Telephony Providers
+-- Voxlyne - Generalized Voice/Telephony Providers
 -- Milestone 5: adds the columns needed to select and configure the new
 -- provider modes ported from earlier-prototype (LiveKit + xAI/OpenAI realtime,
 -- direct SIP xAI/OpenAI, ElevenLabs conversational agent), alongside the

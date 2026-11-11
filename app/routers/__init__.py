@@ -1,5 +1,5 @@
 """
-Routers package for Ascolta API endpoints.
+Routers package for Voxlyne API endpoints.
 """
 
 from . import (

@@ -1,11 +1,11 @@
 """
-Ascolta - Zadarma number-to-SIP-URI provisioning.
+Voxlyne - Zadarma number-to-SIP-URI provisioning.
 
 Companion to xai_provisioning.py: that half registers a number WITH xAI
 ("here is a number you'll receive calls for"); this half tells Zadarma
 (or whichever carrier owns the PSTN number) WHERE to actually send the
 SIP traffic for it. Together they complete the chain Zadarma (PSTN) ->
-xAI SIP gateway -> Ascolta webhook that maintainer asked for (18/08:
+xAI SIP gateway -> Voxlyne webhook that maintainer asked for (18/08:
 "insieme con le istruzioni per reindirizzare da zadarma o equivalente").
 
 Confirmed via official docs before writing this (WebFetch, not guessed):
@@ -177,7 +177,7 @@ def build_manual_instructions(phone_number: str, sip_uri: str) -> Dict[str, str]
             f"4. Salva. Le chiamate in arrivo su {phone_number} verranno da questo momento "
             f"inviate direttamente a questo indirizzo SIP, non più all'account SIP interno Zadarma.\n"
             f"5. (Alternativa via API, se l'automazione è configurata per questo tenant: "
-            f"Ascolta può farlo automaticamente con le credenziali API Zadarma - vedi Credenziali tenant, "
+            f"Voxlyne può farlo automaticamente con le credenziali API Zadarma - vedi Credenziali tenant, "
             f"servizio 'telephony', provider 'zadarma'.)"
         ),
     }

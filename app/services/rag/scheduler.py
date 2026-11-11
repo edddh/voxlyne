@@ -1,5 +1,5 @@
 """
-Ascolta - RAG recrawl scheduler.
+Voxlyne - RAG recrawl scheduler.
 
 Same background-task pattern as app/services/session_cleanup.py (a single
 asyncio loop started/stopped from the app's lifespan, no external task

@@ -1,5 +1,5 @@
 """
-Ascolta - Credentials Management
+Voxlyne - Credentials Management
 Centralized service for managing encrypted credentials for all external services
 """
 

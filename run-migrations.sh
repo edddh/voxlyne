@@ -1,5 +1,5 @@
 #!/bin/bash
-# Migration script for Ascolta
+# Migration script for Voxlyne
 # Run all pending migrations
 
 set -e

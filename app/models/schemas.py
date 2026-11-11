@@ -1,5 +1,5 @@
 """
-Ascolta - Pydantic Schemas
+Voxlyne - Pydantic Schemas
 Data models for API requests/responses and database entities
 """
 

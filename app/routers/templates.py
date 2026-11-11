@@ -1,5 +1,5 @@
 """
-Ascolta - Templates API Routes (M4+)
+Voxlyne - Templates API Routes (M4+)
 
 Template management for super_admin:
 - Create/update/list global templates

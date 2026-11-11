@@ -1,4 +1,4 @@
--- Ascolta - Template System + Project-Level Configuration
+-- Voxlyne - Template System + Project-Level Configuration
 -- Milestone M4+: Template System, Project Config, Prompt Composer
 --
 -- This migration adds:

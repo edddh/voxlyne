@@ -22,7 +22,7 @@ import { SUPPORTED_LANGUAGES } from '../i18n'
 
 const { Header, Sider, Content } = Layout
 
-// Hamburger di marca: 3 righe bianche, l'ultima arancione (accento Ascolta,
+// Hamburger di marca: 3 righe bianche, l'ultima arancione (accento Voxlyne,
 // lo stesso usato ovunque nel resto dell'interfaccia) - al posto delle
 // icone antd generiche MenuFold/MenuUnfold. maintainer, 19/08: "il toast
 // [= il pulsante del menu] dovrebbe essere esteticamente come quella
@@ -205,9 +205,9 @@ function AppLayout() {
           }}
         >
           {collapsed ? (
-            <span style={{ color: BRAND.orange, fontSize: 20, fontWeight: 700 }}>AT</span>
+            <span style={{ color: BRAND.orange, fontSize: 20, fontWeight: 700 }}>VX</span>
           ) : (
-            <BrandLogo alt="Ascolta" style={{ maxWidth: '100%', height: 32, objectFit: 'contain' }} />
+            <BrandLogo alt="Voxlyne" style={{ maxWidth: '100%', height: 32, objectFit: 'contain' }} />
           )}
         </div>
         <Menu

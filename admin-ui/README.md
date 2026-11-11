@@ -1,4 +1,4 @@
-# Admin Panel - Ascolta
+# Admin Panel - Voxlyne
 
 Pannello di amministrazione per il sistema di interviste telefoniche AI.
 

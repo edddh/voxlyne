@@ -1,5 +1,5 @@
 """
-Ascolta - Project Configuration API Routes (M4+)
+Voxlyne - Project Configuration API Routes (M4+)
 
 Project-level configuration for:
 - SIP address and credentials

@@ -1,5 +1,5 @@
 """
-Ascolta - HubSpot CRM Provider
+Voxlyne - HubSpot CRM Provider
 
 Creates contacts and deals in HubSpot using the CRM API v3.
 https://developers.hubspot.com/docs/api/crm/contacts

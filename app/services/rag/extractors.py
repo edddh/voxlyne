@@ -1,5 +1,5 @@
 """
-Ascolta - RAG text extraction from raw source bytes/HTML.
+Voxlyne - RAG text extraction from raw source bytes/HTML.
 
 One function per format the admin upload endpoint accepts. Kept separate
 from chunking.py (format-specific extraction vs format-agnostic

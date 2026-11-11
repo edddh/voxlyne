@@ -1,4 +1,4 @@
--- Ascolta - Initial Database Schema
+-- Voxlyne - Initial Database Schema
 -- Milestone 1: Voice Communication MVP
 --
 -- This migration creates the minimal schema for M1:

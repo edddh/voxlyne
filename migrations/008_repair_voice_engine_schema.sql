@@ -1,4 +1,4 @@
--- Ascolta - Repair Voice Engine Schema
+-- Voxlyne - Repair Voice Engine Schema
 -- Ensures M5 columns/indexes exist even if a previous migration run was partial.
 
 -- ===========================================

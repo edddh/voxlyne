@@ -1,5 +1,5 @@
 """
-Ascolta - CRM Data Mapper
+Voxlyne - CRM Data Mapper
 
 Flexible data mapping from interview JSON to CRM field formats.
 Supports JSONPath-like expressions and transformations.
@@ -30,23 +30,23 @@ class DataMapper:
         "lastname": "$.candidate_name | last_name",
         "phone": "$.phone_number",
         "jobtitle": "$.role_targets[0]",
-        "company": "'Candidato Ascolta'",
+        "company": "'Candidato Voxlyne'",
         "hs_lead_status": "'NEW'",
 
         # Custom properties (will be created if they don't exist)
-        "ascolta_experience_summary": "$.experience_summary",
-        "ascolta_seniority": "$.seniority_estimate",
-        "ascolta_hard_skills": "$.hard_skills | join",
-        "ascolta_soft_skills": "$.soft_skills | join",
-        "ascolta_availability_relocate": "$.availability.willing_to_relocate | bool_to_str",
-        "ascolta_availability_travel": "$.availability.willing_to_travel | bool_to_str",
-        "ascolta_start_date": "$.availability.start_date_estimate",
-        "ascolta_motivations": "$.motivations",
-        "ascolta_fit_score": "$.overall_fit_score | to_str",
-        "ascolta_recruiter_notes": "$.recruiter_notes",
-        "ascolta_call_id": "$._call_metadata.id",
-        "ascolta_call_date": "$._call_metadata.started_at | date",
-        "ascolta_call_duration": "$._call_metadata.duration_seconds | duration",
+        "voxlyne_experience_summary": "$.experience_summary",
+        "voxlyne_seniority": "$.seniority_estimate",
+        "voxlyne_hard_skills": "$.hard_skills | join",
+        "voxlyne_soft_skills": "$.soft_skills | join",
+        "voxlyne_availability_relocate": "$.availability.willing_to_relocate | bool_to_str",
+        "voxlyne_availability_travel": "$.availability.willing_to_travel | bool_to_str",
+        "voxlyne_start_date": "$.availability.start_date_estimate",
+        "voxlyne_motivations": "$.motivations",
+        "voxlyne_fit_score": "$.overall_fit_score | to_str",
+        "voxlyne_recruiter_notes": "$.recruiter_notes",
+        "voxlyne_call_id": "$._call_metadata.id",
+        "voxlyne_call_date": "$._call_metadata.started_at | date",
+        "voxlyne_call_duration": "$._call_metadata.duration_seconds | duration",
     }
 
     # Generic webhook mapping (sends most data as-is)

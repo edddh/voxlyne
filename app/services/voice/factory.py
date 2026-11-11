@@ -1,5 +1,5 @@
 """
-Ascolta - Voice Engine Factory
+Voxlyne - Voice Engine Factory
 
 Creates the appropriate voice engine based on project configuration.
 """

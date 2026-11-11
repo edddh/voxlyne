@@ -1,5 +1,5 @@
 """
-Ascolta - Microsoft 365 Calendar Provider
+Voxlyne - Microsoft 365 Calendar Provider
 
 Microsoft Graph API integration for Outlook Calendar.
 https://learn.microsoft.com/en-us/graph/api/resources/calendar

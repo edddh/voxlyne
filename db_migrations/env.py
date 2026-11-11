@@ -7,7 +7,7 @@ from sqlalchemy import pool
 
 from alembic import context
 
-# Ascolta non usa un ORM (SQLAlchemy models) a runtime - il layer applicativo
+# Voxlyne non usa un ORM (SQLAlchemy models) a runtime - il layer applicativo
 # usa `databases` + asyncpg direttamente (vedi app/database/db.py). Alembic
 # qui gestisce solo l'ordine/tracciamento delle migration SQL, non
 # autogenerate da modelli: target_metadata resta None di proposito.

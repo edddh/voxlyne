@@ -1,1 +1,1 @@
-"""Voice core helpers for Ascolta runtime."""
+"""Voice core helpers for Voxlyne runtime."""

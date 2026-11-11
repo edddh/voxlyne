@@ -1,5 +1,5 @@
 """
-Ascolta - Configuration
+Voxlyne - Configuration
 Pydantic Settings for environment-based configuration
 """
 
@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     # Database Configuration
     # ===========================================
     database_url: str = Field(
-        default="postgresql://ascolta:change-me@localhost:5432/ascolta",
+        default="postgresql://voxlyne:change-me@localhost:5432/voxlyne",
         description="PostgreSQL connection URL"
     )
 
@@ -114,7 +114,7 @@ class Settings(BaseSettings):
     s3_endpoint: Optional[str] = Field(default=None, description="S3/MinIO endpoint URL")
     s3_access_key: Optional[str] = Field(default=None, description="S3 access key")
     s3_secret_key: Optional[str] = Field(default=None, description="S3 secret key")
-    s3_bucket: str = Field(default="ascolta", description="S3 bucket name")
+    s3_bucket: str = Field(default="voxlyne", description="S3 bucket name")
     s3_region: str = Field(default="us-east-1", description="S3 region")
 
     # Email

@@ -2,7 +2,7 @@
 
 ## Product Direction: Open-Source AI Telephony
 
-Ascolta is intended to evolve into a robust, self-hosted AI telephony platform.
+Voxlyne is intended to evolve into a robust, self-hosted AI telephony platform.
 It should let developers connect a phone number, select an external voice/LLM
 provider, configure an agent, test it safely, and inspect every call and tool
 execution from one open-source control plane.

@@ -1,5 +1,5 @@
 """
-Ascolta - Agent version and inbound endpoint management API (Fase 3).
+Voxlyne - Agent version and inbound endpoint management API (Fase 3).
 
 Gives an admin/creator a way to publish/rollback agent_versions and manage
 inbound_endpoints without touching the database directly - the kernel

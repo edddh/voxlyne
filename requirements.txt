@@ -1,4 +1,4 @@
-# Ascolta - Milestone 1 Dependencies
+# Voxlyne - core dependencies
 # Voice Communication MVP
 
 # Web Framework

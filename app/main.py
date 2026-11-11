@@ -1,5 +1,5 @@
 """
-Ascolta - Main Application
+Voxlyne - Main Application
 FastAPI entry point with lifecycle management
 """
 
@@ -52,7 +52,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     """
     # Startup
     logger.info("=" * 50)
-    logger.info("Ascolta - Starting up...")
+    logger.info("Voxlyne - Starting up...")
     logger.info(f"Environment: {settings.app_env}")
     logger.info(f"Log Level: {settings.log_level}")
     logger.info("=" * 50)
@@ -97,7 +97,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
 # ===========================================
 
 app = FastAPI(
-    title="Ascolta",
+    title="Voxlyne",
     description="AI-powered phone interview system for recruiting",
     version="1.0.0-alpha",
     docs_url="/docs" if not settings.is_production else None,
@@ -145,7 +145,7 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 async def root():
     """API information endpoint."""
     return {
-        "name": "Ascolta",
+        "name": "Voxlyne",
         "version": "5.0.0-alpha",
         "milestone": "M5 - Dual Voice Engine + Outbound Calling",
         "status": "running",

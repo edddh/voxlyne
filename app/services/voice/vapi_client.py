@@ -1,5 +1,5 @@
 """
-Ascolta - Vapi.ai REST API Client
+Voxlyne - Vapi.ai REST API Client
 
 HTTP client for Vapi.ai API interactions.
 Handles outbound calls, assistant management, and webhook processing.

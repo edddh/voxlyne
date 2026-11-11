@@ -1,4 +1,4 @@
 """
-Ascolta - Voice Engine Module
+Voxlyne - Voice Engine Module
 Provides abstraction layer for multiple voice AI providers.
 """

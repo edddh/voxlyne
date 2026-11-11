@@ -1,4 +1,4 @@
-"""Ascolta - voice call cost estimation."""
+"""Voxlyne - voice call cost estimation."""
 
 import json
 from typing import Optional

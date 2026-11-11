@@ -1,4 +1,4 @@
--- Ascolta - Tenant-level Credentials Index
+-- Voxlyne - Tenant-level Credentials Index
 -- Milestone 5: service_credentials.entity_type already allows 'tenant'
 -- (see 007_service_credentials.sql CHECK constraint) but no tenant-level
 -- row was ever created or queried until CredentialsManager.get_credentials_with_fallback

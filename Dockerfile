@@ -1,4 +1,4 @@
-# Ascolta - Dockerfile
+# Voxlyne - Dockerfile
 # Multi-stage: admin-ui (Node) buildata prima, poi copiata nell'immagine
 # Python che la serve (app/main.py monta admin-ui/dist come StaticFiles -
 # senza questo stage l'immagine parte ma l'admin UI risponde 404).

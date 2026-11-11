@@ -1,5 +1,5 @@
 """
-Ascolta - Runtime Instance Provisioning
+Voxlyne - Runtime Instance Provisioning
 
 Generates a standalone, earlier-prototype-equivalent runtime instance for a project:
 one config file + one env file + one start script + one systemd unit,
@@ -10,7 +10,7 @@ of a hand-edited .env file.
 This deliberately does NOT attempt dynamic multi-tenant call dispatch in a
 single shared process - that has no equivalent in earlier-prototype either. Each
 project gets its own systemd unit, listening on its own port, exactly like
-earlier-prototype.service / ascolta-runtime.service today.
+earlier-prototype.service / voxlyne-runtime.service today.
 """
 
 import json
@@ -240,9 +240,9 @@ async def provision_project_runtime(project: Dict[str, Any]) -> Dict[str, Any]:
     config_path.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n")
 
     env_lines = [
-        f"# Ascolta runtime env - project {slug} (generated, do not edit manually)",
-        f"ASCOLTA_CONFIG_PATH={config_path}",
-        f"ASCOLTA_LIVEKIT_AGENT_NAME=ascolta-{slug}",
+        f"# Voxlyne runtime env - project {slug} (generated, do not edit manually)",
+        f"VOXLYNE_CONFIG_PATH={config_path}",
+        f"VOXLYNE_LIVEKIT_AGENT_NAME=voxlyne-{slug}",
     ]
     for k, v in env.items():
         env_lines.append(f"{k}={v}")
@@ -266,9 +266,9 @@ exec "{REPO_ROOT}/.venv/bin/python" {exec_line}
     start_script_path.write_text(start_script)
     start_script_path.chmod(0o755)
 
-    service_name = f"ascolta-{slug}.service"
+    service_name = f"voxlyne-{slug}.service"
     systemd_unit = f"""[Unit]
-Description=Ascolta voice runtime ({slug})
+Description=Voxlyne voice runtime ({slug})
 After=network-online.target
 Wants=network-online.target
 

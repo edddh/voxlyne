@@ -1,5 +1,5 @@
 """
-Ascolta - RAG text chunking.
+Voxlyne - RAG text chunking.
 
 Deliberately simple character-window chunker, not token-aware: good
 enough for the embedding model's 8k-token input limit at these chunk

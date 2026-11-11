@@ -84,7 +84,7 @@ class DemoAccessTest(unittest.TestCase):
 class SeedDemoTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.tmp = tempfile.TemporaryDirectory(prefix="ascolta-demo-test-")
+        cls.tmp = tempfile.TemporaryDirectory(prefix="voxlyne-demo-test-")
         cls.root = Path(cls.tmp.name)
         cls.data = cls.root / "pg"
         with socket.socket() as sock:

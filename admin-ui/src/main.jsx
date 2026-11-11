@@ -9,7 +9,7 @@ import './i18n'
 import { applyBrandMetadata } from './components/BrandLogo'
 import { RootWithLocale } from './i18n/RootWithLocale'
 
-// Palette Ascolta: petrolio, acqua e verde salvia. Non deriva dal brand legacy.
+// Palette Voxlyne: petrolio, acqua e verde salvia. Non deriva dal brand legacy.
 export const BRAND = {
   bg: '#0E2025',
   bgElevated: '#153A4A',

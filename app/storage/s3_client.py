@@ -1,5 +1,5 @@
 """
-Ascolta - S3 Client
+Voxlyne - S3 Client
 S3-compatible storage for PDF files (MinIO local, AWS S3 production)
 """
 

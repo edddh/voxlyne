@@ -1,5 +1,5 @@
 """
-Ascolta - Calendar Integration Module
+Voxlyne - Calendar Integration Module
 
 This module provides calendar scheduling capabilities:
 - Google Calendar integration with OAuth2

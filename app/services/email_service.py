@@ -1,5 +1,5 @@
 """
-Ascolta - Email Service
+Voxlyne - Email Service
 Transactional email sender for reports and account flows.
 """
 
@@ -155,7 +155,7 @@ class EmailService:
             return False
 
         display_name = full_name or to_email
-        subject = "Reset password Ascolta"
+        subject = "Reset password Voxlyne"
         body = self._build_password_reset_body(display_name=display_name, reset_url=reset_url)
 
         try:
@@ -175,7 +175,7 @@ class EmailService:
         return "\n".join([
             f"Ciao {display_name},",
             "",
-            "Abbiamo ricevuto una richiesta di reset della password per il tuo account Ascolta.",
+            "Abbiamo ricevuto una richiesta di reset della password per il tuo account Voxlyne.",
             "Apri questo link per impostare una nuova password:",
             reset_url,
             "",

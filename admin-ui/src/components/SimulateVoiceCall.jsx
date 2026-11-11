@@ -299,11 +299,11 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
         // qualunque evento reale inoltrato da xAI conta come attivita' e
         // riazzera il conto alla rovescia - non e' un limite sulla durata
         // totale della prova. Esclusi i messaggi che il backend genera lui
-        // stesso (ascolta.*), che non riflettono attivita' del modello.
-        if (!msg.type?.startsWith('ascolta.')) {
+        // stesso (voxlyne.*), che non riflettono attivita' del modello.
+        if (!msg.type?.startsWith('voxlyne.')) {
           lastActivityRef.current = Date.now()
         }
-        if (msg.type === 'ascolta.ready') {
+        if (msg.type === 'voxlyne.ready') {
           setStatus('live')
           lastActivityRef.current = Date.now()
           // Conto alla rovescia visibile per il timeout di inattivita'
@@ -454,14 +454,14 @@ function SimulateVoiceCall({ open, onClose, projectId, promptA, consentMessage, 
           ws.send(JSON.stringify({ type: 'pong', event_id: msg.ping_event.event_id }))
           return
         }
-        if (msg.type === 'ascolta.tool_call') {
+        if (msg.type === 'voxlyne.tool_call') {
           // maintainer, 19/08: "potresti riportare la chiamata al tool e la
           // risposta" - visibile in trascrizione, non solo eseguita in
           // silenzio dal backend.
           setTranscript((prev) => [...prev, { role: 'tool', name: msg.name, arguments: msg.arguments, result: msg.result }])
           return
         }
-        if (msg.type === 'ascolta.timeout') {
+        if (msg.type === 'voxlyne.timeout') {
           // Il backend chiude la sessione subito dopo questo messaggio -
           // segna il motivo cosi' onclose mostra "limite raggiunto"
           // invece del generico "chiamata terminata".

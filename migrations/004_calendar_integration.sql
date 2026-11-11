@@ -1,4 +1,4 @@
--- Ascolta - Calendar Integration
+-- Voxlyne - Calendar Integration
 -- Milestone 3.5: Add calendar scheduling support
 --
 -- This migration adds:

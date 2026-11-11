@@ -1,5 +1,5 @@
 """
-Ascolta - Telephony Dispatcher
+Voxlyne - Telephony Dispatcher
 
 Resolves a TelephonyProvider name to a BaseTelephonyProvider instance,
 mirroring app.services.crm.dispatcher's provider-selection pattern.

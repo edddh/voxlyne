@@ -1,5 +1,5 @@
 """
-Ascolta - Knowledge base (RAG) admin API.
+Voxlyne - Knowledge base (RAG) admin API.
 
 Answers maintainer's request (18/08): "mi piacerebbe poter lavorare sulla
 funzione RAG e avere la base dati dal crawl del comune di Exampleville" -

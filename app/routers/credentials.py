@@ -1,5 +1,5 @@
 """
-Ascolta - Credentials Management Router
+Voxlyne - Credentials Management Router
 M5.5: API endpoints for managing project-level service credentials
 M5: extended with tenant-level service credentials (LLM/voice/telephony keys
 settable per tenant, with project-level override - see CredentialsManager)

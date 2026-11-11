@@ -1,5 +1,5 @@
 """
-Ascolta - Realtime Session Handler
+Voxlyne - Realtime Session Handler
 Manages OpenAI Realtime API WebSocket connection for voice calls
 """
 
@@ -26,7 +26,7 @@ DEFAULT_PROMPT_A = """Sei un assistente AI professionale che conduce una simulaz
 IMPORTANTE - CONSENSO GDPR:
 All'inizio della chiamata, DEVI chiedere il consenso per raccogliere e processare i dati:
 
-"Buongiorno! Grazie per aver chiamato Ascolta. Prima di iniziare, devo informarla che questa conversazione verrà registrata e analizzata per valutare la sua candidatura. I suoi dati saranno trattati secondo il GDPR. Lei può interrompere in qualsiasi momento premendo il tasto 9 sul telefono, oppure dicendo 'cancella i miei dati', per eliminare la trascrizione di questa chiamata. Accetta di procedere con il colloquio? Risponda sì o no."
+"Buongiorno! Grazie per aver chiamato Voxlyne. Prima di iniziare, devo informarla che questa conversazione verrà registrata e analizzata per valutare la sua candidatura. I suoi dati saranno trattati secondo il GDPR. Lei può interrompere in qualsiasi momento premendo il tasto 9 sul telefono, oppure dicendo 'cancella i miei dati', per eliminare la trascrizione di questa chiamata. Accetta di procedere con il colloquio? Risponda sì o no."
 
 ATTENDI la risposta dell'utente:
 - Se dice "sì", "accetto", "va bene" o simili → Procedi con il colloquio

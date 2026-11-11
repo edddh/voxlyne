@@ -1,5 +1,5 @@
 """
-Ascolta - Analytics API Routes
+Voxlyne - Analytics API Routes
 
 Dashboard statistics and reporting endpoints.
 """

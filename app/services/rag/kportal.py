@@ -1,5 +1,5 @@
 """
-Ascolta - kPortal CMS content API support (AGID municipal portal template).
+Voxlyne - kPortal CMS content API support (AGID municipal portal template).
 
 maintainer (18/08): "avevo gia' risolto tutto in earlier-prototype". Ported per ADR-0002
 (port the algorithm, discard mono-tenant assumptions) from
@@ -32,7 +32,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-USER_AGENT = "AscoltaBot/1.0 (+https://ascolta.example.invalid.com)"
+USER_AGENT = "VoxlyneBot/1.0 (+https://voxlyne.example.invalid.com)"
 DEFAULT_KAPI_DEPTH = 2
 
 # URL shape kPortal uses for a content detail page, e.g.

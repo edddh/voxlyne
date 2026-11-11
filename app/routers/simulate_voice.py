@@ -1,5 +1,5 @@
 """
-Ascolta - Live voice simulation (WebSocket relay to xAI's realtime API).
+Voxlyne - Live voice simulation (WebSocket relay to xAI's realtime API).
 
 maintainer, 19/08: "ma deve corrispondere al modello usato nella chiamata"
 + "io non dicevo una chat ma simulare la chiamata voce con un tastino
@@ -118,7 +118,7 @@ async def _handle_function_call(
 
     try:
         await websocket.send_text(json.dumps({
-            "type": "ascolta.tool_call",
+            "type": "voxlyne.tool_call",
             "name": name,
             "arguments": arguments,
             "result": result,
@@ -338,7 +338,7 @@ async def simulate_voice(websocket: WebSocket, project_id: UUID, token: str = Qu
                 },
             }))
 
-            await websocket.send_text(json.dumps({"type": "ascolta.ready"}))
+            await websocket.send_text(json.dumps({"type": "voxlyne.ready"}))
 
             # Aggiornato ad ogni evento REALE ricevuto da xAI (l'utente ha
             # parlato, l'agente ha risposto, una tool call e' avvenuta) -
@@ -394,7 +394,7 @@ async def simulate_voice(websocket: WebSocket, project_id: UUID, token: str = Qu
             if timeout_task in done:
                 try:
                     await websocket.send_text(json.dumps({
-                        "type": "ascolta.timeout",
+                        "type": "voxlyne.timeout",
                         "seconds": SIMULATION_SILENCE_TIMEOUT_SECONDS,
                     }))
                 except Exception:
@@ -612,7 +612,7 @@ async def simulate_openai_voice(websocket: WebSocket, project_id: UUID, token: s
                     ),
                 },
             }))
-            await websocket.send_text(json.dumps({"type": "ascolta.ready"}))
+            await websocket.send_text(json.dumps({"type": "voxlyne.ready"}))
 
             last_activity = time.monotonic()
             response_in_progress = True
@@ -690,7 +690,7 @@ async def simulate_openai_voice(websocket: WebSocket, project_id: UUID, token: s
             if timeout_task in done:
                 try:
                     await websocket.send_text(json.dumps({
-                        "type": "ascolta.timeout",
+                        "type": "voxlyne.timeout",
                         "seconds": SIMULATION_SILENCE_TIMEOUT_SECONDS,
                     }))
                 except Exception:

@@ -1,5 +1,5 @@
 """
-Ascolta - Telephony Base Classes
+Voxlyne - Telephony Base Classes
 
 Abstract base class and types for standalone telephony/SIP-trunk providers.
 

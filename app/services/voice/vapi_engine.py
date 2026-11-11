@@ -1,5 +1,5 @@
 """
-Ascolta - Vapi Voice Engine
+Voxlyne - Vapi Voice Engine
 
 Voice engine implementation using Vapi.ai for outbound calls.
 Vapi manages the full STT → LLM → TTS pipeline and Twilio telephony bridge.

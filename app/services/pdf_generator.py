@@ -1,5 +1,5 @@
 """
-Ascolta - PDF Generator
+Voxlyne - PDF Generator
 Converts JSON data to beautifully formatted PDF candidate profiles
 """
 

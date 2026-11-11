@@ -1,4 +1,4 @@
--- Ascolta - CRM Integration
+-- Voxlyne - CRM Integration
 -- Milestone 3: Add CRM synchronization support
 --
 -- This migration adds:

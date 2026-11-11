@@ -1,5 +1,5 @@
 """
-Ascolta - Twilio Client
+Voxlyne - Twilio Client
 
 Lightweight Twilio client for phone number validation and status queries.
 Note: With Vapi, Twilio is configured INSIDE Vapi as the phone provider.

@@ -147,7 +147,7 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Run in a rolled-back transaction")
     parser.add_argument("--password-file", default=None)
     args = parser.parse_args()
-    password_file = args.password_file or str(Path.home() / f".ascolta-demo-passwords-{secrets.token_hex(4)}.json")
+    password_file = args.password_file or str(Path.home() / f".voxlyne-demo-passwords-{secrets.token_hex(4)}.json")
     created = execute(args.reset, password_file, args.dry_run)
     if args.dry_run:
         print("Demo dry run completed; transaction rolled back.")

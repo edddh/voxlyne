@@ -1,5 +1,5 @@
 """
-Ascolta - Call Manager Service
+Voxlyne - Call Manager Service
 Manages call lifecycle for both inbound (OpenAI Realtime) and outbound (Vapi) calls.
 """
 

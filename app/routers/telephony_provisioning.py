@@ -1,10 +1,10 @@
 """
-Ascolta - Telephony provisioning router (admin-UI-facing).
+Voxlyne - Telephony provisioning router (admin-UI-facing).
 
 Answers maintainer's explicit request (18/08): "questa procedura dovrà essere
-eseguibile tramite interfaccia ascolta, insieme con le istruzioni per
+eseguibile tramite interfaccia voxlyne, insieme con le istruzioni per
 reindirizzare da zadarma o equivalente". One endpoint that does both halves
-of connecting a real phone number to an Ascolta project:
+of connecting a real phone number to an Voxlyne project:
 
   1. Register the number with xAI's byo_trunk SIP gateway
      (app/services/xai_provisioning.py) -> gives us a webhook signing
@@ -382,7 +382,7 @@ async def disconnect_number(
     )
     phone_number_id = creds.get("phone_number_id") if creds else None
 
-    xai_status = "not_registered_via_ascolta"
+    xai_status = "not_registered_via_voxlyne"
     if phone_number_id:
         try:
             await xai_provisioning.deregister_byo_trunk_number(tenant_id, phone_number_id)

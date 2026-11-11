@@ -1,5 +1,5 @@
 """
-Ascolta - Tenants API Routes
+Voxlyne - Tenants API Routes
 
 CRUD operations for tenant management (super_admin only).
 """

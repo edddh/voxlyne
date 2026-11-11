@@ -1,5 +1,5 @@
 """
-Ascolta - {{key}} custom prompt variable substitution.
+Voxlyne - {{key}} custom prompt variable substitution.
 
 maintainer, 20/08: "nei prompt ... ci sono dei tag che andrebbero collegati
 a dei campi o attivi (come data e ora) oppure custom". Two kinds of
@@ -10,9 +10,9 @@ a dei campi o attivi (come data e ora) oppure custom". Two kinds of
   realtime APIs both understand this convention natively - see
   runtime_workers/provision_elevenlabs.py and the working, live-call-
   verified Comune/URP template prompt, which sends {{system__caller_id}}
-  through unchanged and xAI resolves it). Ascolta must NEVER substitute
+  through unchanged and xAI resolves it). Voxlyne must NEVER substitute
   these - hence the exclusion below.
-- {{anything_else}} - a per-project custom variable Ascolta itself
+- {{anything_else}} - a per-project custom variable Voxlyne itself
   substitutes, from projects.custom_variables (see db_migrations/
   versions/e5e14da0c6e3_*).
 """

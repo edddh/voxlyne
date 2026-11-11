@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Self-contained ElevenLabs provisioning helper for Ascolta.
+Self-contained ElevenLabs provisioning helper for Voxlyne.
 Status: starting point for Milestone 5 (see README) - not yet wired into
 app.services.voice.factory / CallManager. Config/env resolution here is still
-file-based (ascolta-stack-config.json); the DB-driven credential/config
+file-based (voxlyne-stack-config.json); the DB-driven credential/config
 resolution (CredentialsManager.get_credentials_with_fallback) will replace it
 when the concrete voice engine classes are implemented.
 """
@@ -20,9 +20,9 @@ from pathlib import Path
 from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-ASCOLTA_ROOT = SCRIPT_DIR.parent
-if str(ASCOLTA_ROOT) not in sys.path:
-    sys.path.insert(0, str(ASCOLTA_ROOT))
+VOXLYNE_ROOT = SCRIPT_DIR.parent
+if str(VOXLYNE_ROOT) not in sys.path:
+    sys.path.insert(0, str(VOXLYNE_ROOT))
 
 from app.integrations.common.config import load_config, load_scenario_config, resolve_scenario
 from app.integrations.common.tools import build_tools
@@ -30,9 +30,9 @@ from app.integrations.common.tools import build_tools
 
 BASE_URL = "https://api.elevenlabs.io/v1"
 API_KEY = os.environ.get("ELEVENLABS_API_KEY", "").strip()
-PUBLIC_BASE_URL = os.environ.get("ASCOLTA_PUBLIC_BASE_URL", "").strip()
+PUBLIC_BASE_URL = os.environ.get("VOXLYNE_PUBLIC_BASE_URL", "").strip()
 TOOL_SECRET = os.environ.get("ELEVENLABS_TOOL_SECRET", "").strip()
-DEFAULT_AGENT_NAME = "Ascolta Eleven"
+DEFAULT_AGENT_NAME = "Voxlyne Eleven"
 DEFAULT_AGENT_LLM = "qwen3-30b-a3b"
 DEFAULT_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb"
 AGENT_ID_FILE = SCRIPT_DIR / "agent_id.txt"
@@ -186,7 +186,7 @@ def prepare_elevenlabs_instructions(prompt_text: str, scenario_config: dict[str,
 def _load_knowledge_base_ids(path: str | None) -> list[str]:
     if not path:
         return []
-    kb_path = (ASCOLTA_ROOT / path).resolve()
+    kb_path = (VOXLYNE_ROOT / path).resolve()
     data = read_json_file(kb_path)
     if isinstance(data, list):
         return [str(item) for item in data if str(item).strip()]
@@ -382,7 +382,7 @@ def create_tool(
 
 
 def _load_all_languages() -> list[str]:
-    languages_path = ASCOLTA_ROOT / "common" / "languages" / "elevenlabs_agents_all.json"
+    languages_path = VOXLYNE_ROOT / "common" / "languages" / "elevenlabs_agents_all.json"
     data = read_json_file(languages_path)
     if isinstance(data, list):
         return [str(code).strip().lower() for code in data if str(code).strip()]
@@ -550,7 +550,7 @@ def main() -> int:
     variant, prompt, first_message, knowledge_base_ids, scenario_config = prompt_bundle()
     settings = load_effective_settings(scenario_config)
     if not settings["public_base_url"]:
-        print("ASCOLTA_PUBLIC_BASE_URL missing", file=sys.stderr)
+        print("VOXLYNE_PUBLIC_BASE_URL missing", file=sys.stderr)
         return 2
 
     knowledge_base = _format_knowledge_base(knowledge_base_ids, settings)

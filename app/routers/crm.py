@@ -1,5 +1,5 @@
 """
-Ascolta - CRM Admin API Routes
+Voxlyne - CRM Admin API Routes
 
 Endpoints for CRM synchronization management and monitoring.
 """

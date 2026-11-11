@@ -1,5 +1,5 @@
 """
-Ascolta - Google Calendar Provider
+Voxlyne - Google Calendar Provider
 
 Google Calendar integration using OAuth2 and Calendar API v3.
 https://developers.google.com/calendar/api/v3/reference

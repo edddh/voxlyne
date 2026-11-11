@@ -1,5 +1,5 @@
 """
-Ascolta - Credentials Manager
+Voxlyne - Credentials Manager
 
 Centralized service for managing encrypted credentials for all external services.
 Supports project-level and tenant-level credentials with fallback to global .env settings.

@@ -1,5 +1,5 @@
 """
-Ascolta - Users API Routes
+Voxlyne - Users API Routes
 
 CRUD operations for user management.
 """

@@ -1,4 +1,4 @@
--- Ascolta - Multi-Project Foundation
+-- Voxlyne - Multi-Project Foundation
 -- Milestone 2.1: Add multi-use-case support
 --
 -- This migration adds:
@@ -329,7 +329,7 @@ Esempio di output:
 
 -- Seed initial settings
 INSERT INTO settings (key, value, description) VALUES
-    ('system_name', 'Ascolta', 'Application name'),
+    ('system_name', 'Voxlyne', 'Application name'),
     ('default_project_slug', 'candidate-screening-demo', 'Default project for calls without SIP routing'),
     ('max_call_duration_seconds', '900', 'Maximum call duration (15 minutes)'),
     ('silence_timeout_seconds', '5', 'Silence before ending call'),

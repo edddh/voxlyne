@@ -13,7 +13,7 @@ const { Text, Paragraph } = Typography
  * servizio "telephony", provider "zadarma") at xAI's SIP endpoint. One
  * click, one backend call (POST /api/telephony/connect-number) - the
  * whole reason this exists (maintainer, 18/08): "questa procedura dovra'
- * essere eseguibile tramite interfaccia ascolta, insieme alle istruzioni
+ * essere eseguibile tramite interfaccia voxlyne, insieme alle istruzioni
  * per reindirizzare da zadarma o equivalente".
  */
 function TelephonyTab({ projectId, project }) {

@@ -1,4 +1,4 @@
--- Ascolta - Admin Panel Schema
+-- Voxlyne - Admin Panel Schema
 -- Milestone 4: Multi-tenant + User Management + Prompt Versioning
 --
 -- This migration adds:

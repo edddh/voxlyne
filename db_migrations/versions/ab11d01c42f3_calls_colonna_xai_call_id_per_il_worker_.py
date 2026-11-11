@@ -24,7 +24,7 @@ sono a posto?" - la risposta era no, per il percorso xAI diretto
 (l'unico verificato localmente finora): runtime_workers/realtime_service.py
 non scriveva mai una riga in `calls`, mai una trascrizione, mai
 agganciava il post-processing - solo la sessione audio dal vivo, nessuna
-integrazione con lo strato dati di Ascolta. La simulazione di test di stasera
+integrazione con lo strato dati di Voxlyne. La simulazione di test di stasera
 su Exampleville non ha lasciato traccia nel DB.
 
 Stesso pattern di vapi_call_id/twilio_call_sid/elevenlabs_conversation_id

@@ -1,5 +1,5 @@
 """
-Ascolta - Webhook signature verification and idempotency.
+Voxlyne - Webhook signature verification and idempotency.
 
 Shared by app/routers/webhook.py (OpenAI) and app/routers/webhook_vapi.py.
 Signature verification is opt-in (see app/config.py): while the matching

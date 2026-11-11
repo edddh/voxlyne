@@ -1,5 +1,5 @@
 """
-Ascolta - Agent version snapshot and inbound resolver (Fase 2 kernel).
+Voxlyne - Agent version snapshot and inbound resolver (Fase 2 kernel).
 
 Doesn't replace `projects` (see ADR-0001: reuse the working project model,
 don't rewrite it) - snapshots it. A project keeps being where an admin

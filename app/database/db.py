@@ -1,5 +1,5 @@
 """
-Ascolta - Database Connection
+Voxlyne - Database Connection
 Async PostgreSQL connection using databases library
 """
 
