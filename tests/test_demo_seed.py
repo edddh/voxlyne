@@ -12,6 +12,13 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
+# Importing application modules initializes settings. These inert values make
+# the isolated test runnable without a developer's local .env file.
+os.environ.setdefault("OPENAI_API_KEY", "test")
+os.environ.setdefault("OPENAI_PROJECT_ID", "test")
+os.environ.setdefault("SECRET_KEY", "test-secret-for-isolated-tests")
+os.environ.setdefault("ADMIN_PASSWORD", "test-password-not-for-production")
+
 import psycopg2
 from databases import Database
 from fastapi import HTTPException
@@ -113,7 +120,11 @@ class SeedDemoTest(unittest.TestCase):
             for table, count in (("projects", 4), ("users", 3), ("agent_versions", 8), ("calls", 60)):
                 cur.execute(f"SELECT count(*) FROM {table} WHERE tenant_id=%s", (str(DEMO_TENANT_ID),))
                 self.assertEqual(cur.fetchone()[0], count)
-            cur.execute("SELECT count(*) FROM calls WHERE tenant_id=%s AND (origin <> 'voice_simulation' OR phone_number NOT LIKE '+000%%')", (str(DEMO_TENANT_ID),))
+            cur.execute(
+                "SELECT count(*) FROM calls WHERE tenant_id=%s AND "
+                "(origin <> 'voice_simulation' OR phone_number !~ '^\\+39 02 0000 [0-9]{4}$')",
+                (str(DEMO_TENANT_ID),),
+            )
             self.assertEqual(cur.fetchone()[0], 0)
 
         async def check_analytics():
