@@ -242,4 +242,4 @@ Assicurati che il backend FastAPI abbia configurato CORS correttamente per `http
 
 ## Licenza
 
-Proprietario - Edgardo Di Nicola Carena
+Apache-2.0. See the repository root for the full license text.

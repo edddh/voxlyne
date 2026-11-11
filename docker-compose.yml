@@ -3,9 +3,8 @@
 #
 # IMPORTANT:
 # - This compose file is for local/containerized runs.
-# - The production service currently serving ascolta.example.invalid.com is
-#   ascolta.service behind nginx on 127.0.0.1:8091 (see docs/live-ops.md).
-# - Do not assume `docker compose up` updates the live site.
+# - This file starts a local development stack only.
+# - Keep provider credentials in the local .env file, never in the repository.
 
 version: '3.8'
 

@@ -38,7 +38,7 @@ git clone https://github.com/edddh/ascolta.git
 cd ascolta
 cp .env.example .env
 docker compose up -d postgres minio
-.venv/bin/alembic upgrade head
+.venv/bin/alembic upgrade heads
 .venv/bin/python scripts/create_admin.py --email admin@example.test --name "Local Administrator"
 .venv/bin/uvicorn app.main:app --reload --port 8091
 ```
