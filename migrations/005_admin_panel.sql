@@ -265,27 +265,8 @@ UPDATE calls
 SET tenant_id = '00000000-0000-0000-0000-000000000001'
 WHERE tenant_id IS NULL;
 
--- Create super admin user (password should be changed on first login)
--- Password hash is for 'password-set-at-bootstrap' using bcrypt - CHANGE IN PRODUCTION!
-INSERT INTO users (
-    id,
-    tenant_id,
-    email,
-    password_hash,
-    full_name,
-    role,
-    is_active,
-    email_verified
-) VALUES (
-    '00000000-0000-0000-0000-000000000001',
-    NULL,  -- super_admin has no tenant
-    'admin@example.test',
-    'no-static-password-hash',  -- password-set-at-bootstrap (regenerated: the previous hash inherited from ascolta did not actually match 'password-set-at-bootstrap')
-    'Super Admin',
-    'super_admin',
-    TRUE,
-    TRUE
-) ON CONFLICT (email) DO NOTHING;
+-- No administrator is seeded. Create the first local super-admin with
+-- scripts/create_admin.py after running migrations.
 
 -- ===========================================
 -- HELPER FUNCTIONS

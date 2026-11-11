@@ -143,15 +143,11 @@ admin-ui/
 | `power_user` | Visualizzazione avanzata, analytics |
 | `user` | Visualizzazione base |
 
-## Credenziali Default
+## Primo amministratore locale
 
-Dopo aver eseguito la migration `005_admin_panel.sql`:
-
-- **Email**: `admin@example.test`
-- **Password**: `password-set-at-bootstrap`
-- **Ruolo**: `super_admin`
-
-⚠️ **Importante**: Cambiare password subito dopo il primo accesso!
+Le migration non creano credenziali predefinite. Dopo le migration, crea un
+super-admin locale con `scripts/create_admin.py`; la password viene richiesta
+in modo interattivo e non viene mai stampata o salvata nel repository.
 
 ## API Backend Richieste
 

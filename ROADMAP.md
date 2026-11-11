@@ -70,7 +70,7 @@ agents instead of one generalist model attempting every task.
   options and records the rationale.
 - Add a human handoff queue with accept, reject, callback, and resume states.
 
-**Done when:** a standard-reception demo can route scheduling to a scheduling
+**Done when:** an appointment-scheduling demo can route scheduling to a scheduling
 agent, missing information to a follow-up agent, and sensitive requests to a
 human queue while preserving one case timeline.
 
@@ -94,7 +94,7 @@ complete the same request in web chat without repeating the context.
 **Deliverable:** a safe environment that proves an agent workflow before it
 can touch a production integration.
 
-- Define replayable fixtures for standard reception, recruiting, retail, and
+- Define replayable fixtures for appointment scheduling, recruiting, retail, and
   restaurant scenarios.
 - Provide mocked versions of every external system with deterministic data.
 - Record response, tool calls, policy decisions, latency, cost, and final case

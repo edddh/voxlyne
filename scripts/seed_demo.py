@@ -25,7 +25,7 @@ from app.services.pricing import DEFAULT_XAI_VOICE_PRICING_PER_MINUTE
 
 TENANT = str(DEMO_TENANT_ID)
 PROJECTS = (
-    ("studio", "Segreteria studio standard (demo)", "support", "Gestisci richieste generiche di appuntamento con cortesia e senza fornire diagnosi."),
+    ("appuntamenti", "Gestione appuntamenti (demo)", "support", "Gestisci richieste generiche di appuntamento con cortesia, senza raccogliere dati sensibili."),
     ("recruiting", "Recruiting - screening candidati (demo)", "recruiting", "Raccogli disponibilita e competenze per una prima selezione, senza promettere un esito."),
     ("retail", "Assistenza clienti retail (demo)", "support", "Aiuta i clienti con informazioni generiche su ordini e resi."),
     ("ristorante", "Prenotazioni ristorante (demo)", "other", "Raccogli numero di persone e preferenze per una richiesta di prenotazione."),

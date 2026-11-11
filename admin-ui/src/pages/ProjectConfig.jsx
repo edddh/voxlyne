@@ -283,9 +283,9 @@ function ProjectConfig() {
             name="sip_address"
             label={t('projectConfig.sipAddress')}
             rules={[{ required: true, message: t('projectConfig.enterSipAddress') }]}
-            tooltip="Format: +39 000 000 0000 admin@example.test"
+            tooltip="Format: sip:demo@sip.example.test"
           >
-            <Input placeholder="+39 000 000 0000 admin@example.test" />
+            <Input placeholder="sip:demo@sip.example.test" />
           </Form.Item>
 
           <Form.Item

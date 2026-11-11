@@ -43,7 +43,7 @@ COMMENT ON COLUMN template_assignments.is_active IS 'If FALSE, tenant can no lon
 -- PROMPT COMPOSER BLOCKS
 -- ============================================
 
--- Building blocks per prompt composer (da frontend-starter)
+-- Building blocks for the prompt composer (from the frontend starter)
 CREATE TABLE IF NOT EXISTS prompt_blocks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE, -- NULL = global (super_admin)
@@ -70,11 +70,11 @@ COMMENT ON COLUMN prompt_blocks.category IS 'personality (coach/mentor), rules (
 -- ============================================
 
 -- SIP configuration per progetto
-ALTER TABLE projects ADD COLUMN IF NOT EXISTS sip_address VARCHAR(255); -- es: +39 000 000 0000 admin@example.test
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS sip_address VARCHAR(255); -- e.g. sip:demo@sip.example.test
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS sip_username VARCHAR(100);
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS sip_password_encrypted TEXT;
 
-COMMENT ON COLUMN projects.sip_address IS 'SIP address for incoming calls (e.g., +39 000 000 0000 admin@example.test)';
+COMMENT ON COLUMN projects.sip_address IS 'SIP address for incoming calls (e.g., sip:demo@sip.example.test)';
 COMMENT ON COLUMN projects.sip_username IS 'SIP authentication username';
 COMMENT ON COLUMN projects.sip_password_encrypted IS 'Encrypted SIP password (Fernet encryption)';
 

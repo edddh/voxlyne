@@ -109,7 +109,7 @@ CREATE TABLE IF NOT EXISTS crm_credentials (
 
     -- Provider identification
     provider VARCHAR(50) NOT NULL,           -- 'hubspot', 'salesforce', etc.
-    credential_key VARCHAR(100) NOT NULL,    -- Reference key (e.g., 'hubspot_demo-organization')
+    credential_key VARCHAR(100) NOT NULL,    -- Reference key (e.g., 'hubspot_example')
 
     -- Encrypted credential data
     encrypted_data TEXT NOT NULL,            -- Fernet-encrypted JSON

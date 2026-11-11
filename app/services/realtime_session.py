@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 # Default Italian conversation prompt (hardcoded for M1)
 # In M2, this will be loaded from the database per project
-DEFAULT_PROMPT_A = """Sei un assistente AI professionale che conduce colloqui telefonici in italiano per Demo Organization, un'azienda leader nelle costruzioni.
+DEFAULT_PROMPT_A = """Sei un assistente AI professionale che conduce una simulazione di colloquio telefonico in italiano per un'organizzazione fittizia.
 
 IMPORTANTE - CONSENSO GDPR:
 All'inizio della chiamata, DEVI chiedere il consenso per raccogliere e processare i dati:
@@ -47,7 +47,7 @@ DOPO IL CONSENSO, conduci il colloquio:
 5. Chiedi 1-3 progetti rilevanti: per ciascuno raccogli nome progetto/azienda, ruolo, durata e attività principali.
 6. Chiedi competenze tecniche (hard skills) con esempi concreti e strumenti/tecnologie utilizzati.
 7. Chiedi soft skills (es. leadership, problem solving) con un esempio breve.
-8. Chiedi le motivazioni: "Perché vuoi lavorare in Demo Organization?" e cosa ti interessa del ruolo/azienda.
+8. Chiedi le motivazioni: "Perché ti interessa questa opportunita?" e cosa ti interessa del ruolo.
 9. Chiedi disponibilità:
    - Disponibile a trasferirsi? (sì/no)
    - Disponibile a trasferte? (sì/no)

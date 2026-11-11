@@ -54,7 +54,7 @@ CREATE TABLE records (id uuid PRIMARY KEY, call_id uuid REFERENCES calls ON DELE
 class DemoAccessTest(unittest.TestCase):
     def test_restricts_demo_accounts_and_preserves_other_tenants(self):
         demo = CurrentUser(id=uuid4(), email="admin@example.test", role="admin", tenant_id=DEMO_TENANT_ID)
-        other = CurrentUser(id=uuid4(), email="admin@example.test", role="admin", tenant_id=uuid4())
+        other = CurrentUser(id=uuid4(), email="other@example.test", role="admin", tenant_id=uuid4())
 
         def request(path, method="GET"):
             return Request({"type": "http", "method": method, "path": path, "headers": []})

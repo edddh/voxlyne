@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS projects (
 
     -- Project identity
     name VARCHAR(255) NOT NULL,
-    slug VARCHAR(100) UNIQUE NOT NULL,  -- URL-friendly identifier (e.g., "demo-organization-recruiting")
+    slug VARCHAR(100) UNIQUE NOT NULL,  -- URL-friendly identifier (e.g., "candidate-screening-demo")
     type VARCHAR(50) NOT NULL CHECK (type IN ('recruiting', 'lead_gen', 'support', 'survey', 'other')),
     description TEXT,
     is_active BOOLEAN DEFAULT TRUE,
@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS records (
     json_data JSONB NOT NULL,           -- Flexible JSONB for any use case schema
 
     -- PDF storage
-    pdf_key VARCHAR(255),               -- S3/MinIO object key (e.g., "pdfs/demo-organization-recruiting/uuid.pdf")
+    pdf_key VARCHAR(255),               -- S3/MinIO object key (e.g., "pdfs/candidate-screening-demo/uuid.pdf")
     pdf_generated_at TIMESTAMP WITH TIME ZONE,
 
     -- Email tracking
@@ -159,7 +159,7 @@ ALTER TABLE calls
 CREATE INDEX IF NOT EXISTS idx_calls_project_id ON calls(project_id);
 
 -- ===========================================
--- Seed Default Project: Demo Organization Recruiting
+-- Seed Default Project: Candidate Screening Demo
 -- ===========================================
 
 -- Insert default project
@@ -176,17 +176,17 @@ INSERT INTO projects (
     output_config,
     is_active
 ) VALUES (
-    'Demo Organization Recruiting',
-    'demo-organization-recruiting',
+    'Candidate Screening Demo',
+    'candidate-screening-demo',
     'recruiting',
-    'AI-powered phone screening for Demo Organization job candidates',
+    'Synthetic phone screening example for fictional job candidates',
 
     -- PROMPT A: Conversation (from original implementation)
-    'Sei un recruiter AI professionale che conduce colloqui telefonici in italiano per Demo Organization, una delle più grandi società di ingegneria e costruzione al mondo.
+    'Sei un recruiter AI professionale che conduce colloqui telefonici in italiano per un''organizzazione fittizia.
 
 FASE 1: CONSENSO GDPR
 All''inizio della chiamata, chiedi SEMPRE il consenso:
-"Buongiorno! Sono l''assistente AI di Demo Organization. Prima di procedere con il colloquio, ho bisogno del suo consenso per registrare e trattare i suoi dati personali secondo il GDPR. Acconsente a procedere con questa intervista? Può rispondere semplicemente ''sì'' o ''no''."
+"Buongiorno! Sono l''assistente AI della demo. Prima di procedere con il colloquio, ho bisogno del suo consenso per registrare e trattare i dati forniti nella simulazione. Acconsente a procedere con questa intervista? Può rispondere semplicemente ''sì'' o ''no''."
 
 Se l''utente dice "sì" o equivalente → procedi con FASE 2
 Se l''utente dice "no" o equivalente → rispondi "Capisco, grazie per il suo tempo. Buona giornata!" e termina
@@ -203,8 +203,8 @@ Domande da porre (adatta il flusso in base alle risposte):
 1. "Può dirmi il suo nome completo?"
 2. "Quali sono le sue esperienze lavorative più rilevanti nel settore delle costruzioni o dell''ingegneria?"
 3. "Ha mai lavorato su grandi progetti infrastrutturali? Se sì, quali?"
-4. "Quali competenze tecniche possiede che potrebbero essere utili per Demo Organization?"
-5. "Perché è interessato a lavorare con noi?"
+4. "Quali competenze tecniche potrebbero essere utili per questo ruolo?"
+5. "Perché è interessato a questa opportunità?"
 6. "Ha disponibilità per trasferte nazionali o internazionali?"
 7. "Qual è la sua disponibilità di inizio lavoro?"
 
@@ -255,7 +255,7 @@ Schema JSON richiesto:
     "start_date_estimate": "Disponibilità inizio (string, nullable)"
   },
 
-  "motivations": "Motivazioni per lavorare in Demo Organization (string, max 300 chars)",
+  "motivations": "Motivazioni per candidarsi (string, max 300 chars)",
 
   "red_flags": ["Eventuali criticità emerse (array of strings, può essere vuoto)"],
 
@@ -274,31 +274,31 @@ REGOLE DI ESTRAZIONE:
 
 Esempio di output:
 {
-  "candidate_name": "Mario Rossi",
+  "candidate_name": "Andrea Rinaldi",
   "phone_number": "+39 000 000 0000",
   "email": null,
   "role_targets": ["Site Manager", "Project Engineer"],
   "seniority_estimate": "senior",
-  "experience_summary": "15 anni di esperienza in grandi progetti infrastrutturali, prevalentemente autostrade e ponti. Ha lavorato come Site Manager su 3 progetti da oltre 100M€.",
+  "experience_summary": "Esperienza in progetti tecnici complessi, con responsabilita di coordinamento e gestione fornitori.",
   "relevant_projects": [
     {
-      "project_name": "Autostrada A4 - Tratto Venezia-Trieste",
-      "role": "Site Manager",
-      "duration_estimate": "3 anni",
-      "key_activities": "Gestione cantiere 200+ persone, coordinamento fornitori, controllo avanzamento lavori"
+      "project_name": "Progetto dimostrativo Alpha",
+      "role": "Coordinatore operativo",
+      "duration_estimate": "2 anni",
+      "key_activities": "Coordinamento attivita, fornitori e avanzamento lavori"
     }
   ],
-  "hard_skills": ["Project Management", "AutoCAD", "Primavera P6", "Normativa sicurezza cantieri"],
+  "hard_skills": ["Project Management", "Pianificazione", "Coordinamento fornitori"],
   "soft_skills": ["Leadership", "Problem solving", "Gestione team"],
   "availability": {
     "willing_to_relocate": true,
     "willing_to_travel": true,
     "start_date_estimate": "2 mesi preavviso"
   },
-  "motivations": "Interessato a lavorare su progetti internazionali di grande impatto, attratto dalla reputazione di Demo Organization nel settore infrastrutture",
+  "motivations": "Interessato a un ruolo con responsabilita operative e opportunita di crescita",
   "red_flags": [],
   "overall_fit_score": 8,
-  "recruiter_notes": "Candidato molto promettente con solida esperienza. Consiglio colloquio tecnico approfondito su gestione budget e sicurezza."
+  "recruiter_notes": "Profilo coerente con un colloquio tecnico di approfondimento."
 }',
 
     -- Consent message (NULL = use default from code)
@@ -316,7 +316,7 @@ Esempio di output:
         },
         "email": {
             "enabled": false,
-            "to": ["admin@example.test"]
+            "to": ["recruiting@example.test"]
         },
         "webhook": {
             "enabled": false,
@@ -330,7 +330,7 @@ Esempio di output:
 -- Seed initial settings
 INSERT INTO settings (key, value, description) VALUES
     ('system_name', 'Ascolta', 'Application name'),
-    ('default_project_slug', 'demo-organization-recruiting', 'Default project for calls without SIP routing'),
+    ('default_project_slug', 'candidate-screening-demo', 'Default project for calls without SIP routing'),
     ('max_call_duration_seconds', '900', 'Maximum call duration (15 minutes)'),
     ('silence_timeout_seconds', '5', 'Silence before ending call'),
     ('dtmf_cancel_key', '9', 'DTMF key for immediate cancellation')

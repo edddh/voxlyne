@@ -16,7 +16,7 @@ Ascolta is not a replacement for a low-level voice runtime. It focuses on the op
 
 ## Included Demo Scenarios
 
-- Appointment practice reception
+- Appointment scheduling
 - Candidate screening
 - Retail customer support
 - Restaurant reservations
@@ -39,6 +39,7 @@ cd ascolta
 cp .env.example .env
 docker compose up -d postgres minio
 .venv/bin/alembic upgrade head
+.venv/bin/python scripts/create_admin.py --email admin@example.test --name "Local Administrator"
 .venv/bin/uvicorn app.main:app --reload --port 8091
 ```
 

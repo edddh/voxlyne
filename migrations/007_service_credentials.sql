@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS service_credentials (
     service_type VARCHAR(50) NOT NULL
         CHECK (service_type IN ('crm', 'voice', 'telephony', 'tts', 'calendar')),
     provider VARCHAR(50) NOT NULL,           -- 'hubspot', 'vapi', 'twilio', 'elevenlabs', 'google_calendar', 'ms_graph', etc.
-    credential_key VARCHAR(100) NOT NULL,    -- Reference key (e.g., 'main', 'backup', 'hubspot_demo-organization')
+    credential_key VARCHAR(100) NOT NULL,    -- Reference key (e.g., 'main', 'backup', 'hubspot_example')
 
     -- Encrypted credential data (Fernet-encrypted JSON)
     encrypted_data TEXT NOT NULL,

@@ -701,7 +701,7 @@ class LegacyController:
                 "eventTypeId": self.resolve_event_type_id(arguments.get("event_type_id"), arguments),
                 "attendee": {
                     "name": arguments["name"],
-                    "email": arguments.get("email") or "admin@example.test",
+                    "email": arguments.get("email") or "unknown@example.test",
                     "phoneNumber": phone,
                     "timeZone": "Europe/Rome",
                     "language": "it",
