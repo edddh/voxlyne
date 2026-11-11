@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Ported from earlier-prototype via ascolta-salvage-2026-07-24, adapted for ascolta.
-Self-contained: no import/runtime dependency on the earlier-prototype or ascolta directories.
+Self-contained ElevenLabs provisioning helper for Ascolta.
 Status: starting point for Milestone 5 (see README) - not yet wired into
 app.services.voice.factory / CallManager. Config/env resolution here is still
 file-based (ascolta-stack-config.json); the DB-driven credential/config

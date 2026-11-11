@@ -126,9 +126,9 @@ async def point_number_at_sip_uri(
     #
     # Found empirically (18/08, undocumented): `number` must have no
     # leading "+" - Zadarma replies 400 "Check phone's number" otherwise.
-    # `sip_id` just needs the "sip:" scheme stripped - the "+" inside the
-    # user part is fine there. Verified live: number="390200000000",
-    # sip_id="+39 000 000 0000 admin@example.test;transport=tls" -> 200 success.
+    # `sip_id` just needs the "sip:" scheme stripped; a leading "+" in the
+    # user part remains valid. Example: number="390200000000",
+    # sip_id="+390200000000@sip.example.test;transport=tls".
     zadarma_number = phone_number.lstrip("+")
     zadarma_sip_id_value = sip_uri.removeprefix("sip:")
     params = {"number": zadarma_number, "sip_id": zadarma_sip_id_value, "format": "json"}
