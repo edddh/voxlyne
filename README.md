@@ -1,18 +1,19 @@
 # Ascolta
 
-Ascolta is a self-hosted workbench for designing, simulating, and operating AI voice agents. It combines project configuration, prompt versioning, retrieval-backed knowledge bases, voice and text simulations, call analytics, and controlled integrations with external systems.
+Ascolta is an open-source, self-hosted platform for building and operating AI telephone agents. It combines SIP-ready voice runtimes, project configuration, prompt versioning, retrieval-backed knowledge bases, browser simulations, call analytics, and controlled integrations with external systems.
 
-Ascolta is an independent personal project. It is not presented as a deployed customer platform. The repository contains no production credentials, recordings, transcripts, customer names, or live configuration. The included scenarios and calls are synthetic.
+It is designed for developers and teams that want to own their telephony workflow while connecting their chosen AI and telephony providers. Ascolta does not serve models itself: it orchestrates external provider APIs. The repository contains no production credentials, recordings, transcripts, customer names, or live configuration. The included scenarios and calls are synthetic.
 
 ## Focus
 
-Ascolta is not a replacement for a low-level voice runtime. It focuses on the operational layer around an agent:
+Ascolta provides the operational layer around an AI telephone agent:
 
 - Version prompts, compare changes, test them, and roll them back.
 - Simulate conversations against synthetic data before enabling an integration.
 - Inspect retrieval and tool calls before an agent acts on an external system.
 - Keep external actions typed, auditable, idempotent, and suitable for approval workflows.
 - Route a conversation to a specialist workflow or human operator with structured context.
+- Connect inbound telephony through provider-specific SIP and webhook adapters.
 
 ## Included Demo Scenarios
 

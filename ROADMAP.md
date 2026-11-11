@@ -1,15 +1,15 @@
 # Roadmap
 
-## Product Direction: Business Operating Layer
+## Product Direction: Open-Source AI Telephony
 
-Ascolta is intended to evolve beyond a telephone agent into a controlled
-operating layer for business processes. A conversation should be able to
-understand a case, consult the relevant systems, coordinate specialist agents,
-and complete approved work across channels.
+Ascolta is intended to evolve into a robust, self-hosted AI telephony platform.
+It should let developers connect a phone number, select an external voice/LLM
+provider, configure an agent, test it safely, and inspect every call and tool
+execution from one open-source control plane.
 
-The goal is not uncontrolled replacement of people. Standard, low-risk work
-can become autonomous; exceptions, ambiguous requests, sensitive data, and
-high-impact actions must remain policy-governed and transferable to a person.
+The goal is reliable telephone automation with explicit boundaries. Routine
+requests can be automated; exceptions, ambiguous requests, sensitive data, and
+high-impact actions remain policy-governed and transferable to a person.
 
 ## 1. Reproducible Demo Installation
 
